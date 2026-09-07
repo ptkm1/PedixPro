@@ -4,12 +4,11 @@ import type { SellerOrderListItem } from "@/hooks/screens/useSalesListScreen";
 import { PERIOD_PRESET_LABELS, periodRange, type PeriodPreset } from "@/lib/period-presets";
 import { useTheme } from "@/lib/theme";
 import { radiiPx } from "@pedidos/design-tokens";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import {
   LayoutChangeEvent,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { BarChart, ruleTypes } from "react-native-gifted-charts";
@@ -20,9 +19,8 @@ const Y_AXIS_LABEL_WIDTH = 34;
 const X_LABEL_WIDTH = 34;
 const INITIAL_SPACING = 8;
 const END_SPACING = 12;
-/** gifted-charts trata overflowTop como flag → ~30px de folga no topo. */
-const TOP_LABEL_OVERFLOW = 30;
-const TOP_LABEL_WIDTH = 64;
+/** Folga no topo para o tooltip ao tocar na barra. */
+const TOOLTIP_OVERFLOW = 30;
 
 type Props = {
   orders: SellerOrderListItem[];
@@ -34,7 +32,6 @@ type DailyBar = {
   label: string;
   fullLabel: string;
   frontColor: string;
-  topLabelComponent?: () => ReactNode;
 };
 
 function dayKey(value: Date): string {
@@ -174,37 +171,17 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
     const labelIndices = pickLabelIndices(count, maxLabels);
 
     const maxValue = Math.max(...buckets.map((b) => b.value), 0);
-    const paddedMax = maxValue > 0 ? maxValue * 1.28 : undefined;
+    const paddedMax = maxValue > 0 ? maxValue * 1.12 : undefined;
 
-    const allBars: DailyBar[] = buckets.map((bucket, index) => {
-      const value = bucket.value;
-      const bar: DailyBar = {
-        value,
-        label: labelIndices.has(index) ? formatAxisDay(bucket.from, withMonth) : "",
-        fullLabel:
-          bucketDays === 1
-            ? formatFullDay(bucket.from)
-            : formatFullRange(bucket.from, bucket.to),
-        frontColor: colors.primary,
-      };
-      if (value > 0) {
-        bar.topLabelComponent = () => (
-          <Text
-            numberOfLines={1}
-            style={{
-              color: colors.text,
-              fontSize: 10,
-              fontWeight: "700",
-              textAlign: "center",
-              width: TOP_LABEL_WIDTH,
-            }}
-          >
-            {displayMoney(hideValues, value)}
-          </Text>
-        );
-      }
-      return bar;
-    });
+    const allBars: DailyBar[] = buckets.map((bucket, index) => ({
+      value: bucket.value,
+      label: labelIndices.has(index) ? formatAxisDay(bucket.from, withMonth) : "",
+      fullLabel:
+        bucketDays === 1
+          ? formatFullDay(bucket.from)
+          : formatFullRange(bucket.from, bucket.to),
+      frontColor: colors.primary,
+    }));
 
     return {
       bars: allBars,
@@ -214,7 +191,7 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
       spacing: nextSpacing,
       chartMaxValue: paddedMax,
     };
-  }, [colors.primary, colors.text, hideValues, orders, plotWidth, range.from, range.to]);
+  }, [colors.primary, orders, plotWidth, range.from, range.to]);
 
   const hasSales = bars.some((bar) => bar.value > 0);
 
@@ -265,15 +242,7 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
               noOfSections={4}
               roundedTop
               barBorderRadius={3}
-              overflowTop={TOP_LABEL_OVERFLOW}
-              topLabelContainerStyle={{
-                width: TOP_LABEL_WIDTH,
-                height: 22,
-                top: -24,
-                alignItems: "center",
-                justifyContent: "flex-end",
-                marginLeft: (barWidth - TOP_LABEL_WIDTH) / 2,
-              }}
+              overflowTop={TOOLTIP_OVERFLOW}
               yAxisLabelWidth={Y_AXIS_LABEL_WIDTH}
               yAxisColor={colors.border}
               xAxisColor={colors.border}
@@ -327,7 +296,6 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     width: "100%",
     alignSelf: "stretch",
-    // topLabel / overflowTop precisam vazar para cima; a largura correta evita vazamento lateral.
     overflow: "visible",
   },
   tooltip: { borderWidth: 1, borderRadius: radiiPx.md, paddingHorizontal: 10, paddingVertical: 8 },

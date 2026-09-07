@@ -5,12 +5,12 @@ import * as Location from "expo-location";
 import { Link } from "expo-router";
 import { Clock, MapPin, Navigation, Users } from "lucide-react-native";
 import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
 } from "react-native";
 import { RoutePlanMap } from "../../components/RoutePlanMap";
 import { RouteCustomerListItem } from "../../components/molecules/RouteCustomerListItem";
@@ -18,7 +18,7 @@ import { VisitNotesModal } from "../../components/molecules/VisitNotesModal";
 import { useRoutePlanScreen } from "../../hooks/screens/useRoutePlanScreen";
 import { useThemedStyles } from "../../hooks/useThemedStyles";
 import { useTheme } from "../../lib/theme";
-import { createRoutePlanStyles } from "./_route-plan.styles";
+import { createRoutePlanStyles } from "@/styles/route-plan.styles";
 
 export default function RoutePlanScreen() {
   const styles = useThemedStyles(createRoutePlanStyles);

@@ -1,7 +1,7 @@
 import {
-  KeyboardAvoidingScreen,
-  MobileHeader,
-  SafeScreen,
+    KeyboardAvoidingScreen,
+    MobileHeader,
+    SafeScreen,
 } from "@/components/layout";
 import { AppToast } from "@/components/molecules/AppToast";
 import { CatalogFiltersModal } from "@/components/molecules/CatalogFiltersModal";
@@ -10,33 +10,33 @@ import { CATALOG_SEARCH_PLACEHOLDER } from "@/lib/catalog-search";
 import type { QuickSaleTab } from "@/lib/sale/types";
 import { formatCustomerCode } from "@pedidos/shared";
 import {
-  ChevronDown,
-  ChevronUp,
-  ClipboardCheck,
-  Minus,
-  Plus,
-  ScanBarcode,
-  Search,
-  ShoppingCart,
-  SlidersHorizontal,
-  X,
+    ChevronDown,
+    ChevronUp,
+    ClipboardCheck,
+    Minus,
+    Plus,
+    ScanBarcode,
+    Search,
+    ShoppingCart,
+    SlidersHorizontal,
+    X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  Keyboard,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Keyboard,
+    Modal,
+    Pressable,
+    ScrollView,
+    Text,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
 import {
-  CollapsibleCatalogSection,
-  ProductCatalogTile,
+    CollapsibleCatalogSection,
+    ProductCatalogTile,
 } from "../components/ProductCatalogViews";
 import { ThemedTextInput } from "../components/atoms/ThemedTextInput";
 import { fmtMoney } from "../components/atoms/formatMoney";
@@ -45,7 +45,7 @@ import { useCatalogViewMode } from "../hooks/useCatalogViewMode";
 import { useThemedStyles } from "../hooks/useThemedStyles";
 import type { SaleProduct } from "../lib/sale/types";
 import { useTheme } from "../lib/theme";
-import { createQuickSaleStyles } from "./_quick-sale.styles";
+import { createQuickSaleStyles } from "@/styles/quick-sale.styles";
 
 const TABS: { id: QuickSaleTab; label: string }[] = [
   { id: "clientes", label: "Clientes" },

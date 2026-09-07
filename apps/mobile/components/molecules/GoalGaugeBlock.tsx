@@ -156,20 +156,22 @@ const styles = StyleSheet.create({
   },
   gaugeArea: {
     marginTop: 16,
-    height: HEIGHT,
+    height: HEIGHT + 8,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    overflow: "visible",
   },
   gaugeWrap: {
     width: WIDTH,
     height: HEIGHT,
     position: "relative",
+    overflow: "visible",
   },
   percentBehind: {
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 2,
+    bottom: 10,
     zIndex: 1,
     elevation: 1,
     alignItems: "center",
@@ -182,8 +184,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   percentText: {
-    fontSize: 28,
+    fontSize: 22,
+    lineHeight: 26,
     fontWeight: "700",
     letterSpacing: -0.5,
+    includeFontPadding: false,
   },
 });

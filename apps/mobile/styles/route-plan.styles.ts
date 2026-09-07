@@ -1,5 +1,5 @@
 import { StyleSheet } from "react-native";
-import type { AppColors } from "../../lib/theme/types";
+import type { AppColors } from "../lib/theme/types";
 
 export function createRoutePlanStyles(c: AppColors) {
   return StyleSheet.create({
