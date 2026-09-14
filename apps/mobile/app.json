@@ -2,7 +2,7 @@
   "expo": {
     "name": "PedixPro",
     "slug": "pedidos-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "pedixpro",
@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pedixpro.app",
+      "buildNumber": "5",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -26,6 +27,7 @@
         "backgroundColor": "#02445C"
       },
       "package": "com.pedixpro.app",
+      "versionCode": 5,
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",

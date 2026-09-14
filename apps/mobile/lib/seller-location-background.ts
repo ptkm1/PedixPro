@@ -81,17 +81,13 @@ export async function startSellerBackgroundLocation(): Promise<boolean> {
     return false;
   }
 
+  // Não chama request*Permissions aqui — o disclosure + prompt ficam em
+  // requestLocationPermissions (toggle de rastreamento) antes de ativar.
   const fg = await Location.getForegroundPermissionsAsync();
-  if (fg.status !== Location.PermissionStatus.GRANTED) {
-    const req = await Location.requestForegroundPermissionsAsync();
-    if (req.status !== Location.PermissionStatus.GRANTED) return false;
-  }
+  if (fg.status !== Location.PermissionStatus.GRANTED) return false;
 
   const bg = await Location.getBackgroundPermissionsAsync();
-  if (bg.status !== Location.PermissionStatus.GRANTED) {
-    const reqBg = await Location.requestBackgroundPermissionsAsync();
-    if (reqBg.status !== Location.PermissionStatus.GRANTED) return false;
-  }
+  if (bg.status !== Location.PermissionStatus.GRANTED) return false;
 
   const started = await Location.hasStartedLocationUpdatesAsync(
     SELLER_LOCATION_BG_TASK,

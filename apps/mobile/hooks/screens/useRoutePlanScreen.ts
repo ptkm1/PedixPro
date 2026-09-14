@@ -14,6 +14,10 @@ import type {
 import { formatDurationSeconds } from "../../lib/utils/format-duration";
 import { openNavigationApp } from "../../lib/utils/open-navigation";
 import {
+  getForegroundLocationIfGranted,
+  requestLocationPermissions,
+} from "../../lib/location-disclosure";
+import {
   isLocationTrackingEnabled,
   setLocationTrackingEnabled,
   subscribePrivacyPreferences,
@@ -67,48 +71,81 @@ export function useRoutePlanScreen() {
   const setLocationTracking = useCallback(
     async (enabled: boolean) => {
       if (enabled) {
-        const accepted = await confirm({
-          title: "Ativar rastreamento de rota?",
-          description:
-            "O PedixPro coletará sua localização precisa e enviará as coordenadas para a gestão da sua organização, para acompanhar suas rotas e visitas de trabalho. A coleta pode continuar em segundo plano, quando o app estiver fechado ou não estiver em uso, até você desativar este recurso.",
-          confirmLabel: "Ativar rastreamento",
-          cancelLabel: "Agora não",
+        // Disclosure in-app imediatamente antes dos prompts FG/BG do SO.
+        const result = await requestLocationPermissions({
+          purpose: "background_tracking",
+          confirm,
         });
-        if (!accepted) return;
+        if (!result.granted) {
+          if (!result.declinedDisclosure) {
+            setLocErr(
+              "Permissão de localização em segundo plano necessária para o rastreamento.",
+            );
+          }
+          return;
+        }
+        setPerm(result.foreground);
       }
       await setLocationTrackingEnabled(enabled);
     },
     [confirm],
   );
 
-  const refreshLocation = useCallback(async () => {
-    if (locPendingRef.current) return;
-    locPendingRef.current = true;
-    setLocPending(true);
-    setLocErr(null);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setPerm(status);
-      if (status !== Location.PermissionStatus.GRANTED) {
-        setLocErr("Sem permissão de localização.");
-        return;
+  const applyGrantedCoords = useCallback(
+    async (opts: { requestIfNeeded: boolean }) => {
+      if (locPendingRef.current) return;
+      locPendingRef.current = true;
+      setLocPending(true);
+      setLocErr(null);
+      try {
+        if (opts.requestIfNeeded) {
+          const result = await requestLocationPermissions({
+            purpose: "foreground_map",
+            confirm,
+          });
+          setPerm(result.foreground);
+          if (!result.granted) {
+            if (!result.declinedDisclosure) {
+              setLocErr("Sem permissão de localização.");
+            }
+            return;
+          }
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          setMyLat(pos.coords.latitude);
+          setMyLng(pos.coords.longitude);
+          return;
+        }
+
+        const { status, coords } = await getForegroundLocationIfGranted();
+        setPerm(status);
+        if (!coords) {
+          setLocErr(
+            "Toque em \"Atualizar GPS\" para permitir a localização e ver o mapa.",
+          );
+          return;
+        }
+        setMyLat(coords.latitude);
+        setMyLng(coords.longitude);
+      } catch (e) {
+        setLocErr(e instanceof Error ? e.message : "Falha ao obter GPS.");
+      } finally {
+        locPendingRef.current = false;
+        setLocPending(false);
       }
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      setMyLat(pos.coords.latitude);
-      setMyLng(pos.coords.longitude);
-    } catch (e) {
-      setLocErr(e instanceof Error ? e.message : "Falha ao obter GPS.");
-    } finally {
-      locPendingRef.current = false;
-      setLocPending(false);
-    }
-  }, []);
+    },
+    [confirm],
+  );
+
+  const refreshLocation = useCallback(async () => {
+    await applyGrantedCoords({ requestIfNeeded: true });
+  }, [applyGrantedCoords]);
 
   useEffect(() => {
-    void refreshLocation();
-  }, [refreshLocation]);
+    // Mount: nunca chama request*Permissions — só usa se já concedida.
+    void applyGrantedCoords({ requestIfNeeded: false });
+  }, [applyGrantedCoords]);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);

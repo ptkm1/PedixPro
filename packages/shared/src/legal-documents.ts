@@ -314,8 +314,9 @@ export const TERMS_OF_USE_DOCUMENT: LegalDocument = {
 export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
   slug: "privacidade",
   title: "Política de Privacidade",
-  description: "Como o Pedix Pro trata dados pessoais no app, web e site.",
-  effectiveDate: "30 de julho de 2026",
+  description:
+    "Como o Pedix Pro acessa, coleta, usa e compartilha dados pessoais, incluindo localização.",
+  effectiveDate: "14 de setembro de 2026",
   chapters: [
     {
       title: "Capítulo I - Disposições Gerais",
@@ -381,7 +382,10 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "9",
           paragraphs: [
-            "Quando o vendedor ativa voluntariamente o rastreamento de rota, podemos tratar dados de localização precisa, data, hora e precisão aproximada do dispositivo. Esses dados são associados ao usuário e à sua organização para registrar rotas, visitas e atividades comerciais.",
+            "Localização. O aplicativo mobile Pedix Pro acessa, coleta e usa dados de localização precisa do dispositivo (coordenadas geográficas, data, hora e precisão aproximada), mediante permissão do sistema operacional e declaração em destaque no app, nas seguintes hipóteses:",
+            "(a) Foreground (enquanto o app está em uso): para exibir o mapa de rota, clientes próximos, check-in e check-out de visitas e, quando o usuário solicita, para gravar as coordenadas do endereço de um cliente no cadastro;",
+            "(b) Background (em segundo plano, com o app fechado ou não em uso): somente quando o vendedor ativa voluntariamente o rastreamento de rota. Nesse caso, a localização pode ser coletada de forma contínua e enviada à organização à qual o vendedor está vinculado, para acompanhamento operacional de rotas e visitas comerciais;",
+            "Os dados de localização são associados ao usuário e à sua organização. Não utilizamos localização para publicidade, remarketing ou venda a terceiros. O histórico operacional de localização é retido pelo tempo necessário à finalidade (em regra, poucos dias) e depois eliminado ou anonimizado, ressalvadas obrigações legais. O usuário pode desativar o rastreamento no próprio app e gerenciar ou revogar a permissão nas configurações do aparelho; a revogação pode limitar mapa, rotas, check-ins e rastreamento.",
           ],
         },
       ],
@@ -398,7 +402,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "11",
           paragraphs: [
-            "A localização é tratada exclusivamente para disponibilizar mapa, planejamento de rota, check-in e check-out de visitas e, quando o rastreamento é ativado pelo vendedor, acompanhar a jornada comercial. Não utilizamos dados de localização para publicidade.",
+            "Finalidade da Localização. Tratamos dados de localização exclusivamente para funcionalidades do Pedix Pro: mapa, planejamento de rota, check-in e check-out de visitas, gravação pontual de coordenadas de cliente e, quando o rastreamento de rota é ativado pelo vendedor, acompanhamento da jornada comercial pela gestão da organização. Não utilizamos dados de localização para publicidade.",
           ],
         },
       ],
@@ -455,7 +459,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "18",
           paragraphs: [
-            "No aplicativo mobile, determinadas funcionalidades poderão depender de permissões do dispositivo, como câmera, notificações, localização, arquivos, imagens e conexão de rede. A localização em segundo plano só é solicitada depois que o vendedor ativa o rastreamento de rota; ela pode ser desativada no app e gerenciada nas configurações do aparelho. A revogação poderá limitar mapa, rotas, check-ins e rastreamento.",
+            "No aplicativo mobile, determinadas funcionalidades dependem de permissões do dispositivo, incluindo câmera, notificações, localização (precisa), arquivos, imagens e conexão de rede. Antes de qualquer pedido de permissão de localização ao sistema operacional, o app exibe uma declaração em destaque explicando o acesso, a coleta e o uso. A localização em segundo plano só é solicitada depois que o vendedor ativa o rastreamento de rota e aceita essa declaração; ela pode ser desativada no app e gerenciada nas configurações do aparelho. A revogação poderá limitar mapa, rotas, check-ins e rastreamento. A Política de Privacidade completa está em https://pedixpro.com.br/privacidade.",
           ],
         },
       ],
