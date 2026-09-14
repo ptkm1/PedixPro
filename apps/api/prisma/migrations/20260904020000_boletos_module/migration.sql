@@ -22,12 +22,6 @@ ALTER TABLE "Receivable" ADD COLUMN IF NOT EXISTS "cancelReason" TEXT;
 CREATE INDEX IF NOT EXISTS "Receivable_organizationId_orderId_installmentIndex_idx"
   ON "Receivable"("organizationId", "orderId", "installmentIndex");
 
--- Uma parcela ativa só pode ter um título. O índice parcial permite reemitir
--- depois da baixa/cancelamento sem abrir margem para duas emissões concorrentes.
-CREATE UNIQUE INDEX IF NOT EXISTS "Receivable_active_order_installment_key"
-  ON "Receivable"("organizationId", "orderId", "installmentIndex")
-  WHERE "status" <> 'CANCELLED' AND "installmentIndex" IS NOT NULL;
-
 DO $$ BEGIN
   ALTER TABLE "Receivable"
     ADD CONSTRAINT "Receivable_cancelledByUserId_fkey"

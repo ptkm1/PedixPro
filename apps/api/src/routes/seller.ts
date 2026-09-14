@@ -37,7 +37,6 @@ import { getProductStockLevels } from "../services/product-stock.js";
 import { buildSalesByCustomerPdf } from "../services/reports/sales-by-customer-pdf.js";
 import { buildSalesBySupplierPdf } from "../services/reports/sales-by-supplier-pdf.js";
 import { buildSalesDetailedPdf } from "../services/reports/sales-pdf.js";
-import { buildSellerCommissionsPdf } from "../services/reports/seller-commissions-pdf.js";
 import { listSellerCatalogProductIds } from "../services/seller-product-catalog.js";
 import {
     handleRegisterPushDevice,
@@ -47,10 +46,6 @@ import { canReadEffective } from "../services/role-permissions.js";
 import { buildRouteDirections } from "../services/route-directions.js";
 import { greedyNearestRoute, haversineKm } from "../services/route-plan.js";
 import { buildSalesBySupplier } from "../services/sales-by-supplier.js";
-import {
-    getSellerCommissionDetail,
-    listSellerCommissions,
-} from "../services/seller-commission-report.js";
 import {
     getCustomerRegistrationMode,
     getSellerShowUnassignedCustomers,
@@ -195,37 +190,6 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       rankingScope: isTeamLeader ? "team" : "none",
       teamSellerIds,
     });
-  });
-
-  app.get("/commissions", async (req, reply) => {
-    const auth = req.auth!;
-    const sellerId = requireSellerActor(auth, reply);
-    if (!sellerId) return;
-    const query = z.object({
-      from: z.string().optional(), to: z.string().optional(), cursor: z.string().optional(),
-      limit: z.coerce.number().int().min(1).max(50).optional(),
-    }).safeParse(req.query);
-    if (!query.success) return sendZodError(reply, query.error, req);
-    return listSellerCommissions({ organizationId: auth.organizationId, sellerId, ...query.data });
-  });
-
-  app.get("/commissions/:id", async (req, reply) => {
-    const auth = req.auth!;
-    const sellerId = requireSellerActor(auth, reply);
-    if (!sellerId) return;
-    const { id } = idParam.parse(req.params);
-    const detail = await getSellerCommissionDetail({ organizationId: auth.organizationId, sellerId, orderId: id });
-    return detail ?? reply.status(404).send({ error: "Comissão não encontrada" });
-  });
-
-  app.get("/reports/commissions.pdf", async (req, reply) => {
-    const auth = req.auth!;
-    const sellerId = requireSellerActor(auth, reply);
-    if (!sellerId) return;
-    const query = z.object({ from: z.string().optional(), to: z.string().optional() }).safeParse(req.query);
-    if (!query.success) return sendZodError(reply, query.error, req);
-    const pdf = await buildSellerCommissionsPdf({ organizationId: auth.organizationId, sellerId, ...query.data });
-    return reply.header("Content-Type", "application/pdf").header("Content-Disposition", 'attachment; filename="minhas-comissoes.pdf"').send(pdf);
   });
 
   app.get("/reports/sales-by-supplier", async (req, reply) => {
@@ -727,62 +691,23 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     return { products };
   });
 
-  app.get("/customers", async (req, reply) => {
+  app.get("/customers", async (req) => {
     const auth = req.auth!;
-    const query = z
-      .object({
-        code: z.string().trim().max(100).optional(),
-        document: z.string().trim().max(30).optional(),
-        legalName: z.string().trim().max(160).optional(),
-        tradeName: z.string().trim().max(160).optional(),
-        city: z.string().trim().max(100).optional(),
-      })
-      .safeParse(req.query);
-    if (!query.success) return sendZodError(reply, query.error, req);
-    const search = query.data;
-    const terms: Prisma.CustomerWhereInput[] = [];
-    if (search.code) {
-      const numericCode = Number(search.code.replace(/\D/g, ""));
-      terms.push({
-        OR: [
-          ...(Number.isInteger(numericCode) && numericCode > 0
-            ? [{ code: numericCode }]
-            : []),
-          { name: { contains: search.code, mode: "insensitive" } },
-          { tradeName: { contains: search.code, mode: "insensitive" } },
-        ],
-      });
-    }
-    if (search.document) {
-      const document = search.document.replace(/\D/g, "");
-      if (document) {
-        terms.push({ OR: [{ cnpj: { contains: document } }, { cpf: { contains: document } }] });
-      }
-    }
-    if (search.legalName) {
-      terms.push({ OR: [{ legalName: { contains: search.legalName, mode: "insensitive" } }, { name: { contains: search.legalName, mode: "insensitive" } }] });
-    }
-    if (search.tradeName) {
-      terms.push({ OR: [{ tradeName: { contains: search.tradeName, mode: "insensitive" } }, { name: { contains: search.tradeName, mode: "insensitive" } }] });
-    }
-    if (search.city) terms.push({ city: { contains: search.city, mode: "insensitive" } });
-    const where: Prisma.CustomerWhereInput = terms.length ? { AND: terms } : {};
     if (auth.role === "ADMIN") {
       return prisma.customer.findMany({
-        where: { organizationId: auth.organizationId, ...where },
+        where: { organizationId: auth.organizationId },
         orderBy: { name: "asc" },
       });
     }
     const showUnassigned = await getSellerShowUnassignedCustomers(
       auth.organizationId,
     );
-    const sellerWhere = sellerCustomerListWhere(
-      auth.organizationId,
-      auth.sellerId!,
-      showUnassigned,
-    );
     return prisma.customer.findMany({
-      where: terms.length ? { AND: [sellerWhere, ...terms] } : sellerWhere,
+      where: sellerCustomerListWhere(
+        auth.organizationId,
+        auth.sellerId!,
+        showUnassigned,
+      ),
       orderBy: { name: "asc" },
     });
   });

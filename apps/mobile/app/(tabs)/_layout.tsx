@@ -174,12 +174,12 @@ export default function TabsLayout() {
           listeners={tabPressPopToRoot("route-plan")}
         />
 
-        <Tabs.Screen name="_route-plan.styles" options={HIDDEN_TAB} />
         <Tabs.Screen name="commission" options={HIDDEN_TAB} />
         <Tabs.Screen name="products" options={HIDDEN_TAB} />
         <Tabs.Screen name="notifications" options={HIDDEN_TAB} />
         <Tabs.Screen name="profile" options={HIDDEN_TAB} />
         <Tabs.Screen name="reports" options={HIDDEN_TAB} />
+        <Tabs.Screen name="imports" options={HIDDEN_TAB} />
       </Tabs>
       {user.role === "SELLER" ? <QuickSaleFab /> : null}
     </View>

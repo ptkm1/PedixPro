@@ -21,10 +21,8 @@ export default function SettingsScreen() {
   const { colors } = useTheme();
   const {
     apiUrl,
-    locationTrackingEnabled,
     pushNotificationsEnabled,
     privacyLinks,
-    setLocationTracking,
     setPushNotifications,
     logoutAndGoLogin,
     logoutPending,
@@ -47,24 +45,9 @@ export default function SettingsScreen() {
 
         <Text style={styles.section}>Privacidade</Text>
         <Text style={styles.hint}>
-          Você controla os recursos sensíveis do aparelho. A localização de rota
-          só é enviada quando o rastreamento estiver ativado.
+          Você controla os recursos sensíveis do aparelho. O rastreamento de
+          rota é ativado na tela Rota, no momento em que você inicia a jornada.
         </Text>
-        <View style={styles.preferenceCard}>
-          <View style={styles.preferenceText}>
-            <Text style={styles.preferenceTitle}>Rastreamento de rota</Text>
-            <Text style={styles.preferenceHint}>
-              Compartilha sua localização com a gestão durante visitas e rotas
-              de trabalho.
-            </Text>
-          </View>
-          <Switch
-            value={locationTrackingEnabled}
-            onValueChange={(value) => void setLocationTracking(value)}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.primaryForeground}
-          />
-        </View>
         <View style={styles.preferenceCard}>
           <View style={styles.preferenceText}>
             <Text style={styles.preferenceTitle}>Notificações</Text>

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#02445C"/>
+      <stop offset="1" stop-color="#087D9C"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3BC6DC"/>
+      <stop offset="1" stop-color="#72E5B4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#background)"/>
+  <circle cx="922" cy="-6" r="244" fill="#FFFFFF" fill-opacity=".06"/>
+  <circle cx="930" cy="475" r="184" fill="#FFFFFF" fill-opacity=".05"/>
+  <rect x="72" y="92" width="126" height="126" rx="30" fill="#FFFFFF" fill-opacity=".12"/>
+  <g transform="translate(105 120) scale(.56)">
+    <path d="M48.021 134.5L12.021 165.5V89.5L48.021 57.5V134.5Z" fill="#FFFFFF"/>
+    <path d="M72.521 117V84.5H99.021C113.421 80.6415 116.354 66.559 116.021 60C116.021 43.2 102.688 35.6667 96.021 34H1.021L27.021 .5H96.021C107.221 .5 114.021 2.83333 116.021 4C142.021 10.8 150.188 42.5 151.021 57.5C151.021 99.5 122.354 114.667 108.021 117H72.521Z" fill="#FFFFFF"/>
+  </g>
+  <text x="72" y="290" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="700" letter-spacing="-1">PedixPro</text>
+  <text x="72" y="346" fill="#D6F6FF" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="500">Gestão comercial para sua equipe</text>
+  <rect x="72" y="385" width="312" height="8" rx="4" fill="url(#accent)"/>
+  <g transform="translate(650 116)">
+    <rect width="232" height="286" rx="27" fill="#0B2637" fill-opacity=".74" stroke="#8CE8F3" stroke-opacity=".35"/>
+    <rect x="24" y="30" width="112" height="13" rx="6.5" fill="#D6F6FF" fill-opacity=".92"/>
+    <rect x="24" y="57" width="165" height="9" rx="4.5" fill="#D6F6FF" fill-opacity=".45"/>
+    <rect x="24" y="95" width="184" height="76" rx="14" fill="#FFFFFF" fill-opacity=".10"/>
+    <rect x="42" y="139" width="25" height="18" rx="4" fill="#3BC6DC"/>
+    <rect x="78" y="117" width="25" height="40" rx="4" fill="#72E5B4"/>
+    <rect x="114" y="103" width="25" height="54" rx="4" fill="#3BC6DC"/>
+    <rect x="150" y="126" width="25" height="31" rx="4" fill="#72E5B4"/>
+    <rect x="24" y="191" width="88" height="63" rx="12" fill="#FFFFFF" fill-opacity=".10"/>
+    <rect x="120" y="191" width="88" height="63" rx="12" fill="#FFFFFF" fill-opacity=".10"/>
+  </g>
+  <path d="M576 370C610 335 627 305 652 290" fill="none" stroke="#72E5B4" stroke-width="5" stroke-linecap="round" stroke-dasharray="10 12"/>
+  <circle cx="576" cy="370" r="10" fill="#72E5B4"/>
+</svg>

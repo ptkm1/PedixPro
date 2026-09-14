@@ -1,6 +1,6 @@
 {
   "name": "@pedidos/mobile",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -26,11 +26,13 @@
     "@tanstack/react-query": "^5.100.10",
     "dotenv": "^17.4.2",
     "expo": "~55.0.23",
+    "expo-build-properties": "~55.0.18",
     "expo-camera": "~55.0.18",
     "expo-constants": "~55.0.16",
     "expo-crypto": "~55.0.15",
     "expo-dev-client": "~55.0.35",
     "expo-device": "^55.0.19",
+    "expo-document-picker": "~55.0.17",
     "expo-file-system": "~55.0.19",
     "expo-linear-gradient": "~55.0.15",
     "expo-linking": "~55.0.15",

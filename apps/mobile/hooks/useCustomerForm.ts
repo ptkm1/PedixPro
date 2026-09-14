@@ -1,5 +1,6 @@
 import { useConfirm } from "@/context/ConfirmContext";
 import { apiFetch } from "@/lib/api";
+import { requestLocationPermissions } from "@/lib/location-disclosure";
 import {
   fetchSellerCustomer,
   sellerOfflineStaleTime,
@@ -27,7 +28,7 @@ function parseCoord(value: unknown): number | null {
 
 export function useCustomerForm(customerId?: string) {
   const router = useRouter();
-  const { alert } = useConfirm();
+  const { alert, confirm } = useConfirm();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<CustomerFormValues>(emptyCustomerForm());
@@ -108,13 +109,18 @@ export function useCustomerForm(customerId?: string) {
   const captureLocation = useCallback(async () => {
     setLocationLoading(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        await alert({
-          title: "Permissão necessária",
-          description:
-            "Ative a localização para gravar as coordenadas do cliente.",
-        });
+      const result = await requestLocationPermissions({
+        purpose: "foreground_customer",
+        confirm,
+      });
+      if (!result.granted) {
+        if (!result.declinedDisclosure) {
+          await alert({
+            title: "Permissão necessária",
+            description:
+              "Ative a localização para gravar as coordenadas do cliente.",
+          });
+        }
         return;
       }
       const pos = await Location.getCurrentPositionAsync({
@@ -132,7 +138,7 @@ export function useCustomerForm(customerId?: string) {
     } finally {
       setLocationLoading(false);
     }
-  }, [alert]);
+  }, [alert, confirm]);
 
   const save = useMutation({
     mutationFn: async () => {

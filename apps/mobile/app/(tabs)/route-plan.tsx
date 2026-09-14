@@ -5,12 +5,12 @@ import * as Location from "expo-location";
 import { Link } from "expo-router";
 import { Clock, MapPin, Navigation, Users } from "lucide-react-native";
 import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
 } from "react-native";
 import { RoutePlanMap } from "../../components/RoutePlanMap";
 import { RouteCustomerListItem } from "../../components/molecules/RouteCustomerListItem";
@@ -18,7 +18,7 @@ import { VisitNotesModal } from "../../components/molecules/VisitNotesModal";
 import { useRoutePlanScreen } from "../../hooks/screens/useRoutePlanScreen";
 import { useThemedStyles } from "../../hooks/useThemedStyles";
 import { useTheme } from "../../lib/theme";
-import { createRoutePlanStyles } from "./_route-plan.styles";
+import { createRoutePlanStyles } from "@/styles/route-plan.styles";
 
 export default function RoutePlanScreen() {
   const styles = useThemedStyles(createRoutePlanStyles);
@@ -62,6 +62,42 @@ export default function RoutePlanScreen() {
           <Text style={styles.leadStrong}>Rota por estrada</Text> para traçar
           pelas vias (Google Routes).
         </Text>
+
+        <View
+          style={[
+            styles.trackingCard,
+            s.locationTrackingEnabled ? styles.trackingCardActive : undefined,
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.trackingTitle}>Rastreamento de rota</Text>
+            <Text style={styles.trackingDescription}>
+              {s.locationTrackingEnabled
+                ? "Ativo: sua localização é atualizada durante a jornada."
+                : "Ative para registrar sua rota e visitas durante a jornada."}
+            </Text>
+          </View>
+          <Pressable
+            style={[
+              styles.trackingButton,
+              s.locationTrackingEnabled
+                ? styles.trackingButtonStop
+                : undefined,
+            ]}
+            onPress={() => void s.setLocationTracking(!s.locationTrackingEnabled)}
+          >
+            <Text
+              style={[
+                styles.trackingButtonText,
+                s.locationTrackingEnabled
+                  ? styles.trackingButtonStopText
+                  : undefined,
+              ]}
+            >
+              {s.locationTrackingEnabled ? "Desativar" : "Ativar"}
+            </Text>
+          </Pressable>
+        </View>
 
         {__DEV__ && s.nearbyQuery.data?.roadRoutingConfigured === false ? (
           <Text style={styles.warn}>

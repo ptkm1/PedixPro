@@ -314,8 +314,9 @@ export const TERMS_OF_USE_DOCUMENT: LegalDocument = {
 export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
   slug: "privacidade",
   title: "Política de Privacidade",
-  description: "Como o Pedix Pro trata dados pessoais no app, web e site.",
-  effectiveDate: "30 de julho de 2026",
+  description:
+    "Como o Pedix Pro acessa, coleta, usa e compartilha dados pessoais, incluindo localização.",
+  effectiveDate: "14 de setembro de 2026",
   chapters: [
     {
       title: "Capítulo I - Disposições Gerais",
@@ -352,7 +353,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "5",
           paragraphs: [
-            "Em relação aos dados pessoais e dados pessoais sensíveis de pacientes inseridos pelo usuário no Pedix Pro, a Empresa, em regra, atuará como operadora, tratando tais dados em nome do usuário, que será o controlador responsável pela finalidade do tratamento, definição de bases legais, fornecimento de informações aos titulares, obtenção de consentimentos quando necessários e cumprimento das demais obrigações legais.",
+            "Em relação aos dados cadastrados pela organização contratante, como dados de clientes, contatos, produtos, pedidos e visitas comerciais, a Empresa poderá atuar como operadora, tratando esses dados em nome da organização, que é responsável pela finalidade, base legal e conformidade do tratamento.",
           ],
         },
       ],
@@ -381,7 +382,10 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "9",
           paragraphs: [
-            "O usuário poderá inserir dados de pacientes, incluindo nome, contato, nascimento, histórico de atendimento, observações, imagens, documentos, prontuários, informações clínicas e demais registros. Esses dados podem incluir dados pessoais sensíveis, especialmente dados relacionados à saúde.",
+            "Localização. O aplicativo mobile Pedix Pro acessa, coleta e usa dados de localização precisa do dispositivo (coordenadas geográficas, data, hora e precisão aproximada), mediante permissão do sistema operacional e declaração em destaque no app, nas seguintes hipóteses:",
+            "(a) Foreground (enquanto o app está em uso): para exibir o mapa de rota, clientes próximos, check-in e check-out de visitas e, quando o usuário solicita, para gravar as coordenadas do endereço de um cliente no cadastro;",
+            "(b) Background (em segundo plano, com o app fechado ou não em uso): somente quando o vendedor ativa voluntariamente o rastreamento de rota. Nesse caso, a localização pode ser coletada de forma contínua e enviada à organização à qual o vendedor está vinculado, para acompanhamento operacional de rotas e visitas comerciais;",
+            "Os dados de localização são associados ao usuário e à sua organização. Não utilizamos localização para publicidade, remarketing ou venda a terceiros. O histórico operacional de localização é retido pelo tempo necessário à finalidade (em regra, poucos dias) e depois eliminado ou anonimizado, ressalvadas obrigações legais. O usuário pode desativar o rastreamento no próprio app e gerenciar ou revogar a permissão nas configurações do aparelho; a revogação pode limitar mapa, rotas, check-ins e rastreamento.",
           ],
         },
       ],
@@ -398,7 +402,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "11",
           paragraphs: [
-            "Dados de pacientes são tratados para permitir que o usuário organize sua atividade profissional, incluindo cadastro de pacientes, prontuário eletrônico, histórico clínico, agenda, controle de atendimentos, imagens, documentos, relatórios e armazenamento em nuvem, conforme instruções e configurações definidas pelo próprio usuário.",
+            "Finalidade da Localização. Tratamos dados de localização exclusivamente para funcionalidades do Pedix Pro: mapa, planejamento de rota, check-in e check-out de visitas, gravação pontual de coordenadas de cliente e, quando o rastreamento de rota é ativado pelo vendedor, acompanhamento da jornada comercial pela gestão da organização. Não utilizamos dados de localização para publicidade.",
           ],
         },
       ],
@@ -415,7 +419,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "13",
           paragraphs: [
-            "Quando dados pessoais sensíveis de pacientes forem inseridos pelo usuário, caberá ao usuário definir e comprovar a base legal aplicável, incluindo, quando cabível, tutela da saúde, cumprimento de obrigação legal, exercício regular de direitos, proteção da vida ou incolumidade física, consentimento específico e destacado ou outra base admitida pela LGPD.",
+            "O rastreamento de rota é opcional e depende de ação voluntária do vendedor no aplicativo. A organização contratante é responsável por informar seus colaboradores sobre a finalidade operacional do recurso e pelas bases legais aplicáveis à sua operação.",
           ],
         },
       ],
@@ -438,7 +442,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "16",
           paragraphs: [
-            "A Empresa não vende dados pessoais. Eventual compartilhamento ocorrerá na medida necessária às finalidades informadas, observadas salvaguardas contratuais e técnicas razoáveis.",
+            "A Empresa não vende dados pessoais. Dados de localização do vendedor são disponibilizados apenas à organização à qual ele está vinculado e a usuários autorizados por ela, além dos fornecedores técnicos necessários para operar o serviço.",
           ],
         },
       ],
@@ -455,7 +459,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "18",
           paragraphs: [
-            "No aplicativo mobile, determinadas funcionalidades poderão depender de permissões do dispositivo, como câmera, notificações, arquivos, imagens e conexão de rede. O usuário pode gerenciar permissões nas configurações do aparelho, ciente de que a revogação poderá limitar funcionalidades.",
+            "No aplicativo mobile, determinadas funcionalidades dependem de permissões do dispositivo, incluindo câmera, notificações, localização (precisa), arquivos, imagens e conexão de rede. Antes de qualquer pedido de permissão de localização ao sistema operacional, o app exibe uma declaração em destaque explicando o acesso, a coleta e o uso. A localização em segundo plano só é solicitada depois que o vendedor ativa o rastreamento de rota e aceita essa declaração; ela pode ser desativada no app e gerenciada nas configurações do aparelho. A revogação poderá limitar mapa, rotas, check-ins e rastreamento. A Política de Privacidade completa está em https://pedixpro.com.br/privacidade.",
           ],
         },
       ],
@@ -512,7 +516,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "25",
           paragraphs: [
-            "Quando a solicitação envolver dados de pacientes tratados em nome do usuário, a Empresa poderá encaminhar a demanda ao usuário controlador ou aguardar suas instruções, salvo quando a lei determinar conduta diversa.",
+            "Quando a solicitação envolver dados de clientes, pedidos, visitas ou localização tratados em nome de uma organização, a Empresa poderá encaminhar a demanda à organização responsável ou aguardar suas instruções, salvo quando a lei determinar conduta diversa.",
           ],
         },
       ],
@@ -534,7 +538,7 @@ export const PRIVACY_POLICY_DOCUMENT: LegalDocument = {
         {
           id: "27",
           paragraphs: [
-            "O Pedix Pro não é destinado ao uso direto por crianças ou adolescentes. Caso o usuário insira dados de pacientes menores de idade, deverá garantir que possui base legal, autorização e responsabilidade profissional adequadas para tal tratamento.",
+            "O Pedix Pro não é destinado ao uso direto por crianças ou adolescentes. A organização contratante deve assegurar que os usuários autorizados tenham vínculo profissional e idade compatível com o uso da plataforma.",
           ],
         },
       ],

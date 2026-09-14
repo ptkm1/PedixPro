@@ -6,14 +6,14 @@ import { PERIOD_PRESET_LABELS, type PeriodPreset } from "@/lib/period-presets";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    LayoutChangeEvent,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { BarChart, ruleTypes } from "react-native-gifted-charts";
 
@@ -24,13 +24,22 @@ const PRESETS: PeriodPreset[] = [
   "last_90_days",
 ];
 
-const CHART_HEIGHT = 180;
+const CHART_HEIGHT = 200;
+const Y_AXIS_LABEL_WIDTH = 34;
+const X_LABEL_WIDTH = 54;
+const INITIAL_SPACING = 12;
+const END_SPACING = 12;
+const BAR_SPACING = 10;
+/** Espaço extra no topo para o valor acima da barra (gifted-charts trata overflowTop como flag → ~30px). */
+const TOP_LABEL_OVERFLOW = 30;
+const TOP_LABEL_WIDTH = 72;
 
 type SupplierBar = {
   value: number;
   label: string;
   fullName: string;
   frontColor: string;
+  topLabelComponent: () => ReactNode;
 };
 
 type Props = {
@@ -90,7 +99,6 @@ function formatYAxisValue(value: string, hideValues: boolean): string {
 
 export function TopSuppliersBlock({ hideValues = false }: Props) {
   const { colors } = useTheme();
-  const { width } = useWindowDimensions();
   const {
     preset,
     selectPreset,
@@ -105,18 +113,67 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
   const [dateError, setDateError] = useState<string | null>(null);
+  /** Largura útil do chartWrap (já dentro do padding do card). */
+  const [chartAreaWidth, setChartAreaWidth] = useState(0);
 
-  const barData = useMemo<SupplierBar[]>(() => {
-    if (!data?.topSuppliers.length) return [];
-    return data.topSuppliers.map((s) => ({
-      value: Math.round(s.totalAmount * 100) / 100,
-      label: shortSupplierName(s.tradeName),
-      fullName: s.tradeName,
-      frontColor: colors.primary,
-    }));
-  }, [colors.primary, data?.topSuppliers]);
-  const chartWidth = width - 32 - 28;
-  const barWidth = Math.max(18, Math.min(40, (chartWidth - 24) / Math.max(barData.length, 1) - 12));
+  const onChartAreaLayout = (event: LayoutChangeEvent) => {
+    const next = Math.floor(event.nativeEvent.layout.width);
+    if (next > 0 && next !== chartAreaWidth) setChartAreaWidth(next);
+  };
+
+  // gifted-charts: actualContainerWidth = width + yAxisLabelWidth.
+  const parentWidth = Math.max(0, chartAreaWidth - 1);
+  const plotWidth = Math.max(120, parentWidth - Y_AXIS_LABEL_WIDTH);
+
+  const { barData, chartMaxValue, barWidth } = useMemo(() => {
+    if (!data?.topSuppliers.length) {
+      return {
+        barData: [] as SupplierBar[],
+        chartMaxValue: undefined as number | undefined,
+        barWidth: 28,
+      };
+    }
+
+    const count = data.topSuppliers.length;
+    // gifted-charts: totalWidth = initial + end + Σ (barWidth + spacing) — spacing também na última.
+    const usableWidth = Math.max(80, plotWidth - INITIAL_SPACING - END_SPACING);
+    const nextBarWidth = Math.max(
+      18,
+      Math.min(40, (usableWidth - count * BAR_SPACING) / count),
+    );
+
+    const values = data.topSuppliers.map((s) => Math.round(s.totalAmount * 100) / 100);
+    const maxValue = Math.max(...values, 0);
+    const paddedMax = maxValue > 0 ? maxValue * 1.28 : undefined;
+
+    return {
+      barData: data.topSuppliers.map((s, index) => {
+        const value = values[index] ?? 0;
+        return {
+          value,
+          label: shortSupplierName(s.tradeName),
+          fullName: s.tradeName,
+          frontColor: colors.primary,
+          topLabelComponent: () => (
+            <Text
+              numberOfLines={1}
+              style={{
+                color: colors.text,
+                fontSize: 10,
+                fontWeight: "700",
+                textAlign: "center",
+                width: TOP_LABEL_WIDTH,
+              }}
+            >
+              {displayMoney(hideValues, value)}
+            </Text>
+          ),
+        };
+      }),
+      chartMaxValue: paddedMax,
+      barWidth: nextBarWidth,
+    };
+  }, [colors.primary, colors.text, data?.topSuppliers, hideValues, plotWidth]);
 
   const openCustomRange = () => {
     setDateError(null);
@@ -261,40 +318,62 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
           Sem vendas com fornecedor no período.
         </ThemedText>
       ) : (
-        <View style={styles.chartWrap}>
-          <BarChart
-            data={barData}
-            width={chartWidth}
-            height={CHART_HEIGHT}
-            adjustToWidth
-            parentWidth={chartWidth}
-            barWidth={barWidth}
-            spacing={10}
-            initialSpacing={12}
-            endSpacing={12}
-            noOfSections={4}
-            roundedTop
-            barBorderRadius={3}
-            yAxisColor={colors.border}
-            xAxisColor={colors.border}
-            rulesColor={colors.border}
-            rulesType={ruleTypes.DASHED}
-            dashWidth={3}
-            dashGap={3}
-            xAxisThickness={1}
-            yAxisThickness={0}
-            formatYLabel={(value) => formatYAxisValue(value, hideValues)}
-            yAxisTextStyle={{ color: colors.textMuted, fontSize: 11 }}
-            xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9, width: 54, textAlign: "center" }}
-            labelsExtraHeight={30}
-            focusBarOnPress
-            renderTooltip={(item: SupplierBar) => (
-              <View style={[styles.tooltip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <ThemedText variant="caption" style={{ fontWeight: "600" }}>{item.fullName}</ThemedText>
-                <ThemedText variant="caption" muted style={{ marginTop: 2 }}>{displayMoney(hideValues, item.value)}</ThemedText>
-              </View>
-            )}
-          />
+        <View style={styles.chartWrap} onLayout={onChartAreaLayout}>
+          {parentWidth > 0 ? (
+            <BarChart
+              data={barData}
+              width={plotWidth}
+              parentWidth={parentWidth}
+              height={CHART_HEIGHT}
+              maxValue={chartMaxValue}
+              barWidth={barWidth}
+              spacing={BAR_SPACING}
+              initialSpacing={INITIAL_SPACING}
+              endSpacing={END_SPACING}
+              noOfSections={4}
+              roundedTop
+              barBorderRadius={3}
+              overflowTop={TOP_LABEL_OVERFLOW}
+              topLabelContainerStyle={{
+                width: TOP_LABEL_WIDTH,
+                height: 22,
+                top: -24,
+                alignItems: "center",
+                justifyContent: "flex-end",
+                marginLeft: (barWidth - TOP_LABEL_WIDTH) / 2,
+              }}
+              yAxisLabelWidth={Y_AXIS_LABEL_WIDTH}
+              yAxisColor={colors.border}
+              xAxisColor={colors.border}
+              rulesColor={colors.border}
+              rulesType={ruleTypes.DASHED}
+              dashWidth={3}
+              dashGap={3}
+              xAxisThickness={1}
+              yAxisThickness={0}
+              disableScroll
+              formatYLabel={(value) => formatYAxisValue(value, hideValues)}
+              yAxisTextStyle={{ color: colors.textMuted, fontSize: 11 }}
+              xAxisLabelTextStyle={{
+                color: colors.textMuted,
+                fontSize: 9,
+                width: X_LABEL_WIDTH,
+                textAlign: "center",
+              }}
+              labelsDistanceFromXaxis={8}
+              xAxisLabelsVerticalShift={4}
+              labelsExtraHeight={30}
+              focusBarOnPress
+              renderTooltip={(item: SupplierBar) => (
+                <View style={[styles.tooltip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <ThemedText variant="caption" style={{ fontWeight: "600" }}>{item.fullName}</ThemedText>
+                  <ThemedText variant="caption" muted style={{ marginTop: 2 }}>
+                    {displayMoney(hideValues, item.value)}
+                  </ThemedText>
+                </View>
+              )}
+            />
+          ) : null}
           {isFetching && !isLoading ? (
             <View
               style={[
@@ -331,7 +410,10 @@ const styles = StyleSheet.create({
   },
   chartWrap: {
     marginTop: 8,
-    overflow: "hidden",
+    paddingTop: 4,
+    width: "100%",
+    alignSelf: "stretch",
+    overflow: "visible",
     position: "relative",
   },
   chartLoading: {

@@ -30,6 +30,7 @@ import {
     Settings,
     ShoppingBag,
     TrendingUp,
+    Upload,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -234,6 +235,13 @@ export default function ProfileScreen() {
             label="Relatórios"
             onPress={() => router.push("/(tabs)/reports")}
           />
+          {user?.role === "ADMIN" ? (
+            <MenuRow
+              icon={Upload}
+              label="Importar CSV"
+              onPress={() => router.push("/(tabs)/imports")}
+            />
+          ) : null}
           <MenuRow
             icon={TrendingUp}
             label={user?.role === "ADMIN" ? "Ranking" : "Comissão"}

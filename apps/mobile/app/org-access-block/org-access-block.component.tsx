@@ -2,7 +2,7 @@ import { SafeScreen } from "@/components/layout";
 import { Redirect, useRouter } from "expo-router";
 import { Pressable, Text } from "react-native";
 import { useAuth } from "../../context/AuthContext";
-import { useOrgAccessBlockStyles } from "./_org-access-block.styles";
+import { useOrgAccessBlockStyles } from "@/styles/org-access-block.styles";
 
 export default function OrgAccessBlockScreen() {
   const router = useRouter();

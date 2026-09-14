@@ -1,5 +1,5 @@
 import { StyleSheet } from "react-native";
-import type { AppColors } from "../../lib/theme/types";
+import type { AppColors } from "../lib/theme/types";
 
 export function createRoutePlanStyles(c: AppColors) {
   return StyleSheet.create({
@@ -13,6 +13,46 @@ export function createRoutePlanStyles(c: AppColors) {
       lineHeight: 18,
     },
     leadStrong: { fontWeight: "700", color: c.text },
+    trackingCard: {
+      marginHorizontal: 16,
+      marginTop: 14,
+      padding: 14,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.card,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    trackingCardActive: {
+      borderColor: c.primary,
+      backgroundColor: c.surface,
+    },
+    trackingTitle: { fontSize: 15, fontWeight: "700", color: c.text },
+    trackingDescription: {
+      marginTop: 4,
+      fontSize: 12,
+      lineHeight: 17,
+      color: c.textSecondary,
+    },
+    trackingButton: {
+      backgroundColor: c.primary,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    trackingButtonStop: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.primary,
+    },
+    trackingButtonText: {
+      color: c.primaryForeground,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    trackingButtonStopText: { color: c.primary },
     filterRow: {
       flexDirection: "row",
       flexWrap: "wrap",

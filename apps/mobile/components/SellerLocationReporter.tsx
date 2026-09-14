@@ -13,7 +13,9 @@ import {
 } from "../lib/privacy-preferences";
 
 /**
- * Envia GPS do vendedor (foreground + background com permissão) para o painel admin.
+ * Envia GPS do vendedor quando o rastreamento está ativo e a permissão
+ * já foi concedida (disclosure + prompt ficam no toggle da tela Rota).
+ * Nunca solicita permissão de localização daqui.
  */
 export function SellerLocationReporter() {
   const { user, loading } = useAuth();

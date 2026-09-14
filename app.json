@@ -1,5 +1,7 @@
 {
   "expo": {
+    "name": "PedixPro",
+    "slug": "pedidos-mobile",
     "extra": {
       "eas": {
         "projectId": "533c4fc8-7849-4180-bdb5-5d27fd5be149"

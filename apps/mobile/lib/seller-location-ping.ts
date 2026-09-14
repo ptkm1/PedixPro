@@ -19,15 +19,15 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * Envia GPS apenas se a permissão foreground já estiver concedida.
+ * Nunca chama request*Permissions (política Play / disclosure).
+ */
 export async function pingSellerLocationIfNeeded(): Promise<void> {
   const now = Date.now();
   if (now - lastSentAt < MIN_INTERVAL_MS) return;
 
-  let { status } = await Location.getForegroundPermissionsAsync();
-  if (status !== Location.PermissionStatus.GRANTED) {
-    const req = await Location.requestForegroundPermissionsAsync();
-    status = req.status;
-  }
+  const { status } = await Location.getForegroundPermissionsAsync();
   if (status !== Location.PermissionStatus.GRANTED) return;
 
   const pos = await Location.getCurrentPositionAsync({
@@ -44,7 +44,7 @@ export async function pingSellerLocationIfNeeded(): Promise<void> {
     return;
   }
 
-  await apiFetch<{ ok: boolean }>("/seller/location", {
+  await apiFetch("/seller/location", {
     method: "POST",
     body: JSON.stringify({
       latitude,
