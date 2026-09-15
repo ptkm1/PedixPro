@@ -1,0 +1,31 @@
+# Monorepo pnpm hoisted: production iOS.
+build:
+  name: PedixPro production iOS
+  steps:
+    - eas/checkout
+    - eas/use_npm_token
+    - run:
+        name: Install monorepo and link Expo for CLI
+        command: bash ./scripts/eas-prepare-monorepo.sh
+    - run:
+        name: Build @pedidos/shared
+        command: cd ../.. && pnpm --filter @pedidos/shared run build
+    - run:
+        name: Build @pedidos/design-tokens
+        command: cd ../.. && pnpm --filter @pedidos/design-tokens run build
+    - run:
+        name: Verify expo-router entry
+        command: |
+          node -e "const m=require('./package.json').main; if(m!=='expo-router/entry'&&m!=='./index.js'&&m!=='index.js'){console.error('main inválido:',m); process.exit(1)}; console.log('main OK:',m)"
+    - eas/resolve_build_config
+    - run:
+        name: Expo prebuild (iOS)
+        command: pnpm exec expo prebuild --no-install --platform ios
+    - eas/configure_eas_update:
+        inputs:
+          throw_if_not_configured: false
+    - eas/inject_ios_credentials
+    - eas/configure_ios_version
+    - eas/generate_gymfile
+    - eas/run_fastlane
+    - eas/find_and_upload_build_artifacts

@@ -43,7 +43,11 @@
         "EXPO_PUBLIC_API_URL": "https://api.pedixpro.com.br"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "config": "production-android.yml"
+      },
+      "ios": {
+        "config": "production-ios.yml"
       }
     }
   },
