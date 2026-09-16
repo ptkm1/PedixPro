@@ -1,8 +1,8 @@
 import {
-  cnpjDigitsOnly,
-  cpfDigitsOnly,
-  isValidCnpj,
-  isValidCpf,
+    cnpjDigitsOnly,
+    cpfDigitsOnly,
+    isValidCnpj,
+    isValidCpf,
 } from "@pedidos/shared";
 import type { CustomerDocumentType } from "@prisma/client";
 import { z } from "zod";
@@ -58,8 +58,14 @@ function refineCustomerDocument(
 ) {
   const partial = opts?.partial ?? false;
 
+  // Em patch, o client envia o doc “outro” como null (ex.: CNPJ + cpf:null).
+  // Não tratar `null` como “campo sendo validado” — só string/valor real.
   const validateCnpj =
-    data.documentType === "CNPJ" || (partial && data.cnpj !== undefined);
+    data.documentType === "CNPJ" ||
+    (partial &&
+      data.documentType !== "CPF" &&
+      data.cnpj !== undefined &&
+      data.cnpj !== null);
   if (validateCnpj) {
     const d = cnpjDigitsOnly(data.cnpj ?? "");
     if (!d) {
@@ -97,7 +103,11 @@ function refineCustomerDocument(
   }
 
   const validateCpf =
-    data.documentType === "CPF" || (partial && data.cpf !== undefined);
+    data.documentType === "CPF" ||
+    (partial &&
+      data.documentType !== "CNPJ" &&
+      data.cpf !== undefined &&
+      data.cpf !== null);
   if (validateCpf) {
     const d = cpfDigitsOnly(data.cpf ?? "");
     if (!d) {

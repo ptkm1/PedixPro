@@ -4521,6 +4521,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ids: z.array(z.string().min(1)).min(1).max(100),
         status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
         creditBlocked: z.boolean().optional(),
+        sellerId: z.string().min(1).nullable().optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -4528,8 +4529,19 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       }
 
     const { ids: rawIds, ...patch } = body.data;
-    if (patch.status === undefined && patch.creditBlocked === undefined) {
+    if (
+      patch.status === undefined &&
+      patch.creditBlocked === undefined &&
+      patch.sellerId === undefined
+    ) {
       return reply.status(400).send({ error: "Nenhuma alteração informada" });
+    }
+
+    if (patch.sellerId) {
+      const s = await prisma.seller.findFirst({
+        where: { id: patch.sellerId, organizationId: auth.organizationId },
+      });
+      if (!s) return reply.status(400).send({ error: "Vendedor inválido" });
     }
 
     const ids = [...new Set(rawIds)];
@@ -4550,6 +4562,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ...(patch.creditBlocked !== undefined
           ? { creditBlocked: patch.creditBlocked }
           : {}),
+        ...(patch.sellerId !== undefined ? { sellerId: patch.sellerId } : {}),
       },
     });
     await auditFromAuth(auth, {
@@ -4561,10 +4574,55 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         count: targets.length,
         status: patch.status ?? null,
         creditBlocked: patch.creditBlocked ?? null,
+        sellerId: patch.sellerId !== undefined ? patch.sellerId : null,
         names: targets.map((t) => t.name).slice(0, 20),
       },
     });
     return { updated: targets.length };
+  });
+
+  app.post("/customers/batch-delete", async (req, reply) => {
+    const auth = req.auth!;
+    if (
+      auth.role === "MANAGER" &&
+      !(await canWriteEffective(auth.organizationId, auth.role, "customers"))
+    ) {
+      return reply
+        .status(403)
+        .send({ error: "Sem permissão para excluir clientes" });
+    }
+    const body = z
+      .object({ ids: z.array(z.string().min(1)).min(1).max(100) })
+      .safeParse(req.body);
+    if (!body.success) {
+      return sendZodError(reply, body.error, req);
+    }
+
+    const ids = [...new Set(body.data.ids)];
+    const targets = await prisma.customer.findMany({
+      where: { organizationId: auth.organizationId, id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    if (targets.length !== ids.length) {
+      return reply
+        .status(400)
+        .send({ error: "Um ou mais clientes não foram encontrados" });
+    }
+
+    await prisma.customer.deleteMany({
+      where: { organizationId: auth.organizationId, id: { in: ids } },
+    });
+    await auditFromAuth(auth, {
+      action: AUDIT_ACTION.DELETE,
+      entityType: AUDIT_ENTITY.Customer,
+      entityId: auth.organizationId,
+      metadata: {
+        batch: true,
+        count: targets.length,
+        names: targets.map((t) => t.name).slice(0, 20),
+      },
+    });
+    return { deleted: targets.length };
   });
 
   app.get("/customers/pending-approval", async (req) => {
