@@ -73,6 +73,7 @@ export function adminPathToPlanFeature(routePath: string): PlanFeature | null {
   }
   if (p.startsWith("/audit")) return "audit";
   if (p === "/organization/branding") return "whitelabel";
+  if (p.startsWith("/ai")) return "reports_ai";
 
   return null;
 }
