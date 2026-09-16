@@ -7,20 +7,20 @@ import type { RouteListCustomer } from "../../components/molecules/RouteCustomer
 import { useConfirm } from "../../context/ConfirmContext";
 import { apiFetch } from "../../lib/api";
 import type {
-  DirectionsRouteResp,
-  NearbyCustomersResp,
-  SellerVisit,
+    DirectionsRouteResp,
+    NearbyCustomersResp,
+    SellerVisit,
 } from "../../lib/route/types";
 import { formatDurationSeconds } from "../../lib/utils/format-duration";
 import { openNavigationApp } from "../../lib/utils/open-navigation";
 import {
-  getForegroundLocationIfGranted,
-  requestLocationPermissions,
+    getForegroundLocationIfGranted,
+    requestLocationPermissions,
 } from "../../lib/location-disclosure";
 import {
-  isLocationTrackingEnabled,
-  setLocationTrackingEnabled,
-  subscribePrivacyPreferences,
+    isLocationTrackingEnabled,
+    setLocationTrackingEnabled,
+    subscribePrivacyPreferences,
 } from "../../lib/privacy-preferences";
 
 const RADIUS_OPTIONS = [30, 60, 120] as const;
@@ -421,6 +421,7 @@ export function useRoutePlanScreen() {
         addressNote: null,
         distanceKm: 0,
         assignedToMe: false,
+        hasSeller: false,
       };
       const isActive = activeVisit?.customerId === full.id && hasOpenVisit;
       void (async () => {
