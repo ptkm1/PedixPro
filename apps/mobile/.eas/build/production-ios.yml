@@ -1,5 +1,6 @@
+# Monorepo pnpm hoisted: production iOS.
 build:
-  name: PedixPro preview iOS
+  name: PedixPro production iOS
   steps:
     - eas/checkout
     - eas/use_npm_token
@@ -12,6 +13,10 @@ build:
     - run:
         name: Build @pedidos/design-tokens
         command: cd ../.. && pnpm --filter @pedidos/design-tokens run build
+    - run:
+        name: Verify expo-router entry
+        command: |
+          node -e "const m=require('./package.json').main; if(m!=='expo-router/entry'&&m!=='./index.js'&&m!=='index.js'){console.error('main inválido:',m); process.exit(1)}; console.log('main OK:',m)"
     - eas/resolve_build_config
     - run:
         name: Expo prebuild (iOS)

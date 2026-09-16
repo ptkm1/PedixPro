@@ -1,5 +1,6 @@
+# Monorepo pnpm hoisted: production AAB para Play Store.
 build:
-  name: PedixPro preview iOS
+  name: PedixPro production Android
   steps:
     - eas/checkout
     - eas/use_npm_token
@@ -12,19 +13,18 @@ build:
     - run:
         name: Build @pedidos/design-tokens
         command: cd ../.. && pnpm --filter @pedidos/design-tokens run build
+    - run:
+        name: Verify expo-router entry
+        command: |
+          node -e "const m=require('./package.json').main; if(m!=='expo-router/entry'&&m!=='./index.js'&&m!=='index.js'){console.error('main inválido:',m); process.exit(1)}; console.log('main OK:',m)"
     - eas/resolve_build_config
     - run:
-        name: Expo prebuild (iOS)
-        command: pnpm exec expo prebuild --no-install --platform ios
+        name: Expo prebuild (Android)
+        command: pnpm exec expo prebuild --no-install --platform android
     - eas/configure_eas_update:
         inputs:
           throw_if_not_configured: false
-    - run:
-        name: Install iOS Pods
-        command: cd ios && pod install
-    - eas/resolve_apple_team_id_from_credentials
-    - eas/configure_ios_credentials
-    - eas/configure_ios_version
-    - eas/generate_gymfile_from_template
-    - eas/run_fastlane
+    - eas/inject_android_credentials
+    - eas/configure_android_version
+    - eas/run_gradle
     - eas/find_and_upload_build_artifacts
