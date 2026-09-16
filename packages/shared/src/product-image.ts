@@ -1,6 +1,19 @@
 /** Limites e tipos do upload de foto de produto (R2). */
 
+/** Tamanho máximo do arquivo que sobe ao bucket (já otimizado). */
 export const PRODUCT_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Tamanho máximo do arquivo escolhido pelo usuário (antes da otimização). */
+export const PRODUCT_IMAGE_SOURCE_MAX_BYTES = 12 * 1024 * 1024;
+
+/** Maior lado da imagem após redimensionar (px). */
+export const PRODUCT_IMAGE_MAX_EDGE_PX = 1200;
+
+/** Qualidade WebP inicial (0–1); a otimização pode baixar se ainda ficar grande. */
+export const PRODUCT_IMAGE_WEBP_QUALITY = 0.78;
+
+/** Qualidade JPEG de fallback (0–1). */
+export const PRODUCT_IMAGE_JPEG_QUALITY = 0.82;
 
 export const PRODUCT_IMAGE_MIME_TYPES = [
   "image/jpeg",

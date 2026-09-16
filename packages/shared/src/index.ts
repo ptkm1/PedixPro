@@ -465,8 +465,12 @@ export type {
 } from "./product-form.js";
 export {
   isProductImageMimeType,
+  PRODUCT_IMAGE_JPEG_QUALITY,
   PRODUCT_IMAGE_MAX_BYTES,
+  PRODUCT_IMAGE_MAX_EDGE_PX,
   PRODUCT_IMAGE_MIME_TYPES,
+  PRODUCT_IMAGE_SOURCE_MAX_BYTES,
+  PRODUCT_IMAGE_WEBP_QUALITY,
   productImageExtension,
 } from "./product-image.js";
 export type {

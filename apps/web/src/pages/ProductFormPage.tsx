@@ -371,7 +371,7 @@ export function ProductFormPage() {
                 label="Foto do produto"
                 htmlFor="prod-image-file"
                 className="sm:col-span-2"
-                hint="JPEG, PNG ou WebP · máx. 2 MB. Usada no catálogo do app."
+                hint="JPEG, PNG ou WebP · até 12 MB · otimizada automaticamente (WebP ~1200px). Usada no catálogo do app."
                 error={fieldError("imageUrl") ?? imageError ?? undefined}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
