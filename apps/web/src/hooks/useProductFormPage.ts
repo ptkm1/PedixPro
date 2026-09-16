@@ -144,7 +144,10 @@ export function useProductFormPage() {
   useEffect(() => {
     if (product) {
       setValues(productToForm(product));
-      setAttrs(normalizeAttrsJson(product.attributes));
+      const cat = categories.find((c) => c.id === product.categoryId);
+      const defs = coerceDefs(cat?.attributeSchema);
+      const loaded = normalizeAttrsJson(product.attributes);
+      setAttrs(defs.length > 0 ? pruneAttrs(loaded, defs) : loaded);
       setPendingImageFile(null);
       setImagePreviewUrl(null);
       setImageError(null);
@@ -163,7 +166,7 @@ export function useProductFormPage() {
       }
       setPriceTablePrices(map);
     }
-  }, [product]);
+  }, [product, categories]);
 
   useEffect(() => {
     return () => {

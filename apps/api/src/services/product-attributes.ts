@@ -62,21 +62,16 @@ function normalizeIncomingAttributes(raw: unknown): Record<string, unknown> {
  */
 export const RESERVED_PRODUCT_ATTRIBUTE_KEYS = new Set(["ncm"]);
 
-/** Valida e normaliza valores conforme defs; só permite chaves definidas no schema. */
+/**
+ * Valida e normaliza valores conforme defs.
+ * Chaves fora do schema da categoria são ignoradas (legado/seed),
+ * não bloqueiam o save — só defs conhecidas entram no resultado.
+ */
 export function validateProductAttributes(
   raw: unknown,
   defs: AttributeFieldDef[],
 ): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
   const attrs = normalizeIncomingAttributes(raw);
-  const allowed = new Set(defs.map((d) => d.key));
-
-  for (const k of Object.keys(attrs)) {
-    if (RESERVED_PRODUCT_ATTRIBUTE_KEYS.has(k)) continue;
-    if (!allowed.has(k)) {
-      return { ok: false, error: `Campo não permitido para esta categoria: "${k}"` };
-    }
-  }
-
   const out: Record<string, unknown> = {};
 
   for (const def of defs) {
@@ -136,6 +131,15 @@ export function validateProductAttributes(
       default:
         break;
     }
+  }
+
+  // Preserva NCM espelhado em attributes (coluna canônica).
+  if (
+    typeof attrs.ncm === "string" &&
+    attrs.ncm.trim() &&
+    out.ncm === undefined
+  ) {
+    out.ncm = attrs.ncm.trim();
   }
 
   return { ok: true, value: out };
