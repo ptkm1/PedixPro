@@ -4,6 +4,8 @@ export type ImportRowResult = {
   line: number;
   status: "ok" | "error";
   errors: ImportFieldError[];
+  /** Avisos (ex.: IBGE corrigido / pendente) — não bloqueiam a linha. */
+  warnings?: string[];
   preview?: Record<string, string>;
 };
 

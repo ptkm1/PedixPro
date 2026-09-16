@@ -86,6 +86,14 @@ export function validateCustomerFiscal(
       message: "Cliente sem endereço fiscal completo",
     });
   }
+  const ibge = (customer.cityIbgeCode ?? "").replace(/\D/g, "");
+  if (!ibge || ibge.length !== 7) {
+    issues.push({
+      code: "NO_IBGE",
+      message:
+        "Não foi possível identificar o código IBGE do município deste cliente. Verifique CEP, cidade e UF no cadastro.",
+    });
+  }
   return issues;
 }
 

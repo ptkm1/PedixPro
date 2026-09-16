@@ -21,7 +21,7 @@ import {
     toCustomerPrismaData,
     type CustomerBodyInput,
 } from "../customer-validation.js";
-import { fetchIbgeMunicipios } from "../ibge/brasilapi.js";
+import { resolveMunicipioIbge } from "../ibge/municipio-resolver.js";
 import { cell, parseBrNumber, parseCsvText, remapCsvCells } from "./csv-parse.js";
 import {
     summarizeImportRows,
@@ -49,22 +49,21 @@ type PreparedCustomer = {
   addressNote: string;
   state: string;
   city: string;
-  cityIbgeCode: string;
+  cityIbgeCode: string | null;
   stateRegistration: string;
   buyerName: string;
   notes: string;
   sellerId: string | null;
   creditLimit: number | null;
+  ibgeWarnings: string[];
+  ibgeStatus: string;
 };
-
 type OrgLookups = {
   sellersByEmail: Map<string, string>;
   sellersByName: Map<string, string>;
   existingCnpjs: Set<string>;
   existingCpfs: Set<string>;
 };
-
-type IbgeCache = Map<string, Array<{ id: number; nome: string }>>;
 
 function normKey(s: string): string {
   return s
@@ -112,41 +111,19 @@ function placeholderEmail(docDigits: string): string {
   return `sem-email.${d}@import.local`;
 }
 
-async function resolveIbgeCode(
-  city: string,
-  uf: string,
-  cache: IbgeCache,
-): Promise<string | null> {
-  const state = uf.trim().toUpperCase();
-  if (!city.trim() || !/^[A-Z]{2}$/.test(state)) return null;
-  let list = cache.get(state);
-  if (!list) {
-    try {
-      list = await fetchIbgeMunicipios(state);
-      cache.set(state, list);
-    } catch {
-      return null;
-    }
-  }
-  const key = normKey(city);
-  const exact = list.find((m) => normKey(m.nome) === key);
-  if (exact) return String(exact.id);
-  const loose = list.find(
-    (m) =>
-      normKey(m.nome).includes(key) || key.includes(normKey(m.nome)),
-  );
-  return loose ? String(loose.id) : null;
-}
-
 async function validateCustomerRow(
   cells: Record<string, string>,
   lookups: OrgLookups,
   docsInFile: Map<string, number>,
   line: number,
-  ibgeCache: IbgeCache,
   fieldDefaults?: Record<string, string>,
-): Promise<{ errors: ImportFieldError[]; prepared: PreparedCustomer | null }> {
+): Promise<{
+  errors: ImportFieldError[];
+  prepared: PreparedCustomer | null;
+  warnings: string[];
+}> {
   const errors: ImportFieldError[] = [];
+  const warnings: string[] = [];
   const def = (field: string, current: string) => {
     const cur = current.trim();
     if (cur) return cur;
@@ -160,13 +137,31 @@ async function validateCustomerRow(
   let fantasia = cell(cells, "nome_fantasia");
   let email = def("email", cell(cells, "email"));
   let telefone = def("telefone", cell(cells, "telefone"));
-  const cep = def("cep", cell(cells, "cep"));
-  const logradouro = def("logradouro", cell(cells, "logradouro"));
-  const numero = def("numero", cell(cells, "numero"));
-  const bairro = def("bairro", cell(cells, "bairro"));
-  const cidade = def("cidade", cell(cells, "cidade"));
-  const uf = def("uf", cell(cells, "uf"));
-  let ibge = def("codigo_ibge", cell(cells, "codigo_ibge"));
+  const cep = def("cep", cell(cells, "cep", "zip", "zipcode", "codigo_postal"));
+  const logradouro = def(
+    "logradouro",
+    cell(cells, "logradouro", "endereco", "rua", "street", "address"),
+  );
+  const numeroRaw = def(
+    "numero",
+    cell(cells, "numero", "num", "nro", "nr", "number"),
+  );
+  // Export de ERP costuma omitir número; S/N é o padrão do cadastro Pedix.
+  const numero = numeroRaw || STREET_NUMBER_SN;
+  const bairro = def(
+    "bairro",
+    cell(cells, "bairro", "distrito", "neighborhood"),
+  );
+  // Fallbacks de alias: CSV com município preenchido e "cidade" vazia (ou remap).
+  const cidade = def(
+    "cidade",
+    cell(cells, "cidade", "municipio", "city", "localidade"),
+  );
+  const uf = def("uf", cell(cells, "uf", "estado", "state", "sigla_uf"));
+  let ibge = def(
+    "codigo_ibge",
+    cell(cells, "codigo_ibge", "ibge", "cod_ibge", "codigoibge", "id_ibge"),
+  );
   const complemento = def("complemento", cell(cells, "complemento"));
   const ie = def("inscricao_estadual", cell(cells, "inscricao_estadual"));
   const comprador = def("comprador", cell(cells, "comprador"));
@@ -288,21 +283,28 @@ async function validateCustomerRow(
   else if (!/^[A-Z]{2}$/.test(state))
     errors.push({ field: "uf", message: "UF inválida (2 letras)." });
 
-  let ibgeD = ibge.replace(/\D/g, "");
-  if (!ibgeD && cidade && state) {
-    const resolved = await resolveIbgeCode(cidade, state, ibgeCache);
-    if (resolved) ibgeD = resolved;
+  let ibgeD: string | null = null;
+  let ibgeStatus = "⚠ Município não localizado";
+  // IBGE: resolução automática (CSV → CEP → CNPJ → cidade+UF). Não bloqueia importação.
+  {
+    const ibgeResolution = await resolveMunicipioIbge({
+      codigoIbge: ibge,
+      cep: cepD.length === 8 ? cepD : cep,
+      cidade,
+      uf: state,
+      cnpj: documentType === "CNPJ" ? documento : null,
+    });
+    warnings.push(...ibgeResolution.warnings);
+    ibgeD = ibgeResolution.codigoIbge;
+    if (ibgeD) {
+      if (ibgeResolution.corrected) ibgeStatus = "⚠ Código IBGE corrigido";
+      else if (ibgeResolution.source === "CSV")
+        ibgeStatus = "✓ Código IBGE informado";
+      else ibgeStatus = "✓ Identificado automaticamente";
+    } else {
+      warnings.push("codigo_ibge pendente — resolva antes de emitir NF-e.");
+    }
   }
-  if (!ibgeD)
-    errors.push({
-      field: "codigo_ibge",
-      message: "Código IBGE obrigatório (informe ou use cidade+UF resolvíveis).",
-    });
-  else if (ibgeD.length !== 7)
-    errors.push({
-      field: "codigo_ibge",
-      message: "Código IBGE deve ter 7 dígitos.",
-    });
 
   let sellerId: string | null = null;
   if (vendedorRef) {
@@ -312,20 +314,17 @@ async function validateCustomerRow(
     // Se não achar, segue sem vendedor (comum em exports de terceiros).
   }
 
+  // Limite é opcional: vazio, 0, placeholder ou valor não numérico → sem limite.
+  // Exports de ERP costumam preencher 0 / 0,00 / "-" e isso não deve invalidar a linha.
   let creditLimit: number | null = null;
   if (limiteRaw) {
     const n = parseBrNumber(limiteRaw);
-    if (n == null || n <= 0) {
-      errors.push({
-        field: "limite_credito",
-        message: "Limite de crédito inválido.",
-      });
-    } else {
+    if (n != null && n > 0) {
       creditLimit = n;
     }
   }
 
-  if (errors.length) return { errors, prepared: null };
+  if (errors.length) return { errors, prepared: null, warnings };
 
   const numberValue =
     numero.trim().toUpperCase() === STREET_NUMBER_SN ||
@@ -335,6 +334,7 @@ async function validateCustomerRow(
 
   return {
     errors: [],
+    warnings,
     prepared: {
       documentType,
       name: documentType === "CNPJ" ? fantasia || razao : nome,
@@ -357,6 +357,8 @@ async function validateCustomerRow(
       notes: observacoes.trim() || FIELD_NOT_APPLICABLE,
       sellerId,
       creditLimit,
+      ibgeWarnings: warnings,
+      ibgeStatus,
     },
   };
 }
@@ -374,18 +376,16 @@ async function runCustomerRows(
   const parsed = parseCsvText(csvText);
   const lookups = await loadOrgLookups(organizationId);
   const docsInFile = new Map<string, number>();
-  const ibgeCache: IbgeCache = new Map();
   const rows: ImportRowResult[] = [];
   const preparedList: Array<{ line: number; data: PreparedCustomer }> = [];
 
   for (const row of parsed.rows) {
     const cells = remapCsvCells(row.cells, columnMap);
-    const { errors, prepared } = await validateCustomerRow(
+    const { errors, prepared, warnings } = await validateCustomerRow(
       cells,
       lookups,
       docsInFile,
       row.line,
-      ibgeCache,
       fieldDefaults,
     );
     if (errors.length || !prepared) {
@@ -393,6 +393,7 @@ async function runCustomerRows(
         line: row.line,
         status: "error",
         errors,
+        warnings: warnings.length ? warnings : undefined,
         preview: {
           documento: cell(cells, "documento"),
           nome: cell(cells, "nome", "nome_fantasia", "razao_social"),
@@ -404,11 +405,17 @@ async function runCustomerRows(
       line: row.line,
       status: "ok",
       errors: [],
+      warnings: prepared.ibgeWarnings.length
+        ? prepared.ibgeWarnings
+        : undefined,
       preview: {
         tipo_documento: prepared.documentType,
         documento: prepared.cnpj ?? prepared.cpf ?? "",
         nome: prepared.name,
-        email: prepared.email,
+        cidade: prepared.city,
+        uf: prepared.state,
+        codigo_ibge: prepared.cityIbgeCode ?? "",
+        ibge_status: prepared.ibgeStatus,
       },
     });
     preparedList.push({ line: row.line, data: prepared });
@@ -469,7 +476,7 @@ export async function commitCustomerImport(params: {
           addressNote: d.addressNote,
           state: d.state,
           city: d.city,
-          cityIbgeCode: d.cityIbgeCode,
+          cityIbgeCode: d.cityIbgeCode ?? "",
           stateRegistration: d.stateRegistration,
           buyerName: d.buyerName,
           notes: d.notes,
