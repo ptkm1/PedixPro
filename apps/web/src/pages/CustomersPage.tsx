@@ -43,6 +43,17 @@ import { CustomerFormFields } from "../components/CustomerFormFields";
 import { CustomerTitlesPanel } from "../components/CustomerTitlesPanel";
 import { apiFetch } from "../lib/api";
 
+/** Limite da API em PATCH/POST batch de clientes. */
+const CUSTOMER_BATCH_CHUNK = 100;
+
+function chunkIds(ids: string[], size = CUSTOMER_BATCH_CHUNK): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
 const CUSTOMER_STATUS_OPTIONS: {
   value: CustomerStatus;
   label: string;
@@ -385,16 +396,25 @@ export function CustomersPage() {
   });
 
   const batchPatch = useMutation({
-    mutationFn: (body: {
+    mutationFn: async (body: {
       ids: string[];
       status?: CustomerStatus;
       creditBlocked?: boolean;
       sellerId?: string | null;
-    }) =>
-      apiFetch<{ updated: number }>("/admin/customers/batch", {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      }),
+    }) => {
+      let updated = 0;
+      for (const ids of chunkIds(body.ids)) {
+        const res = await apiFetch<{ updated: number }>(
+          "/admin/customers/batch",
+          {
+            method: "PATCH",
+            body: JSON.stringify({ ...body, ids }),
+          },
+        );
+        updated += res.updated;
+      }
+      return { updated };
+    },
     onSuccess: () => {
       setActionError(null);
       setBulkStatus("");
@@ -412,11 +432,20 @@ export function CustomersPage() {
   });
 
   const batchDelete = useMutation({
-    mutationFn: (ids: string[]) =>
-      apiFetch<{ deleted: number }>("/admin/customers/batch-delete", {
-        method: "POST",
-        body: JSON.stringify({ ids }),
-      }),
+    mutationFn: async (ids: string[]) => {
+      let deleted = 0;
+      for (const chunk of chunkIds(ids)) {
+        const res = await apiFetch<{ deleted: number }>(
+          "/admin/customers/batch-delete",
+          {
+            method: "POST",
+            body: JSON.stringify({ ids: chunk }),
+          },
+        );
+        deleted += res.deleted;
+      }
+      return { deleted };
+    },
     onSuccess: () => {
       setActionError(null);
       setSelectedIds(new Set());
