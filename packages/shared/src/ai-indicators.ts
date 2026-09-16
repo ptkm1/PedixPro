@@ -51,5 +51,13 @@ export type AiIndicatorsStatus = {
   model: string;
   latest: AiIndicatorsLatest | null;
   usageLastHour: number;
+  usageToday: number;
+  usageThisMonth: number;
   maxPerHour: number;
+  maxPerDay: number;
+  maxPerMonth: number;
+  /** Intervalo mínimo entre gerações (minutos). */
+  cooldownMinutes: number;
+  /** Segundos restantes de cooldown; 0 se livre. */
+  cooldownRemainingSeconds: number;
 };

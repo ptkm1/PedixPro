@@ -136,9 +136,22 @@ export function IndicatorsAiPage() {
                 {status.reason ? ` ${status.reason}` : null}
               </p>
               <p className="text-xs text-muted-foreground">
-                Modelo: {status.model} · Uso na última hora:{" "}
-                {status.usageLastHour}/{status.maxPerHour}
+                Modelo: {status.model}
               </p>
+              <p className="text-xs text-muted-foreground">
+                Uso: {status.usageToday}/{status.maxPerDay} hoje ·{" "}
+                {status.usageThisMonth}/{status.maxPerMonth} no mês ·{" "}
+                {status.usageLastHour}/{status.maxPerHour} na hora
+                {status.cooldownMinutes > 0
+                  ? ` · intervalo mín. ${status.cooldownMinutes} min`
+                  : ""}
+              </p>
+              {status.cooldownRemainingSeconds > 0 ? (
+                <p className="text-xs text-amber-700 dark:text-amber-200">
+                  Próxima geração em ~{Math.ceil(status.cooldownRemainingSeconds / 60)}{" "}
+                  min.
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center gap-3">
               <Checkbox
