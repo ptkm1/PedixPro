@@ -156,6 +156,18 @@ export type {
   IbgeUf,
 } from "./address.js";
 export {
+  ibgeDigitsOnly,
+  isValidIbgeMunicipioCode,
+  normalizeMunicipioName,
+  normalizeUf,
+} from "./municipio.js";
+export type {
+  MunicipioIbgeConfidence,
+  MunicipioIbgeResolution,
+  MunicipioIbgeSource,
+  ResolveMunicipioIbgeInput,
+} from "./municipio.js";
+export {
   APP_BRAND_BACKGROUND,
   APP_BRAND_BORDER,
   APP_BRAND_LILAC,

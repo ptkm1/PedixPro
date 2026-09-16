@@ -4850,6 +4850,30 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       );
     }
 
+    // Revalida IBGE quando CEP/cidade/UF mudam (ou código inválido).
+    {
+      const { resolveMunicipioIbge } = await import(
+        "../services/ibge/municipio-resolver.js"
+      );
+      const addrChanged =
+        body.data.cep !== undefined ||
+        body.data.city !== undefined ||
+        body.data.state !== undefined ||
+        body.data.cityIbgeCode !== undefined;
+      if (addrChanged) {
+        const resolved = await resolveMunicipioIbge({
+          codigoIbge: complete.data.cityIbgeCode,
+          cep: complete.data.cep,
+          cidade: complete.data.city,
+          uf: complete.data.state,
+          cnpj: complete.data.cnpj,
+        });
+        if (resolved.codigoIbge) {
+          complete.data.cityIbgeCode = resolved.codigoIbge;
+        }
+      }
+    }
+
     try {
       const updated = await prisma.customer.update({
         where: { id },

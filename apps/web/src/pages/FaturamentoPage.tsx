@@ -983,6 +983,20 @@ export function FaturamentoPage() {
                                           </li>
                                         ))}
                                       </ul>
+                                      {o.readinessIssues.some(
+                                        (i) => i.code === "NO_IBGE",
+                                      ) && o.customer?.id ? (
+                                        <Button
+                                          asChild
+                                          variant="outline"
+                                          size="sm"
+                                          className="mt-2"
+                                        >
+                                          <Link to="/clientes">
+                                            Corrigir cadastro
+                                          </Link>
+                                        </Button>
+                                      ) : null}
                                     </div>
                                   )}
                                 <Button

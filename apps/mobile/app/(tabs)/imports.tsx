@@ -202,6 +202,11 @@ export default function ImportsScreen() {
               );
             })}
 
+            <ThemedText variant="caption" muted>
+              Mapeie as colunas do arquivo. Caso o código IBGE não seja
+              informado, o Pedix Pro tenta identificá-lo via CEP, CNPJ ou
+              município/UF.
+            </ThemedText>
             <ThemedButton
               onPress={() => void s.runPreview()}
               disabled={!s.csvText || s.busy || s.mappedCount === 0}
