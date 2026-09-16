@@ -30,8 +30,7 @@
         "config": "preview-android.yml"
       },
       "ios": {
-        "simulator": false,
-        "config": "preview-ios.yml"
+        "simulator": false
       }
     },
     "production": {
@@ -45,13 +44,14 @@
       "android": {
         "buildType": "app-bundle",
         "config": "production-android.yml"
-      },
-      "ios": {
-        "config": "production-ios.yml"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6808814477"
+      }
+    }
   }
 }

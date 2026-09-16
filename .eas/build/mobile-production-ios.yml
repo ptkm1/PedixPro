@@ -28,11 +28,17 @@ build:
         working_directory: apps/mobile
         inputs:
           throw_if_not_configured: false
-    - eas/inject_ios_credentials:
+    - run:
+        name: Install iOS Pods
+        working_directory: apps/mobile
+        command: cd ios && pod install
+    - eas/resolve_apple_team_id_from_credentials:
+        working_directory: apps/mobile
+    - eas/configure_ios_credentials:
         working_directory: apps/mobile
     - eas/configure_ios_version:
         working_directory: apps/mobile
-    - eas/generate_gymfile:
+    - eas/generate_gymfile_from_template:
         working_directory: apps/mobile
     - eas/run_fastlane:
         working_directory: apps/mobile
