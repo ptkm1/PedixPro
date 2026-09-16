@@ -4401,6 +4401,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         sellerId: z.string().optional(),
         approvalStatus: z.enum(["APPROVED", "PENDING", "REJECTED"]).optional(),
         status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+        q: z.string().trim().max(200).optional(),
       })
       .safeParse(req.query);
     await maybeInactivateStaleCustomersForOrg(auth.organizationId);
@@ -4411,6 +4412,77 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (q.success && q.data.approvalStatus)
       where.approvalStatus = q.data.approvalStatus;
     if (q.success && q.data.status) where.status = q.data.status;
+    const search = q.success ? q.data.q?.trim() : undefined;
+    if (search) {
+      const digits = search.replace(/\D/g, "");
+      const text = { contains: search, mode: "insensitive" as const };
+      const or: Prisma.CustomerWhereInput[] = [
+        { name: text },
+        { email: text },
+        { phone: text },
+        { addressNote: text },
+        { legalName: text },
+        { tradeName: text },
+        { cep: text },
+        { street: text },
+        { number: text },
+        { neighborhood: text },
+        { state: text },
+        { city: text },
+        { cityIbgeCode: text },
+        { stateRegistration: text },
+        { buyerName: text },
+        { notes: text },
+        { approvalNote: text },
+        { rejectionReason: text },
+        { cnpj: text },
+        { cpf: text },
+        { seller: { user: { name: text } } },
+        { region: { name: text } },
+        { region: { code: text } },
+      ];
+      if (digits.length > 0) {
+        or.push(
+          { cnpj: { contains: digits } },
+          { cpf: { contains: digits } },
+          { cep: { contains: digits } },
+          { phone: { contains: digits } },
+          { stateRegistration: { contains: digits } },
+        );
+        const asCode = Number(digits);
+        if (
+          Number.isInteger(asCode) &&
+          String(asCode) === digits &&
+          digits.length <= 9
+        ) {
+          or.push({ code: asCode });
+        }
+      }
+      const upper = search.toUpperCase();
+      if (upper === "CNPJ" || upper === "CPF") {
+        or.push({ documentType: upper });
+      }
+      if (upper === "ACTIVE" || upper === "ATIVO") {
+        or.push({ status: "ACTIVE" });
+      }
+      if (upper === "INACTIVE" || upper === "INATIVO") {
+        or.push({ status: "INACTIVE" });
+      }
+      if (
+        upper === "PENDING" ||
+        upper === "PENDENTE" ||
+        upper.includes("AGUARD")
+      ) {
+        or.push({ approvalStatus: "PENDING" });
+      }
+      if (upper === "APPROVED" || upper === "APROVADO") {
+        or.push({ approvalStatus: "APPROVED" });
+      }
+      if (upper === "REJECTED" || upper === "REJEITADO") {
+        or.push({ approvalStatus: "REJECTED" });
+      }
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), { OR: or }];
+    }
     return prisma.customer.findMany({
       where,
       orderBy: { name: "asc" },

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import {
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-  type ScrollViewProps,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    View,
+    type ScrollViewProps,
 } from "react-native";
 import { useTheme } from "@/lib/theme";
 
@@ -14,6 +14,7 @@ export const MOBILE_TAB_SCROLL_BOTTOM = 100;
 type Props = {
   children: ReactNode;
   scroll?: boolean;
+  scrollEnabled?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
   contentContainerStyle?: ScrollViewProps["contentContainerStyle"];
@@ -23,6 +24,7 @@ type Props = {
 export function MobileScreen({
   children,
   scroll = true,
+  scrollEnabled = true,
   refreshing,
   onRefresh,
   contentContainerStyle,
@@ -33,18 +35,21 @@ export function MobileScreen({
 
   if (!scroll) {
     return (
-      <View style={[styles.fill, { backgroundColor: colors.background }]}>{children}</View>
+      <View style={[styles.fill, { backgroundColor: "transparent" }]}>
+        {children}
+      </View>
     );
   }
 
   return (
     <ScrollView
-      style={[styles.fill, { backgroundColor: colors.background }]}
+      style={[styles.fill, { backgroundColor: "transparent" }]}
       contentContainerStyle={[
         styles.content,
         { paddingBottom: bottomPad },
         contentContainerStyle,
       ]}
+      scrollEnabled={scrollEnabled}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       refreshControl={

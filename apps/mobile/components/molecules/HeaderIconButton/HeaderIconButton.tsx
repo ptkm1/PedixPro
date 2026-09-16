@@ -25,7 +25,10 @@ export function HeaderIconButton({
       disabled={disabled}
       style={[
         styles.btn,
-        { backgroundColor: colors.surfaceMuted },
+        {
+          backgroundColor: colors.glassFill,
+          borderColor: colors.glassBorder,
+        },
         disabled ? styles.disabled : null,
       ]}
       accessibilityRole="button"
@@ -34,8 +37,22 @@ export function HeaderIconButton({
     >
       {children}
       {badge != null && badge > 0 ? (
-        <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-          <Text style={{ color: colors.primaryForeground, fontSize: 10, fontWeight: "700" }}>
+        <View
+          style={[
+            styles.badge,
+            {
+              backgroundColor: colors.primary,
+              shadowColor: colors.primary,
+            },
+          ]}
+        >
+          <Text
+            style={{
+              color: colors.primaryForeground,
+              fontSize: 10,
+              fontWeight: "700",
+            }}
+          >
             {badge > 9 ? "9+" : badge}
           </Text>
         </View>
@@ -48,9 +65,10 @@ const styles = StyleSheet.create({
   btn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth * 2,
   },
   disabled: {
     opacity: 0.45,
@@ -64,5 +82,8 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
 });

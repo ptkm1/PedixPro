@@ -48,6 +48,14 @@ export type AppColors = {
   onDarkSubtle: string;
   footerBackdrop: string;
   surfaceOverlay: string;
+  /** Preenchimento translúcido dos cards glass. */
+  glassFill: string;
+  /** Borda cyan/teal dos cards glass. */
+  glassBorder: string;
+  /** Brilho / glow do accent glass. */
+  glassHighlight: string;
+  /** Segunda cor do gradiente de fundo. */
+  backgroundGradientEnd: string;
 };
 
 export type AppTheme = {

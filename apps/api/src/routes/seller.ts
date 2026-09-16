@@ -1048,6 +1048,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           addressNote: c.addressNote,
           distanceKm: Math.round(distanceKm * 100) / 100,
           assignedToMe: auth.sellerId != null && c.sellerId === auth.sellerId,
+          hasSeller: c.sellerId != null,
         };
       })
       .filter((x) => x.distanceKm <= radiusKm)

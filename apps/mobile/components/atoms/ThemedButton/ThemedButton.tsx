@@ -1,4 +1,5 @@
 import { useTheme } from "@/lib/theme";
+import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -17,9 +18,7 @@ type Props = PressableProps & {
   variant?: Variant;
   size?: "sm" | "md" | "lg";
   style?: StyleProp<ViewStyle>;
-  /** Desativa o botão e mostra spinner (e opcionalmente `loadingLabel`). */
   loading?: boolean;
-  /** Texto enquanto `loading` (padrão: mantém o children se for string). */
   loadingLabel?: string;
 };
 
@@ -41,19 +40,23 @@ export function ThemedButton({
 
   const bg =
     variant === "primary"
-      ? colors.primary
+      ? colorWithAlpha(colors.primary, 0.88)
       : variant === "secondary"
-        ? colors.surfaceMuted
+        ? colors.glassFill
         : variant === "destructive"
           ? colors.danger
           : "transparent";
 
   const borderColor =
     variant === "outline"
-      ? colors.border
+      ? colors.glassBorder
       : variant === "ghost"
         ? "transparent"
-        : bg;
+        : variant === "primary"
+          ? colorWithAlpha(colors.primary, 0.65)
+          : variant === "secondary"
+            ? colors.glassBorder
+            : bg;
 
   const textColor =
     variant === "primary" || variant === "destructive"
@@ -84,15 +87,19 @@ export function ThemedButton({
       style={({ pressed }) => [
         {
           backgroundColor:
-            variant === "outline" || variant === "ghost" ? "transparent" : bg,
-          borderWidth: variant === "outline" ? 1 : 0,
+            variant === "outline" || variant === "ghost" ? colors.glassFill : bg,
+          borderWidth: 1.5,
           borderColor,
-          borderRadius: 12,
+          borderRadius: 16,
           paddingVertical: padV,
           paddingHorizontal: padH,
           opacity: isDisabled ? 0.5 : pressed ? 0.88 : 1,
           alignItems: "center",
           justifyContent: "center",
+          shadowColor: variant === "primary" ? colors.primary : "transparent",
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: variant === "primary" ? 0.45 : 0,
+          shadowRadius: 10,
         },
         style,
       ]}

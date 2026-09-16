@@ -36,6 +36,7 @@
     "db:unlock-org": "dotenv -e apps/api/.env -- tsx apps/api/prisma/unlock-org-full.ts",
     "db:activate-pending": "dotenv -e apps/api/.env -- tsx apps/api/prisma/activate-pending-payment.ts",
     "db:seed:sales-chart": "dotenv -e apps/api/.env -- tsx apps/api/prisma/seed-sales-chart-demo.ts",
+    "db:seed:seller-charts": "dotenv -e apps/api/.env -- tsx apps/api/prisma/seed-seller-charts-inflate.ts",
     "predb:seed": "pnpm db:generate",
     "db:generate": "dotenv -e apps/api/.env -- prisma generate --config apps/api/prisma.config.ts",
     "db:studio": "dotenv -e apps/api/.env -- prisma studio --config apps/api/prisma.config.ts",

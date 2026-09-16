@@ -1,12 +1,13 @@
 import { displayMoney } from "@/components/atoms/formatMoney";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
+import { GlassSurface } from "@/components/atoms/GlassSurface";
 import { useSalesBySupplier } from "@/hooks/screens/useSalesBySupplier";
 import { PERIOD_PRESET_LABELS, type PeriodPreset } from "@/lib/period-presets";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     LayoutChangeEvent,
@@ -30,16 +31,17 @@ const X_LABEL_WIDTH = 54;
 const INITIAL_SPACING = 12;
 const END_SPACING = 12;
 const BAR_SPACING = 10;
-/** Espaço extra no topo para o valor acima da barra (gifted-charts trata overflowTop como flag → ~30px). */
-const TOP_LABEL_OVERFLOW = 30;
-const TOP_LABEL_WIDTH = 72;
+const TOOLTIP_DOCK_HEIGHT = 52;
+const BAR_GRADIENT_FROM_DARK = "#0284c7";
+const BAR_GRADIENT_FROM_LIGHT = "#2563eb";
 
 type SupplierBar = {
   value: number;
   label: string;
   fullName: string;
   frontColor: string;
-  topLabelComponent: () => ReactNode;
+  gradientColor: string;
+  showGradient: boolean;
 };
 
 type Props = {
@@ -94,11 +96,13 @@ function formatYAxisValue(value: string, hideValues: boolean): string {
   if (hideValues) return "••••";
   const number = Number(value);
   if (!Number.isFinite(number)) return value;
-  return number >= 1000 ? `${(number / 1000).toFixed(1)}k` : String(Math.round(number));
+  return number >= 1000
+    ? `${(number / 1000).toFixed(1)}k`
+    : String(Math.round(number));
 }
 
 export function TopSuppliersBlock({ hideValues = false }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const {
     preset,
     selectPreset,
@@ -113,17 +117,23 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
   const [dateError, setDateError] = useState<string | null>(null);
-  /** Largura útil do chartWrap (já dentro do padding do card). */
   const [chartAreaWidth, setChartAreaWidth] = useState(0);
+  const [focused, setFocused] = useState<SupplierBar | null>(null);
+
+  useEffect(() => {
+    setFocused(null);
+  }, [preset, data?.period.from, data?.period.to]);
 
   const onChartAreaLayout = (event: LayoutChangeEvent) => {
     const next = Math.floor(event.nativeEvent.layout.width);
     if (next > 0 && next !== chartAreaWidth) setChartAreaWidth(next);
   };
 
-  // gifted-charts: actualContainerWidth = width + yAxisLabelWidth.
   const parentWidth = Math.max(0, chartAreaWidth - 1);
   const plotWidth = Math.max(120, parentWidth - Y_AXIS_LABEL_WIDTH);
+
+  const gradientFrom = isDark ? BAR_GRADIENT_FROM_DARK : BAR_GRADIENT_FROM_LIGHT;
+  const gradientTo = colors.primary;
 
   const { barData, chartMaxValue, barWidth } = useMemo(() => {
     if (!data?.topSuppliers.length) {
@@ -135,16 +145,17 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
     }
 
     const count = data.topSuppliers.length;
-    // gifted-charts: totalWidth = initial + end + Σ (barWidth + spacing) — spacing também na última.
     const usableWidth = Math.max(80, plotWidth - INITIAL_SPACING - END_SPACING);
     const nextBarWidth = Math.max(
       18,
       Math.min(40, (usableWidth - count * BAR_SPACING) / count),
     );
 
-    const values = data.topSuppliers.map((s) => Math.round(s.totalAmount * 100) / 100);
+    const values = data.topSuppliers.map(
+      (s) => Math.round(s.totalAmount * 100) / 100,
+    );
     const maxValue = Math.max(...values, 0);
-    const paddedMax = maxValue > 0 ? maxValue * 1.28 : undefined;
+    const paddedMax = maxValue > 0 ? maxValue * 1.12 : undefined;
 
     return {
       barData: data.topSuppliers.map((s, index) => {
@@ -153,27 +164,15 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
           value,
           label: shortSupplierName(s.tradeName),
           fullName: s.tradeName,
-          frontColor: colors.primary,
-          topLabelComponent: () => (
-            <Text
-              numberOfLines={1}
-              style={{
-                color: colors.text,
-                fontSize: 10,
-                fontWeight: "700",
-                textAlign: "center",
-                width: TOP_LABEL_WIDTH,
-              }}
-            >
-              {displayMoney(hideValues, value)}
-            </Text>
-          ),
+          frontColor: gradientTo,
+          gradientColor: gradientFrom,
+          showGradient: true,
         };
       }),
       chartMaxValue: paddedMax,
       barWidth: nextBarWidth,
     };
-  }, [colors.primary, colors.text, data?.topSuppliers, hideValues, plotWidth]);
+  }, [data?.topSuppliers, gradientFrom, gradientTo, plotWidth]);
 
   const openCustomRange = () => {
     setDateError(null);
@@ -199,12 +198,7 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
   };
 
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
+    <GlassSurface>
       <ThemedText variant="titleSm">Top fornecedores</ThemedText>
       <ThemedText variant="bodySm" muted style={{ marginTop: 4 }}>
         Suas vendas confirmadas por indústria
@@ -219,7 +213,10 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
           return (
             <Pressable
               key={p}
-              onPress={() => selectPreset(p)}
+              onPress={() => {
+                setFocused(null);
+                selectPreset(p);
+              }}
               style={[
                 styles.chip,
                 {
@@ -266,7 +263,9 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
         <View style={[styles.customRange, { borderColor: colors.border }]}>
           <View style={styles.customFields}>
             <View style={styles.dateField}>
-              <Text style={[styles.dateLabel, { color: colors.textMuted }]}>De</Text>
+              <Text style={[styles.dateLabel, { color: colors.textMuted }]}>
+                De
+              </Text>
               <ThemedTextInput
                 value={fromInput}
                 onChangeText={setFromInput}
@@ -276,7 +275,9 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
               />
             </View>
             <View style={styles.dateField}>
-              <Text style={[styles.dateLabel, { color: colors.textMuted }]}>Até</Text>
+              <Text style={[styles.dateLabel, { color: colors.textMuted }]}>
+                Até
+              </Text>
               <ThemedTextInput
                 value={toInput}
                 onChangeText={setToInput}
@@ -292,10 +293,16 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
             </ThemedText>
           ) : null}
           <Pressable
-            style={[styles.applyRangeButton, { backgroundColor: colors.primary }]}
+            style={[
+              styles.applyRangeButton,
+              { backgroundColor: colors.primary },
+            ]}
             onPress={applyCustomRange}
           >
-            <ThemedText variant="caption" style={{ color: colors.primaryForeground, fontWeight: "700" }}>
+            <ThemedText
+              variant="caption"
+              style={{ color: colors.primaryForeground, fontWeight: "700" }}
+            >
               Aplicar período
             </ThemedText>
           </Pressable>
@@ -319,6 +326,35 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
         </ThemedText>
       ) : (
         <View style={styles.chartWrap} onLayout={onChartAreaLayout}>
+          <View style={styles.tooltipDock} pointerEvents="none">
+            {focused ? (
+              <View
+                style={[
+                  styles.tooltip,
+                  {
+                    backgroundColor: colors.surfaceOverlay,
+                    borderColor: colors.glassBorder,
+                  },
+                ]}
+              >
+                <ThemedText
+                  variant="caption"
+                  numberOfLines={1}
+                  style={{ fontWeight: "600" }}
+                >
+                  {focused.fullName}
+                </ThemedText>
+                <ThemedText variant="caption" muted style={{ marginTop: 2 }}>
+                  {displayMoney(hideValues, focused.value)}
+                </ThemedText>
+              </View>
+            ) : (
+              <ThemedText variant="caption" muted>
+                Toque numa barra para ver o valor
+              </ThemedText>
+            )}
+          </View>
+
           {parentWidth > 0 ? (
             <BarChart
               data={barData}
@@ -331,17 +367,10 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
               initialSpacing={INITIAL_SPACING}
               endSpacing={END_SPACING}
               noOfSections={4}
-              roundedTop
+              showGradient
+              frontColor={gradientTo}
+              gradientColor={gradientFrom}
               barBorderRadius={3}
-              overflowTop={TOP_LABEL_OVERFLOW}
-              topLabelContainerStyle={{
-                width: TOP_LABEL_WIDTH,
-                height: 22,
-                top: -24,
-                alignItems: "center",
-                justifyContent: "flex-end",
-                marginLeft: (barWidth - TOP_LABEL_WIDTH) / 2,
-              }}
               yAxisLabelWidth={Y_AXIS_LABEL_WIDTH}
               yAxisColor={colors.border}
               xAxisColor={colors.border}
@@ -364,14 +393,13 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
               xAxisLabelsVerticalShift={4}
               labelsExtraHeight={30}
               focusBarOnPress
-              renderTooltip={(item: SupplierBar) => (
-                <View style={[styles.tooltip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <ThemedText variant="caption" style={{ fontWeight: "600" }}>{item.fullName}</ThemedText>
-                  <ThemedText variant="caption" muted style={{ marginTop: 2 }}>
-                    {displayMoney(hideValues, item.value)}
-                  </ThemedText>
-                </View>
-              )}
+              onPress={(item: SupplierBar) => {
+                setFocused((prev) =>
+                  prev?.fullName === item.fullName && prev.value === item.value
+                    ? null
+                    : item,
+                );
+              }}
             />
           ) : null}
           {isFetching && !isLoading ? (
@@ -386,21 +414,17 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
           ) : null}
         </View>
       )}
-    </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: radiiPx.lg,
-    borderWidth: 1,
-    padding: 14,
-  },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
     marginTop: 12,
+    zIndex: 1,
   },
   chip: {
     borderWidth: 1,
@@ -410,11 +434,17 @@ const styles = StyleSheet.create({
   },
   chartWrap: {
     marginTop: 8,
-    paddingTop: 4,
     width: "100%",
     alignSelf: "stretch",
     overflow: "visible",
     position: "relative",
+    zIndex: 5,
+  },
+  tooltipDock: {
+    minHeight: TOOLTIP_DOCK_HEIGHT,
+    marginBottom: 4,
+    justifyContent: "center",
+    paddingHorizontal: 2,
   },
   chartLoading: {
     alignItems: "center",
@@ -431,6 +461,17 @@ const styles = StyleSheet.create({
   customFields: { flexDirection: "row", gap: 10 },
   dateField: { flex: 1, gap: 5 },
   dateLabel: { fontSize: 12, fontWeight: "700" },
-  applyRangeButton: { alignSelf: "flex-end", borderRadius: radiiPx.md, paddingHorizontal: 12, paddingVertical: 9 },
-  tooltip: { borderWidth: 1, borderRadius: radiiPx.md, paddingHorizontal: 10, paddingVertical: 8, maxWidth: 180 },
+  applyRangeButton: {
+    alignSelf: "flex-end",
+    borderRadius: radiiPx.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  tooltip: {
+    alignSelf: "stretch",
+    borderWidth: 1,
+    borderRadius: radiiPx.md,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
 });

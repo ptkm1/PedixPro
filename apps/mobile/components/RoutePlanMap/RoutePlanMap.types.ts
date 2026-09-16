@@ -7,6 +7,8 @@ export type RoutePlanMapCustomerPin = {
   longitude: number;
   distanceKm: number;
   assignedToMe: boolean;
+  /** Com vendedor atribuído → pin azul; sem → vermelho. */
+  hasSeller: boolean;
 };
 
 export type RoutePlanMapCoord = { latitude: number; longitude: number };

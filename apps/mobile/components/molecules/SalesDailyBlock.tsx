@@ -1,37 +1,46 @@
 import { displayMoney } from "@/components/atoms/formatMoney";
 import { ThemedText } from "@/components/atoms/ThemedText";
+import { GlassSurface } from "@/components/atoms/GlassSurface";
 import type { SellerOrderListItem } from "@/hooks/screens/useSalesListScreen";
-import { PERIOD_PRESET_LABELS, periodRange, type PeriodPreset } from "@/lib/period-presets";
+import {
+    PERIOD_PRESET_LABELS,
+    periodRange,
+    type PeriodPreset,
+} from "@/lib/period-presets";
 import { useTheme } from "@/lib/theme";
+import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
 import { useMemo, useState } from "react";
 import {
-  LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  View,
+    LayoutChangeEvent,
+    Pressable,
+    StyleSheet,
+    View,
 } from "react-native";
-import { BarChart, ruleTypes } from "react-native-gifted-charts";
+import { LineChart, ruleTypes } from "react-native-gifted-charts";
 
-const PRESETS: PeriodPreset[] = ["this_month", "last_month", "last_7_days", "last_90_days"];
-const CHART_HEIGHT = 200;
-const Y_AXIS_LABEL_WIDTH = 34;
-const X_LABEL_WIDTH = 34;
+const PRESETS: PeriodPreset[] = [
+  "this_month",
+  "last_month",
+  "last_7_days",
+  "last_90_days",
+];
+const CHART_HEIGHT = 220;
+const Y_AXIS_LABEL_WIDTH = 42;
+const X_LABEL_WIDTH = 36;
 const INITIAL_SPACING = 8;
-const END_SPACING = 12;
-/** Folga no topo para o tooltip ao tocar na barra. */
-const TOOLTIP_OVERFLOW = 30;
+const END_SPACING = 16;
 
 type Props = {
   orders: SellerOrderListItem[];
   hideValues?: boolean;
 };
 
-type DailyBar = {
+type DayPoint = {
   value: number;
   label: string;
   fullLabel: string;
-  frontColor: string;
+  dataPointText?: string;
 };
 
 function dayKey(value: Date): string {
@@ -39,7 +48,9 @@ function dayKey(value: Date): string {
 }
 
 function startOfUtcDay(value: Date): Date {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
 }
 
 function addUtcDays(value: Date, days: number): Date {
@@ -49,35 +60,41 @@ function addUtcDays(value: Date, days: number): Date {
 }
 
 function daysBetweenInclusive(from: Date, to: Date): number {
-  return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+  return Math.max(
+    1,
+    Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1,
+  );
 }
 
 function formatYAxisValue(value: string, hideValues: boolean): string {
   if (hideValues) return "••••";
   const n = Number(value);
   if (!Number.isFinite(n)) return value;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(Math.round(n));
+  if (n >= 1000) return `R$ ${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return `R$ ${Math.round(n)}`;
 }
 
 function formatAxisDay(cursor: Date, withMonth: boolean): string {
-  const day = cursor.getUTCDate();
-  if (!withMonth) return String(day);
-  return `${day}/${cursor.getUTCMonth() + 1}`;
+  const day = String(cursor.getUTCDate()).padStart(2, "0");
+  if (!withMonth) return day;
+  const month = new Intl.DateTimeFormat("pt-BR", {
+    month: "short",
+    timeZone: "UTC",
+  })
+    .format(cursor)
+    .replace(".", "");
+  return `${day} ${month}`;
 }
 
 function formatFullDay(cursor: Date): string {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "short",
+    year: "numeric",
     timeZone: "UTC",
   })
     .format(cursor)
-    .replace(".", "");
-}
-
-function formatFullRange(from: Date, to: Date): string {
-  return `${formatFullDay(from)} – ${formatFullDay(to)}`;
+    .replace(/\./g, "");
 }
 
 function pickLabelIndices(count: number, maxLabels: number): Set<number> {
@@ -85,7 +102,7 @@ function pickLabelIndices(count: number, maxLabels: number): Set<number> {
   if (count === 1) return new Set([0]);
 
   const budget = Math.max(2, Math.min(count, maxLabels));
-  const lastIndex = Math.max(0, count - 2);
+  const lastIndex = count - 1;
   if (budget === 2) return new Set([0, lastIndex]);
 
   const indices = new Set<number>([0, lastIndex]);
@@ -96,10 +113,12 @@ function pickLabelIndices(count: number, maxLabels: number): Set<number> {
   return indices;
 }
 
+/**
+ * Gráfico de área (spline) — faturamento diário no período, estilo “Vendas do mês”.
+ */
 export function SalesDailyBlock({ orders, hideValues = false }: Props) {
   const { colors } = useTheme();
   const [preset, setPreset] = useState<PeriodPreset>("this_month");
-  /** Largura útil do chartWrap (já dentro do padding do card). */
   const [chartAreaWidth, setChartAreaWidth] = useState(0);
   const range = useMemo(() => periodRange(preset), [preset]);
 
@@ -108,12 +127,10 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
     if (next > 0 && next !== chartAreaWidth) setChartAreaWidth(next);
   };
 
-  // gifted-charts: actualContainerWidth = width + yAxisLabelWidth.
-  // Medimos o chartWrap (já dentro do padding). 1px de folga evita overflow por arredondamento.
   const parentWidth = Math.max(0, chartAreaWidth - 1);
   const plotWidth = Math.max(120, parentWidth - Y_AXIS_LABEL_WIDTH);
 
-  const { bars, total, orderCount, barWidth, spacing, chartMaxValue } = useMemo(() => {
+  const { points, total, orderCount, spacing, chartMaxValue } = useMemo(() => {
     const from = startOfUtcDay(new Date(range.from));
     const to = startOfUtcDay(new Date(range.to));
     const amounts = new Map<string, number>();
@@ -133,73 +150,59 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
     }
 
     const numberOfDays = daysBetweenInclusive(from, to);
-    const bucketDays = numberOfDays > 40 ? 7 : 1;
-    const withMonth = numberOfDays > 14 || bucketDays > 1;
+    const withMonth = numberOfDays > 10;
+    const maxLabels = Math.max(3, Math.floor(plotWidth / (X_LABEL_WIDTH + 8)));
+    const labelIndices = pickLabelIndices(numberOfDays, maxLabels);
 
-    type Bucket = { from: Date; to: Date; value: number };
-    const buckets: Bucket[] = [];
+    const series: DayPoint[] = [];
     let cursor = new Date(from);
+    let index = 0;
     while (cursor <= to) {
-      const bucketFrom = new Date(cursor);
-      const bucketTo = startOfUtcDay(
-        new Date(Math.min(addUtcDays(cursor, bucketDays - 1).getTime(), to.getTime())),
-      );
-      let value = 0;
-      const walk = new Date(bucketFrom);
-      while (walk <= bucketTo) {
-        value += amounts.get(dayKey(walk)) ?? 0;
-        walk.setUTCDate(walk.getUTCDate() + 1);
-      }
-      buckets.push({
-        from: bucketFrom,
-        to: bucketTo,
-        value: Math.round(value * 100) / 100,
+      const value = Math.round((amounts.get(dayKey(cursor)) ?? 0) * 100) / 100;
+      series.push({
+        value,
+        label: labelIndices.has(index)
+          ? formatAxisDay(cursor, withMonth)
+          : "",
+        fullLabel: formatFullDay(cursor),
       });
-      cursor = addUtcDays(bucketTo, 1);
+      cursor = addUtcDays(cursor, 1);
+      index += 1;
     }
 
-    const count = Math.max(1, buckets.length);
-    // gifted-charts: totalWidth = initial + end + Σ (barWidth + spacing) — spacing também na última barra.
-    const nextSpacing = count > 20 ? 2 : count > 10 ? 4 : 8;
-    const usableWidth = Math.max(80, plotWidth - INITIAL_SPACING - END_SPACING);
-    const nextBarWidth = Math.max(
+    const count = Math.max(1, series.length);
+    const nextSpacing = Math.max(
       4,
-      Math.min(26, (usableWidth - count * nextSpacing) / count),
+      Math.min(28, (plotWidth - INITIAL_SPACING - END_SPACING) / Math.max(1, count - 1)),
     );
-
-    const maxLabels = Math.max(3, Math.floor(usableWidth / (X_LABEL_WIDTH + 6)));
-    const labelIndices = pickLabelIndices(count, maxLabels);
-
-    const maxValue = Math.max(...buckets.map((b) => b.value), 0);
-    const paddedMax = maxValue > 0 ? maxValue * 1.12 : undefined;
-
-    const allBars: DailyBar[] = buckets.map((bucket, index) => ({
-      value: bucket.value,
-      label: labelIndices.has(index) ? formatAxisDay(bucket.from, withMonth) : "",
-      fullLabel:
-        bucketDays === 1
-          ? formatFullDay(bucket.from)
-          : formatFullRange(bucket.from, bucket.to),
-      frontColor: colors.primary,
-    }));
+    const maxValue = Math.max(...series.map((p) => p.value), 0);
+    const paddedMax = maxValue > 0 ? maxValue * 1.15 : 100;
 
     return {
-      bars: allBars,
+      points: series,
       total: totalAmount,
       orderCount: confirmedOrders,
-      barWidth: nextBarWidth,
       spacing: nextSpacing,
       chartMaxValue: paddedMax,
     };
-  }, [colors.primary, orders, plotWidth, range.from, range.to]);
+  }, [orders, plotWidth, range.from, range.to]);
 
-  const hasSales = bars.some((bar) => bar.value > 0);
+  const hasSales = points.some((p) => p.value > 0);
+  const title =
+    preset === "this_month" || preset === "last_month"
+      ? "Vendas do mês"
+      : "Vendas no período";
+
+  const lineColor = colors.primary;
+  const fillStart = colorWithAlpha(colors.primary, 0.45);
+  const fillEnd = colorWithAlpha(colors.primary, 0.06);
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <ThemedText variant="titleSm">Vendas por dia</ThemedText>
+    <GlassSurface>
+      <ThemedText variant="titleSm">{title}</ThemedText>
       <ThemedText variant="bodySm" muted style={{ marginTop: 4 }}>
-        {displayMoney(hideValues, total)} em {orderCount} pedido{orderCount === 1 ? "" : "s"}
+        {displayMoney(hideValues, total)} em {orderCount} pedido
+        {orderCount === 1 ? "" : "s"}
       </ThemedText>
       <View style={styles.chips}>
         {PRESETS.map((item) => {
@@ -212,13 +215,16 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
                 styles.chip,
                 {
                   backgroundColor: active ? colors.chipActive : colors.chip,
-                  borderColor: active ? colors.primary : colors.border,
+                  borderColor: active ? colors.glassHighlight : colors.glassBorder,
                 },
               ]}
             >
               <ThemedText
                 variant="caption"
-                style={{ fontWeight: "600", color: active ? colors.chipTextActive : colors.chipText }}
+                style={{
+                  fontWeight: "600",
+                  color: active ? colors.chipTextActive : colors.chipText,
+                }}
               >
                 {PERIOD_PRESET_LABELS[item]}
               </ThemedText>
@@ -229,52 +235,88 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
       {hasSales ? (
         <View style={styles.chartWrap} onLayout={onChartAreaLayout}>
           {parentWidth > 0 ? (
-            <BarChart
-              data={bars}
+            <LineChart
+              areaChart
+              curved
+              data={points}
               width={plotWidth}
               parentWidth={parentWidth}
               height={CHART_HEIGHT}
               maxValue={chartMaxValue}
-              barWidth={barWidth}
               spacing={spacing}
               initialSpacing={INITIAL_SPACING}
               endSpacing={END_SPACING}
               noOfSections={4}
-              roundedTop
-              barBorderRadius={3}
-              overflowTop={TOOLTIP_OVERFLOW}
+              color={lineColor}
+              thickness={2.5}
+              startFillColor={fillStart}
+              endFillColor={fillEnd}
+              startOpacity={1}
+              endOpacity={1}
+              hideDataPoints
               yAxisLabelWidth={Y_AXIS_LABEL_WIDTH}
-              yAxisColor={colors.border}
-              xAxisColor={colors.border}
-              rulesColor={colors.border}
+              yAxisColor={colors.glassBorder}
+              xAxisColor={colors.glassBorder}
+              rulesColor={colors.glassBorder}
               rulesType={ruleTypes.DASHED}
               dashWidth={3}
-              dashGap={3}
+              dashGap={4}
               xAxisThickness={1}
               yAxisThickness={0}
               disableScroll
               formatYLabel={(value) => formatYAxisValue(value, hideValues)}
-              yAxisTextStyle={{ color: colors.textMuted, fontSize: 11 }}
+              yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
               xAxisLabelTextStyle={{
                 color: colors.textMuted,
                 fontSize: 10,
                 width: X_LABEL_WIDTH,
                 textAlign: "center",
               }}
-              labelsDistanceFromXaxis={8}
-              xAxisLabelsVerticalShift={4}
-              labelsExtraHeight={30}
-              focusBarOnPress
-              renderTooltip={(item: DailyBar) => (
-                <View style={[styles.tooltip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <ThemedText variant="caption" style={{ fontWeight: "600" }}>
-                    {item.fullLabel}
-                  </ThemedText>
-                  <ThemedText variant="caption" muted style={{ marginTop: 2 }}>
-                    {displayMoney(hideValues, item.value)}
-                  </ThemedText>
-                </View>
-              )}
+              pointerConfig={{
+                pointerStripHeight: CHART_HEIGHT - 20,
+                pointerStripColor: colors.glassBorder,
+                pointerStripWidth: 1,
+                strokeDashArray: [4, 4],
+                pointerColor: lineColor,
+                radius: 5,
+                pointerLabelWidth: 148,
+                pointerLabelHeight: 56,
+                activatePointersOnLongPress: false,
+                autoAdjustPointerLabelPosition: true,
+                pointerLabelComponent: (items: DayPoint[]) => {
+                  const item = items[0];
+                  if (!item) return null;
+                  return (
+                    <View
+                      style={[
+                        styles.tooltip,
+                        {
+                          backgroundColor: colors.surfaceOverlay,
+                          borderColor: colors.glassBorder,
+                        },
+                      ]}
+                    >
+                      <ThemedText variant="caption" muted>
+                        {item.fullLabel}
+                      </ThemedText>
+                      <View style={styles.tooltipRow}>
+                        <View
+                          style={[
+                            styles.tooltipDot,
+                            { backgroundColor: lineColor },
+                          ]}
+                        />
+                        <ThemedText
+                          variant="caption"
+                          style={{ fontWeight: "700", flexShrink: 1 }}
+                        >
+                          Faturamento: {displayMoney(hideValues, item.value)}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  );
+                },
+              }}
             />
           ) : null}
         </View>
@@ -283,14 +325,18 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
           Sem vendas confirmadas no período.
         </ThemedText>
       )}
-    </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: radiiPx.lg, borderWidth: 1, padding: 14 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  chip: { borderWidth: 1, borderRadius: radiiPx.md, paddingHorizontal: 10, paddingVertical: 6 },
+  chip: {
+    borderWidth: 1,
+    borderRadius: radiiPx.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   chartWrap: {
     marginTop: 8,
     paddingTop: 4,
@@ -298,5 +344,13 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     overflow: "visible",
   },
-  tooltip: { borderWidth: 1, borderRadius: radiiPx.md, paddingHorizontal: 10, paddingVertical: 8 },
+  tooltip: {
+    borderWidth: 1,
+    borderRadius: radiiPx.md,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  tooltipRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  tooltipDot: { width: 8, height: 8, borderRadius: 4 },
 });

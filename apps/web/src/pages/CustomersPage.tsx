@@ -41,6 +41,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { CustomerFormFields } from "../components/CustomerFormFields";
 import { CustomerTitlesPanel } from "../components/CustomerTitlesPanel";
+import {
+    LocationPinMap,
+    splitLatLngPaste,
+} from "../components/LocationPinMap";
 import { apiFetch } from "../lib/api";
 
 /** Limite da API em PATCH/POST batch de clientes. */
@@ -52,6 +56,15 @@ function chunkIds(ids: string[], size = CUSTOMER_BATCH_CHUNK): string[][] {
     chunks.push(ids.slice(i, i + size));
   }
   return chunks;
+}
+
+function useDebouncedValue<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
 }
 
 const CUSTOMER_STATUS_OPTIONS: {
@@ -146,9 +159,20 @@ export function CustomersPage() {
         canWrite(user.role, "customers", user.permissions)),
   );
 
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
+
   const { data: customers = [], isLoading } = useQuery({
-    queryKey: ["admin", "customers"],
-    queryFn: () => apiFetch<CustomerRecord[]>("/admin/customers"),
+    queryKey: ["admin", "customers", debouncedSearch.trim()],
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      const term = debouncedSearch.trim();
+      if (term) qs.set("q", term);
+      const q = qs.toString();
+      return apiFetch<CustomerRecord[]>(
+        `/admin/customers${q ? `?${q}` : ""}`,
+      );
+    },
   });
   const { data: pending = [], isLoading: pendingLoading } = useQuery({
     queryKey: ["admin", "customers", "pending-approval"],
@@ -703,16 +727,35 @@ export function CustomersPage() {
             Localização no mapa (app do vendedor)
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Latitude/longitude em graus decimais. Opcional; necessário para rota
-            e «próximos».
+            Marque no mapa ou informe latitude/longitude em graus decimais.
+            Opcional; necessário para rota e «próximos».
           </p>
+          <LocationPinMap
+            className="mt-3"
+            active={sheetOpen}
+            latitude={geoLatStr}
+            longitude={geoLngStr}
+            onChange={(lat, lng) => {
+              setGeoLatStr(lat);
+              setGeoLngStr(lng);
+            }}
+          />
           <FormGrid cols={2} className="mt-3">
             <FormField label="Latitude" htmlFor="cust-lat">
               <Input
                 id="cust-lat"
                 placeholder="Ex.: -23.5505"
                 value={geoLatStr}
-                onChange={(e) => setGeoLatStr(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const split = splitLatLngPaste(v);
+                  if (split) {
+                    setGeoLatStr(split.lat);
+                    setGeoLngStr(split.lng);
+                    return;
+                  }
+                  setGeoLatStr(v);
+                }}
                 autoComplete="off"
               />
             </FormField>
@@ -721,7 +764,16 @@ export function CustomersPage() {
                 id="cust-lng"
                 placeholder="Ex.: -46.6333"
                 value={geoLngStr}
-                onChange={(e) => setGeoLngStr(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const split = splitLatLngPaste(v);
+                  if (split) {
+                    setGeoLatStr(split.lat);
+                    setGeoLngStr(split.lng);
+                    return;
+                  }
+                  setGeoLngStr(v);
+                }}
                 autoComplete="off"
               />
             </FormField>
@@ -792,6 +844,21 @@ export function CustomersPage() {
           />
         ) : null}
       </FormSheet>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <Input
+          className="max-w-md"
+          placeholder="Buscar por nome, fantasia, documento, cidade, vendedor…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+        />
+        {debouncedSearch.trim() && !isLoading ? (
+          <p className="text-sm text-muted-foreground">
+            {customers.length} resultado(s)
+          </p>
+        ) : null}
+      </div>
 
       {canEditCustomers && customers.length > 0 ? (
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
