@@ -6,7 +6,15 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
 const createPrismaClient = () => {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // Pool enxuto para o Neon Free conseguir scale-to-zero: fecha idle rápido
+  // e não segura conexões eternas que mantêm o compute acordado.
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: Number(process.env.PG_POOL_MAX ?? 5),
+    idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 5_000),
+    connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 15_000),
+    allowExitOnIdle: true,
+  });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,
