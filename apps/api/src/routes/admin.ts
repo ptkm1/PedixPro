@@ -7738,4 +7738,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   await app.register(boletosAdminRoutes);
   const { establishmentRoutes } = await import("./establishments.js");
   await app.register(establishmentRoutes, { prefix: "/establishments" });
+  const { aiIndicatorsRoutes } = await import("./ai-indicators.js");
+  await app.register(aiIndicatorsRoutes, { prefix: "/ai" });
 };

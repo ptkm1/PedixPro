@@ -168,6 +168,16 @@ export type {
   MunicipioIbgeSource,
   ResolveMunicipioIbgeInput,
 } from "./municipio.js";
+export { AI_INDICATOR_SECTION_IDS } from "./ai-indicators.js";
+export type {
+  AiIndicatorItem,
+  AiIndicatorSection,
+  AiIndicatorSectionId,
+  AiIndicatorSeverity,
+  AiIndicatorsLatest,
+  AiIndicatorsPayload,
+  AiIndicatorsStatus,
+} from "./ai-indicators.js";
 export {
   APP_BRAND_BACKGROUND,
   APP_BRAND_BORDER,
