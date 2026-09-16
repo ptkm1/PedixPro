@@ -14,13 +14,21 @@ import {
   parseAiIndicatorsPayload,
 } from "./indicators-prompt.js";
 import {
+  evaluateQuotaGate,
+  readCooldownMinutes,
+  readMaxCompletionTokens,
+  readMaxPerDay,
+  readMaxPerHour,
+  readMaxPerMonth,
+  startOfUtcDay,
+  startOfUtcMonth,
+} from "./indicators-quotas.js";
+import {
   estimateOpenAiCostUsd,
   isAiIndicatorsGloballyEnabled,
   openAiChatJson,
   readOpenAiModel,
 } from "./openai-client.js";
-
-export const AI_INDICATORS_MAX_PER_HOUR = 10;
 
 function toLatest(
   row: {
@@ -45,8 +53,10 @@ function toLatest(
   };
 }
 
-async function countUsageLastHour(organizationId: string): Promise<number> {
-  const since = new Date(Date.now() - 60 * 60 * 1000);
+async function countUsageSince(
+  organizationId: string,
+  since: Date,
+): Promise<number> {
   return prisma.aiUsageEvent.count({
     where: {
       organizationId,
@@ -66,13 +76,26 @@ export async function getAiIndicatorsStatus(
     select: { aiIndicatorsEnabled: true },
   });
   const orgEnabled = Boolean(org?.aiIndicatorsEnabled);
-  const usageLastHour = await countUsageLastHour(organizationId);
-  const latestRow = await prisma.organizationAiIndicator.findUnique({
-    where: { organizationId },
-  });
+  const now = new Date();
+  const [usageLastHour, usageToday, usageThisMonth, latestRow] =
+    await Promise.all([
+      countUsageSince(organizationId, new Date(now.getTime() - 60 * 60 * 1000)),
+      countUsageSince(organizationId, startOfUtcDay(now)),
+      countUsageSince(organizationId, startOfUtcMonth(now)),
+      prisma.organizationAiIndicator.findUnique({
+        where: { organizationId },
+      }),
+    ]);
+
+  const maxPerHour = readMaxPerHour();
+  const maxPerDay = readMaxPerDay();
+  const maxPerMonth = readMaxPerMonth();
+  const cooldownMinutes = readCooldownMinutes();
 
   let reason: string | null = null;
   let canGenerate = true;
+  let cooldownRemainingSeconds = 0;
+
   if (!globallyEnabled) {
     canGenerate = false;
     reason =
@@ -83,9 +106,19 @@ export async function getAiIndicatorsStatus(
   } else if (!orgEnabled) {
     canGenerate = false;
     reason = "Ative Indicadores IA nas configurações da organização.";
-  } else if (usageLastHour >= AI_INDICATORS_MAX_PER_HOUR) {
-    canGenerate = false;
-    reason = `Limite de ${AI_INDICATORS_MAX_PER_HOUR} gerações por hora atingido. Tente mais tarde.`;
+  } else {
+    const gate = evaluateQuotaGate({
+      usageLastHour,
+      usageToday,
+      usageThisMonth,
+      lastGeneratedAt: latestRow?.generatedAt ?? null,
+      now,
+    });
+    if (!gate.ok) {
+      canGenerate = false;
+      reason = gate.reason;
+      cooldownRemainingSeconds = gate.cooldownRemainingSeconds;
+    }
   }
 
   return {
@@ -97,7 +130,13 @@ export async function getAiIndicatorsStatus(
     model: readOpenAiModel(),
     latest: latestRow ? toLatest(latestRow) : null,
     usageLastHour,
-    maxPerHour: AI_INDICATORS_MAX_PER_HOUR,
+    usageToday,
+    usageThisMonth,
+    maxPerHour,
+    maxPerDay,
+    maxPerMonth,
+    cooldownMinutes,
+    cooldownRemainingSeconds,
   };
 }
 
@@ -196,6 +235,7 @@ export async function generateAiIndicators(params: {
     const chat = await openAiChatJson({
       system: AI_INDICATORS_SYSTEM_PROMPT,
       user: userPrompt,
+      maxCompletionTokens: readMaxCompletionTokens(),
     });
     rawContent = chat.content;
     model = chat.model;
