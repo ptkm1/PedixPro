@@ -464,6 +464,17 @@ export type {
   ProductRecord,
 } from "./product-form.js";
 export {
+  isProductImageMimeType,
+  PRODUCT_IMAGE_MAX_BYTES,
+  PRODUCT_IMAGE_MIME_TYPES,
+  productImageExtension,
+} from "./product-image.js";
+export type {
+  ProductImageMimeType,
+  ProductImageUploadUrlRequest,
+  ProductImageUploadUrlResponse,
+} from "./product-image.js";
+export {
   formatRomaneioNumber,
   groupOrdersByPaymentCondition,
   paymentConditionLabel,

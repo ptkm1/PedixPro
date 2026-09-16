@@ -4,10 +4,12 @@ import {
     HOME_INDICATOR_KEYS,
     homeIndicatorLimitForPlan,
     isLifecycleSituationCode,
+    isProductImageMimeType,
     isReservedSituationCode,
     normalizePurchaseUnitCode,
     parseHomeIndicators,
     persistHomeIndicatorsError,
+    PRODUCT_IMAGE_MAX_BYTES,
     uniqueIdsPreserveOrder,
     type HomeChartIndicatorKey,
     type HomeIndicatorKey,
@@ -121,6 +123,12 @@ import {
 } from "../services/financial-result-report.js";
 import { getOrCreateMorningBrief } from "../services/morning-brief.js";
 import { getWebPushPublicKey, notifyUsers } from "../services/notify.js";
+import {
+    createProductImageUploadUrl,
+    deleteOwnedProductImage,
+    isObjectStorageConfigured,
+    ObjectStorageError,
+} from "../services/object-storage.js";
 import {
     loadOrderForPdf,
     sendOrderPdf80mmReply,
@@ -2724,6 +2732,20 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           ))
         : body.data.basePrice;
 
+    const nextImageUrl =
+      body.data.imageUrl === undefined
+        ? undefined
+        : body.data.imageUrl === null || body.data.imageUrl === ""
+          ? null
+          : body.data.imageUrl.trim() || null;
+    if (
+      nextImageUrl !== undefined &&
+      nextImageUrl !== existing.imageUrl &&
+      existing.imageUrl
+    ) {
+      await deleteOwnedProductImage(existing.imageUrl);
+    }
+
     try {
       const updated = await prisma.product.update({
         where: { id },
@@ -2741,14 +2763,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           basePrice: patchBasePrice,
           featured:
             body.data.featured === undefined ? undefined : body.data.featured,
-          ...(body.data.imageUrl !== undefined
-            ? {
-                imageUrl:
-                  body.data.imageUrl === null || body.data.imageUrl === ""
-                    ? null
-                    : body.data.imageUrl.trim() || null,
-              }
-            : {}),
+          ...(nextImageUrl !== undefined ? { imageUrl: nextImageUrl } : {}),
           categoryId:
             body.data.categoryId === undefined
               ? undefined
@@ -2860,6 +2875,75 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post("/products/:id/image/upload-url", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    if (!isObjectStorageConfigured()) {
+      return reply.status(503).send({
+        error:
+          "Upload de imagens não configurado. Defina as variáveis R2_* no servidor.",
+      });
+    }
+    const body = z
+      .object({
+        contentType: z.string().min(1),
+        contentLength: z.number().int().positive(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return sendZodError(reply, body.error, req);
+    }
+    if (!isProductImageMimeType(body.data.contentType)) {
+      return reply.status(400).send({
+        error: "Use JPEG, PNG ou WebP.",
+      });
+    }
+    if (body.data.contentLength > PRODUCT_IMAGE_MAX_BYTES) {
+      return reply.status(400).send({
+        error: `A imagem deve ter no máximo ${Math.floor(PRODUCT_IMAGE_MAX_BYTES / (1024 * 1024))} MB.`,
+      });
+    }
+
+    const product = await prisma.product.findFirst({
+      where: { id, organizationId: auth.organizationId },
+      select: { id: true },
+    });
+    if (!product) return reply.status(404).send({ error: "Não encontrado" });
+
+    try {
+      const result = await createProductImageUploadUrl({
+        organizationId: auth.organizationId,
+        productId: product.id,
+        contentType: body.data.contentType,
+        contentLength: body.data.contentLength,
+      });
+      return result;
+    } catch (e) {
+      if (e instanceof ObjectStorageError) {
+        return reply.status(503).send({ error: e.message });
+      }
+      throw e;
+    }
+  });
+
+  app.delete("/products/:id/image", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    const product = await prisma.product.findFirst({
+      where: { id, organizationId: auth.organizationId },
+      select: { id: true, imageUrl: true },
+    });
+    if (!product) return reply.status(404).send({ error: "Não encontrado" });
+
+    await deleteOwnedProductImage(product.imageUrl);
+    const updated = await prisma.product.update({
+      where: { id: product.id },
+      data: { imageUrl: null },
+      include: productRelationsInclude,
+    });
+    return updated;
+  });
+
   app.delete("/products/:id", async (req, reply) => {
     const auth = req.auth!;
     const { id } = idParam.parse(req.params);
@@ -2867,6 +2951,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       where: { id, organizationId: auth.organizationId },
     });
     if (!existing) return reply.status(404).send({ error: "Não encontrado" });
+    await deleteOwnedProductImage(existing.imageUrl);
     await prisma.product.delete({ where: { id } });
     await auditFromAuth(auth, {
       action: AUDIT_ACTION.DELETE,

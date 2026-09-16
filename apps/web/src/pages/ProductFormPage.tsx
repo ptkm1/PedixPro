@@ -1,20 +1,20 @@
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import {
-  CreatePriceTableButton,
-  CreatePriceTableHint,
-  useCanCreatePriceTable,
+    CreatePriceTableButton,
+    CreatePriceTableHint,
+    useCanCreatePriceTable,
 } from "@/components/CreatePriceTableSheet";
 import {
-  CreatePurchaseUnitButton,
-  CreatePurchaseUnitHint,
+    CreatePurchaseUnitButton,
+    CreatePurchaseUnitHint,
 } from "@/components/CreatePurchaseUnitSheet";
 import { FiscalCodeCombobox } from "@/components/FiscalCodeCombobox";
 import {
-  FormActions,
-  FormErrorBanner,
-  FormField,
-  FormGrid,
-  FormSection,
+    FormActions,
+    FormErrorBanner,
+    FormField,
+    FormGrid,
+    FormSection,
 } from "@/components/forms";
 import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
@@ -24,15 +24,15 @@ import { useProductFormPage } from "@/hooks/useProductFormPage";
 import { useScrollToFirstError } from "@/hooks/useScrollToFirstError";
 import { cn } from "@/lib/utils";
 import {
-  formatCfopDisplay,
-  formatNcmDisplay,
-  formatPurchaseUnitLabel,
-  PRODUCT_CLASSIFICATIONS,
-  PURCHASE_UNITS,
-  productClassificationLabel,
-  type FiscalTaxRegime,
-  type ProductClassification,
-  type ProductFormTab,
+    formatCfopDisplay,
+    formatNcmDisplay,
+    formatPurchaseUnitLabel,
+    PRODUCT_CLASSIFICATIONS,
+    PURCHASE_UNITS,
+    productClassificationLabel,
+    type FiscalTaxRegime,
+    type ProductClassification,
+    type ProductFormTab,
 } from "@pedidos/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -122,6 +122,11 @@ export function ProductFormPage() {
     applyCreatedPriceTable,
     purchaseUnits,
     applyCreatedPurchaseUnit,
+    displayImageUrl,
+    imageBusy,
+    imageError,
+    onImageFileChange,
+    removeProductImage,
   } = useProductFormPage();
 
   useScrollToFirstError(
@@ -363,18 +368,71 @@ export function ProductFormPage() {
               </FormField>
 
               <FormField
-                label="URL da foto (catálogo no app)"
-                htmlFor="prod-image-url"
+                label="Foto do produto"
+                htmlFor="prod-image-file"
                 className="sm:col-span-2"
-                error={fieldError("imageUrl")}
+                hint="JPEG, PNG ou WebP · máx. 2 MB. Usada no catálogo do app."
+                error={fieldError("imageUrl") ?? imageError ?? undefined}
               >
-                <Input
-                  id="prod-image-url"
-                  type="url"
-                  placeholder="https://… (opcional)"
-                  value={values.imageUrl}
-                  onChange={(e) => setField("imageUrl", e.target.value)}
-                />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40">
+                    {displayImageUrl ? (
+                      <img
+                        src={displayImageUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="px-2 text-center text-xs text-muted-foreground">
+                        Sem foto
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <Input
+                      id="prod-image-file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={pending || imageBusy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        void onImageFileChange(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {displayImageUrl ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending || imageBusy}
+                          onClick={() => void removeProductImage()}
+                        >
+                          Remover foto
+                        </Button>
+                      ) : null}
+                      {imageBusy ? (
+                        <span className="text-xs text-muted-foreground">
+                          Enviando…
+                        </span>
+                      ) : null}
+                    </div>
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer select-none">
+                        URL manual (avançado)
+                      </summary>
+                      <Input
+                        className="mt-2"
+                        id="prod-image-url"
+                        type="url"
+                        placeholder="https://… (opcional)"
+                        value={values.imageUrl}
+                        onChange={(e) => setField("imageUrl", e.target.value)}
+                      />
+                    </details>
+                  </div>
+                </div>
               </FormField>
             </FormGrid>
           </FormSection>
