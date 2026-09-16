@@ -3,10 +3,16 @@ import { ThemedCard } from "@/components/atoms/ThemedCard";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
 import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
+import { FilterChipRow } from "@/components/molecules/FilterChipRow";
 import {
     useReportsScreen,
     type ReportKind,
 } from "@/hooks/screens/useReportsScreen";
+import {
+    PERIOD_FILTER_OPTIONS_WITH_CUSTOM,
+    type PeriodFilterId,
+    type PeriodPreset,
+} from "@/lib/period-presets";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
@@ -56,42 +62,20 @@ export default function ReportsScreen() {
           <ThemedText variant="titleSm" style={{ marginBottom: 10 }}>
             Período
           </ThemedText>
-          <View style={styles.chips}>
-            {s.presets.map((p) => {
-              const active = s.preset === p;
-              return (
-                <Pressable
-                  key={p}
-                  onPress={() => s.selectPreset(p)}
-                  style={[
-                    styles.chip,
-                    {
-                      borderColor: active ? colors.primary : colors.border,
-                      backgroundColor: active
-                        ? colorWithAlpha(colors.primary, 0.12)
-                        : colors.surfaceMuted,
-                    },
-                  ]}
-                >
-                  <ThemedText
-                    variant="caption"
-                    style={{
-                      fontWeight: "600",
-                      color: active ? colors.primary : colors.textSecondary,
-                    }}
-                  >
-                    {s.periodLabels[p]}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-            <Pressable
-              onPress={() => setCustomOpen((open) => !open)}
-              style={[styles.chip, { borderColor: s.isCustomRange ? colors.primary : colors.border, backgroundColor: s.isCustomRange ? colorWithAlpha(colors.primary, 0.12) : colors.surfaceMuted }]}
-            >
-              <ThemedText variant="caption" style={{ fontWeight: "600", color: s.isCustomRange ? colors.primary : colors.textSecondary }}>Personalizado</ThemedText>
-            </Pressable>
-          </View>
+          <FilterChipRow
+            scroll={false}
+            options={PERIOD_FILTER_OPTIONS_WITH_CUSTOM}
+            value={
+              (s.isCustomRange ? "custom" : s.preset) as PeriodFilterId | null
+            }
+            onChange={(id) => {
+              if (id === "custom") {
+                setCustomOpen((open) => !open);
+                return;
+              }
+              s.selectPreset(id as PeriodPreset);
+            }}
+          />
           {customOpen ? (
             <View style={[styles.customRange, { borderColor: colors.border }]}>
               <View style={styles.dateRow}>
@@ -239,13 +223,6 @@ export default function ReportsScreen() {
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
   scopeRow: { gap: 10 },
   scopeBtn: {
     flexDirection: "row",

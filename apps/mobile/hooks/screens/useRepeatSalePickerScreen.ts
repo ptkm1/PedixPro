@@ -3,11 +3,12 @@ import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { listRepeatableSalesInLookback } from "../../lib/repeat-sale";
 import {
-  fetchSellerSales,
-  SELLER_SALES_KEY,
-  sellerOfflineStaleTime,
+    fetchSellerSales,
+    SELLER_SALES_KEY,
+    sellerOfflineStaleTime,
 } from "../../lib/seller-offline-queries";
 import type { SellerOrderListItem } from "./useSalesListScreen";
+import { useDebouncedValue } from "../useDebouncedValue";
 
 function digitsOnly(v: string): string {
   return v.replace(/\D/g, "");
@@ -47,6 +48,7 @@ function matchesRepeatSaleSearch(
 export function useRepeatSalePickerScreen() {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
   const query = useQuery({
     queryKey: SELLER_SALES_KEY,
     staleTime: sellerOfflineStaleTime,
@@ -59,8 +61,11 @@ export function useRepeatSalePickerScreen() {
   );
 
   const filteredCandidates = useMemo(
-    () => candidates.filter((order) => matchesRepeatSaleSearch(order, search)),
-    [candidates, search],
+    () =>
+      candidates.filter((order) =>
+        matchesRepeatSaleSearch(order, debouncedSearch),
+      ),
+    [candidates, debouncedSearch],
   );
 
   const pickSale = useCallback(

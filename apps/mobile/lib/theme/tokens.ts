@@ -25,13 +25,14 @@ const darkGlass: AppColors = {
   headerTitle: "#f4fbff",
   card: "#123048",
   chip: "#143352",
-  chipActive: "rgba(51, 218, 255, 0.22)",
+  chipActive: "#33DAFF",
   chipText: "#cfe7f5",
-  chipTextActive: "#33DAFF",
+  /** Texto do chip ativo = fundo do app (contraste no primary ciano). */
+  chipTextActive: "#071828",
   pill: "#143352",
-  pillActive: "rgba(51, 218, 255, 0.22)",
+  pillActive: "#33DAFF",
   pillText: "#cfe7f5",
-  pillTextActive: "#33DAFF",
+  pillTextActive: "#071828",
   link: "#33DAFF",
   loginHero: "#041018",
   loginCard: "#123048",
@@ -49,10 +50,19 @@ const darkGlass: AppColors = {
 
 const lightGlass: AppColors = {
   ...appColorsLight,
-  glassFill: "rgba(255, 255, 255, 0.72)",
-  glassBorder: "rgba(2, 68, 92, 0.14)",
-  glassHighlight: "rgba(2, 68, 92, 0.35)",
-  backgroundGradientEnd: "#E8F1F5",
+  background: "#EBEBED",
+  backgroundGradientEnd: "#D8D8DC",
+  headerBackground: "transparent",
+  surfaceMuted: "rgba(255, 255, 255, 0.72)",
+  chip: "rgba(255, 255, 255, 0.78)",
+  searchBackground: "rgba(255, 255, 255, 0.82)",
+  inputBackground: "rgba(255, 255, 255, 0.88)",
+  glassFill: "#F7F8FA",
+  glassBorder: "rgba(255, 255, 255, 0.98)",
+  glassHighlight: "rgba(255, 255, 255, 1)",
+  chipTextActive: "#EBEBED",
+  pillTextActive: "#EBEBED",
+  primaryForeground: "#F8FAFC",
 };
 
 export const themeColors: Record<AppColorScheme, AppColors> = {

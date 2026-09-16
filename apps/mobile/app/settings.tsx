@@ -1,17 +1,19 @@
+import { ThemedButton } from "@/components/atoms/ThemedButton";
+import { ThemedSwitch } from "@/components/atoms/ThemedSwitch";
+import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
 import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
 import { ExternalLink, LogOut } from "lucide-react-native";
 import {
-  ActivityIndicator,
-  Linking,
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
+    ActivityIndicator,
+    Linking,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { ThemePreferencePicker } from "../components/molecules/ThemePreferencePicker";
-import { useSettingsScreen } from "../hooks/screens/useSettingsScreen";
 import { useProfileScreen } from "../hooks/screens/useProfileScreen";
+import { useSettingsScreen } from "../hooks/screens/useSettingsScreen";
 import { useThemedStyles } from "../hooks/useThemedStyles";
 import { useTheme } from "../lib/theme";
 import type { AppColors } from "../lib/theme/types";
@@ -56,11 +58,9 @@ export default function SettingsScreen() {
               comissão.
             </Text>
           </View>
-          <Switch
+          <ThemedSwitch
             value={pushNotificationsEnabled}
             onValueChange={(value) => void setPushNotifications(value)}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.primaryForeground}
           />
         </View>
         <Pressable
@@ -193,5 +193,3 @@ function createSettingsStyles(c: AppColors) {
     dangerText: { color: c.danger, fontWeight: "700" },
   });
 }
-import { ThemedButton } from "@/components/atoms/ThemedButton";
-import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";

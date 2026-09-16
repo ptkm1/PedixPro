@@ -4,12 +4,38 @@ export type PeriodPreset =
   | "last_7_days"
   | "last_90_days";
 
+export type PeriodFilterId = PeriodPreset | "custom";
+
 export const PERIOD_PRESET_LABELS: Record<PeriodPreset, string> = {
   this_month: "Este mês",
   last_month: "Mês passado",
   last_7_days: "Últimos 7 dias",
   last_90_days: "Últimos 90 dias",
 };
+
+/** Presets compartilhados pelos chips de período no mobile. */
+export const PERIOD_FILTER_PRESETS: PeriodPreset[] = [
+  "this_month",
+  "last_month",
+  "last_7_days",
+  "last_90_days",
+];
+
+export const PERIOD_FILTER_OPTIONS: Array<{
+  id: PeriodPreset;
+  label: string;
+}> = PERIOD_FILTER_PRESETS.map((id) => ({
+  id,
+  label: PERIOD_PRESET_LABELS[id],
+}));
+
+export const PERIOD_FILTER_OPTIONS_WITH_CUSTOM: Array<{
+  id: PeriodFilterId;
+  label: string;
+}> = [
+  ...PERIOD_FILTER_OPTIONS,
+  { id: "custom", label: "Personalizado" },
+];
 
 export function periodRange(preset: PeriodPreset): {
   from: string;
