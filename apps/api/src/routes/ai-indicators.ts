@@ -53,7 +53,7 @@ export const aiIndicatorsRoutes: FastifyPluginAsync = async (app) => {
         lower.includes("plano") ||
         lower.includes("ative") ||
         lower.includes("desligad") ||
-        lower.includes("limite")
+        lower.includes("gerações por hora")
           ? 403
           : 502;
       return reply.status(status).send({ error: msg });

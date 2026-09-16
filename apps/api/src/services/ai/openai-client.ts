@@ -69,9 +69,7 @@ export async function openAiChatJson(params: {
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(
-        `OpenAI HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}`,
-      );
+      throw new Error(friendlyOpenAiHttpError(res.status, body));
     }
 
     const json = (await res.json()) as {
@@ -99,6 +97,45 @@ export async function openAiChatJson(params: {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Mensagem amigável a partir do JSON de erro da OpenAI. */
+export function friendlyOpenAiHttpError(status: number, body: string): string {
+  let code: string | undefined;
+  let apiMessage: string | undefined;
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { code?: string; type?: string; message?: string };
+    };
+    code = parsed.error?.code || parsed.error?.type;
+    apiMessage = parsed.error?.message;
+  } catch {
+    /* corpo não-JSON */
+  }
+
+  const lower = `${code ?? ""} ${apiMessage ?? ""} ${body}`.toLowerCase();
+  if (
+    status === 429 &&
+    (lower.includes("insufficient_quota") ||
+      lower.includes("no credits remaining") ||
+      lower.includes("billing"))
+  ) {
+    return "A conta OpenAI está sem créditos. Adicione saldo em platform.openai.com (Billing) e tente de novo.";
+  }
+  if (status === 429) {
+    return "Limite de requisições da OpenAI atingido. Aguarde um minuto e tente novamente.";
+  }
+  if (status === 401 || lower.includes("invalid_api_key")) {
+    return "Chave OPENAI_API_KEY inválida. Verifique o valor em apps/api/.env.";
+  }
+  if (status === 400 && lower.includes("model")) {
+    return "Modelo OpenAI inválido. Ajuste OPENAI_MODEL no .env da API.";
+  }
+
+  const snippet = (apiMessage || body).trim().slice(0, 180);
+  return snippet
+    ? `Falha na OpenAI (HTTP ${status}): ${snippet}`
+    : `Falha na OpenAI (HTTP ${status}).`;
 }
 
 /** Custo estimado USD (tabela aproximada gpt-4o-mini). */
