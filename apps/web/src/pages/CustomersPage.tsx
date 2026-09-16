@@ -217,6 +217,7 @@ export function CustomersPage() {
   const [geoLngStr, setGeoLngStr] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkSeller, setBulkSeller] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
   const canEditCustomers = Boolean(
@@ -388,6 +389,7 @@ export function CustomersPage() {
       ids: string[];
       status?: CustomerStatus;
       creditBlocked?: boolean;
+      sellerId?: string | null;
     }) =>
       apiFetch<{ updated: number }>("/admin/customers/batch", {
         method: "PATCH",
@@ -396,18 +398,38 @@ export function CustomersPage() {
     onSuccess: () => {
       setActionError(null);
       setBulkStatus("");
+      setBulkSeller("");
       setSelectedIds(new Set());
       void qc.invalidateQueries({ queryKey: ["admin", "customers"] });
     },
     onError: (err) => {
       setBulkStatus("");
+      setBulkSeller("");
       setActionError(
         err instanceof Error ? err.message : "Erro ao atualizar clientes",
       );
     },
   });
 
-  const batchBusy = batchPatch.isPending;
+  const batchDelete = useMutation({
+    mutationFn: (ids: string[]) =>
+      apiFetch<{ deleted: number }>("/admin/customers/batch-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      }),
+    onSuccess: () => {
+      setActionError(null);
+      setSelectedIds(new Set());
+      void qc.invalidateQueries({ queryKey: ["admin", "customers"] });
+    },
+    onError: (err) => {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao excluir clientes",
+      );
+    },
+  });
+
+  const batchBusy = batchPatch.isPending || batchDelete.isPending;
 
   async function applyBatchStatus(status: CustomerStatus) {
     if (!canEditCustomers || !hasSelection || batchBusy) return;
@@ -428,6 +450,26 @@ export function CustomersPage() {
   function applyBatchCreditBlocked(blocked: boolean) {
     if (!canEditCustomers || !hasSelection || batchBusy) return;
     batchPatch.mutate({ ids: [...selectedIds], creditBlocked: blocked });
+  }
+
+  function applyBatchSeller(v: string) {
+    if (!canEditCustomers || !hasSelection || batchBusy) return;
+    setBulkSeller(v);
+    batchPatch.mutate({
+      ids: [...selectedIds],
+      sellerId: v === "" ? null : v,
+    });
+  }
+
+  async function confirmBatchDelete() {
+    if (!canEditCustomers || !hasSelection || batchBusy) return;
+    const ok = await confirm({
+      title: "Excluir clientes selecionados?",
+      description: `${selectedIds.size} cliente(s) serão removidos permanentemente do sistema.`,
+      confirmLabel: "Excluir",
+      tone: "destructive",
+    });
+    if (ok) batchDelete.mutate([...selectedIds]);
   }
 
   const formErrors = useMemo(
@@ -742,6 +784,18 @@ export function CustomersPage() {
                   void applyBatchStatus(v);
               }}
             />
+            <AppSelect
+              value={bulkSeller}
+              disabled={!hasSelection || batchBusy}
+              placeholder="Alterar vendedor…"
+              emptyLabel="— Sem vendedor —"
+              triggerClassName="w-[12rem]"
+              options={sellers.map((s) => ({
+                value: s.id,
+                label: s.user.name,
+              }))}
+              onValueChange={(v) => applyBatchSeller(v)}
+            />
             <Button
               type="button"
               size="sm"
@@ -759,6 +813,15 @@ export function CustomersPage() {
               onClick={() => applyBatchCreditBlocked(true)}
             >
               Bloquear crédito
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={!hasSelection || batchBusy}
+              onClick={() => void confirmBatchDelete()}
+            >
+              {batchDelete.isPending ? "Excluindo…" : "Excluir selecionados"}
             </Button>
           </div>
         </div>
