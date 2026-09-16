@@ -11,6 +11,7 @@ import {
   isValidIbgeMunicipioCode,
   normalizeMunicipioName,
   normalizeUf,
+  parseCepFlexible,
   type IbgeMunicipio,
   type MunicipioIbgeResolution,
   type ResolveMunicipioIbgeInput,
@@ -147,7 +148,7 @@ export async function validateIbgeCode(
 async function resolveFromCep(
   cepRaw: string,
 ): Promise<MunicipioIbgeResolution | null> {
-  const cep = cepDigitsOnly(cepRaw);
+  const cep = parseCepFlexible(cepRaw);
   if (cep.length !== 8) return null;
   const cached = resolveByCep.get(cep);
   if (cached) return cached;
@@ -308,8 +309,9 @@ export type ResolveMunicipioOptions = {
 };
 
 /**
- * Ordem: CSV IBGE (validado) → CEP → CNPJ → cidade+UF.
- * Não altera endereço do cliente — só resolve código IBGE (+ avisos).
+ * Ordem: CSV IBGE (validado) → cidade+UF local → CEP → CNPJ.
+ * Quando cidade/UF vierem vazios ou não baterem na base, CEP/CNPJ podem
+ * preencher cidade + UF + IBGE (com aviso).
  */
 export async function resolveMunicipioIbge(
   input: ResolveMunicipioIbgeInput,
@@ -320,6 +322,8 @@ export async function resolveMunicipioIbge(
   let cidade = input.cidade?.trim() || null;
   let uf = input.uf ? normalizeUf(input.uf) : null;
   if (uf && uf.length !== 2) uf = null;
+  const csvCity = cidade;
+  const csvUf = uf;
 
   const csvCodeRaw = input.codigoIbge?.trim() || "";
   if (csvCodeRaw) {
@@ -352,63 +356,7 @@ export async function resolveMunicipioIbge(
     if (v.reason) warnings.push(v.reason);
   }
 
-  // CEP: útil sobretudo quando falta cidade/UF; também como fonte de IBGE.
-  if (allowExternal && input.cep) {
-    const viaCep = await resolveFromCep(input.cep);
-    if (viaCep) {
-      warnings.push(...viaCep.warnings);
-      if (
-        cidade &&
-        uf &&
-        viaCep.cidade &&
-        viaCep.uf &&
-        (normalizeMunicipioName(cidade) !==
-          normalizeMunicipioName(viaCep.cidade) ||
-          uf !== viaCep.uf)
-      ) {
-        warnings.push(
-          `Divergência cadastral encontrada. CSV: ${cidade}/${uf} · Consulta CEP: ${viaCep.cidade}/${viaCep.uf}.`,
-        );
-        // Mantém cidade/UF do CSV; tenta IBGE local abaixo.
-      } else {
-        if (!cidade && viaCep.cidade) cidade = viaCep.cidade;
-        if (!uf && viaCep.uf) uf = viaCep.uf;
-        if (viaCep.codigoIbge) {
-          return {
-            codigoIbge: viaCep.codigoIbge,
-            cidade: cidade ?? viaCep.cidade,
-            uf: uf ?? viaCep.uf,
-            source: "CEP",
-            confidence: "HIGH",
-            warnings,
-            corrected: Boolean(csvCodeRaw),
-          };
-        }
-      }
-    }
-  }
-
-  if (allowExternal && input.cnpj) {
-    const viaCnpj = await resolveFromCnpj(input.cnpj, cidade, uf);
-    if (viaCnpj) {
-      warnings.push(...viaCnpj.warnings);
-      const diverged = viaCnpj.warnings.some((w) =>
-        w.includes("Divergência cadastral"),
-      );
-      if (viaCnpj.codigoIbge && !diverged) {
-        return {
-          codigoIbge: viaCnpj.codigoIbge,
-          cidade: cidade ?? viaCnpj.cidade,
-          uf: uf ?? viaCnpj.uf,
-          source: viaCnpj.source ?? "CNPJ",
-          confidence: viaCnpj.confidence ?? "MEDIUM",
-          warnings,
-          corrected: Boolean(csvCodeRaw),
-        };
-      }
-    }
-  }
-
+  // Cidade+UF locais primeiro (cache por UF — barato em massa).
   if (cidade && uf) {
     const hit = await findByCidadeUf(cidade, uf);
     if (hit) {
@@ -422,7 +370,71 @@ export async function resolveMunicipioIbge(
         corrected: Boolean(csvCodeRaw),
       };
     }
-    warnings.push(`Município não localizado: ${cidade}/${uf}.`);
+    warnings.push(`Município não localizado no CSV: ${cidade}/${uf}.`);
+  }
+
+  // CEP: preenche cidade/UF/IBGE quando faltam ou quando o nome do CSV não resolveu.
+  if (allowExternal && input.cep) {
+    const viaCep = await resolveFromCep(input.cep);
+    if (viaCep?.codigoIbge) {
+      const filledCity = !csvCity;
+      const filledUf = !csvUf;
+      if (
+        csvCity &&
+        viaCep.cidade &&
+        normalizeMunicipioName(csvCity) !==
+          normalizeMunicipioName(viaCep.cidade)
+      ) {
+        warnings.push(
+          `Cidade do CSV (${csvCity}) não resolvida; usando CEP → ${viaCep.cidade}/${viaCep.uf}.`,
+        );
+      } else if (filledCity && viaCep.cidade) {
+        warnings.push(
+          `Cidade preenchida automaticamente via CEP: ${viaCep.cidade}.`,
+        );
+      }
+      if (filledUf && viaCep.uf) {
+        warnings.push(`UF preenchida automaticamente via CEP: ${viaCep.uf}.`);
+      }
+      return {
+        codigoIbge: viaCep.codigoIbge,
+        cidade: viaCep.cidade ?? cidade,
+        uf: viaCep.uf ?? uf,
+        source: "CEP",
+        confidence: "HIGH",
+        warnings: [...warnings, ...viaCep.warnings],
+        corrected: Boolean(csvCodeRaw) || filledCity || filledUf,
+      };
+    }
+    if (viaCep) warnings.push(...viaCep.warnings);
+  }
+
+  if (allowExternal && input.cnpj) {
+    const viaCnpj = await resolveFromCnpj(input.cnpj, csvCity, csvUf);
+    if (viaCnpj) {
+      warnings.push(...viaCnpj.warnings);
+      const diverged =
+        Boolean(csvCity) &&
+        viaCnpj.warnings.some((w) => w.includes("Divergência cadastral"));
+      // Sem cidade no CSV, ou sem divergência: pode usar CNPJ.
+      if (viaCnpj.codigoIbge && (!diverged || !csvCity)) {
+        const filledCity = !csvCity && Boolean(viaCnpj.cidade);
+        if (filledCity) {
+          warnings.push(
+            `Cidade preenchida automaticamente via CNPJ: ${viaCnpj.cidade}.`,
+          );
+        }
+        return {
+          codigoIbge: viaCnpj.codigoIbge,
+          cidade: cidade ?? viaCnpj.cidade,
+          uf: uf ?? viaCnpj.uf,
+          source: viaCnpj.source ?? "CNPJ",
+          confidence: viaCnpj.confidence ?? "MEDIUM",
+          warnings,
+          corrected: Boolean(csvCodeRaw) || filledCity,
+        };
+      }
+    }
   }
 
   return {

@@ -3,30 +3,31 @@ import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { notifyError, notifySuccess } from "@/lib/app-notifications";
 import { apiFetch, downloadPdf } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import {
-    CUSTOMER_CSV_ADDRESS_FALLBACK,
-    CUSTOMER_CSV_BULK_FIELDS,
-    CUSTOMER_CSV_HEADERS,
-    PRODUCT_CSV_HEADERS,
-    csvFieldLabel,
-    peekCsvHeaders,
-    suggestCsvColumnMap,
-    type CsvColumnMap,
-    type CsvHeaderPeek,
-    type CsvImportKind,
-    type CsvImportRecipe,
+  CUSTOMER_CSV_ADDRESS_FALLBACK,
+  CUSTOMER_CSV_BULK_FIELDS,
+  CUSTOMER_CSV_HEADERS,
+  PRODUCT_CSV_HEADERS,
+  csvFieldLabel,
+  peekCsvHeaders,
+  suggestCsvColumnMap,
+  type CsvColumnMap,
+  type CsvHeaderPeek,
+  type CsvImportKind,
+  type CsvImportRecipe,
 } from "@pedidos/shared";
 import { useMutation } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 export type CsvImportResult = {
@@ -330,9 +331,14 @@ export function CsvImportSheet({
             }}
             disabled={!csvText || validCount === 0 || busy || committed}
           >
-            {commit.isPending
-              ? "Importando…"
-              : `Importar ${validCount} válido(s)`}
+            {commit.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Importando…
+              </>
+            ) : (
+              `Importar ${validCount} válido(s)`
+            )}
           </Button>
         </div>
       }
@@ -364,7 +370,14 @@ export function CsvImportSheet({
             disabled={!csvText || busy || mappedCount === 0}
             onClick={runPreview}
           >
-            {preview.isPending ? "Validando…" : "Validar"}
+            {preview.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Validando…
+              </>
+            ) : (
+              "Validar"
+            )}
           </Button>
           <input
             ref={inputRef}
@@ -518,9 +531,14 @@ export function CsvImportSheet({
                       disabled={busy || !csvText}
                       onClick={runPreview}
                     >
-                      {preview.isPending
-                        ? "Revalidando…"
-                        : "Revalidar com correções"}
+                      {preview.isPending ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Revalidando…
+                        </>
+                      ) : (
+                        "Revalidar com correções"
+                      )}
                     </Button>
                   </div>
                 </div>

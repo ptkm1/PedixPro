@@ -148,6 +148,7 @@ export {
   formatCepMask,
   formatStructuredAddress,
   isCepComplete,
+  parseCepFlexible,
 } from "./address.js";
 export type {
   CepAddressData,

@@ -23,6 +23,36 @@ export function cepDigitsOnly(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 8);
 }
 
+/**
+ * CEP a partir de texto de CSV/Excel, inclusive notação científica
+ * (ex.: 4,37E+08 → 43700000) e zeros à esquerda perdidos.
+ */
+export function parseCepFlexible(raw: string): string {
+  const t = raw.trim().replace(/\s/g, "");
+  if (!t) return "";
+
+  const sci = t.match(/^(\d+)[,.](\d*)[eE]([+-]?\d+)$/i);
+  if (sci || /^[\d.,]+[eE][+-]?\d+$/i.test(t)) {
+    const normalized = t.replace(",", ".");
+    const n = Number(normalized);
+    if (Number.isFinite(n) && n > 0) {
+      let digits = String(Math.round(n));
+      // Excel às vezes infla com zero extra (4,37E+08 → 437000000).
+      while (digits.length > 8 && digits.endsWith("0")) {
+        digits = digits.slice(0, -1);
+      }
+      if (digits.length < 8) digits = digits.padStart(8, "0");
+      if (digits.length === 8) return digits;
+    }
+  }
+
+  let digits = t.replace(/\D/g, "");
+  if (digits.length > 0 && digits.length < 8 && /^\d+$/.test(digits)) {
+    digits = digits.padStart(8, "0");
+  }
+  return digits.slice(0, 8);
+}
+
 export function formatCepMask(digitsMax8: string): string {
   const d = cepDigitsOnly(digitsMax8);
   if (d.length <= 5) return d;
@@ -30,7 +60,8 @@ export function formatCepMask(digitsMax8: string): string {
 }
 
 export function isCepComplete(digitsOrRaw: string): boolean {
-  return cepDigitsOnly(digitsOrRaw).length === 8;
+  const d = parseCepFlexible(digitsOrRaw);
+  return d.length === 8;
 }
 
 export type CustomerAddressFields = {

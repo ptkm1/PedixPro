@@ -5,7 +5,7 @@ import {
   resolveMunicipioIbge,
   validateIbgeCode,
 } from "./municipio-resolver.js";
-import { normalizeMunicipioName } from "@pedidos/shared";
+import { normalizeMunicipioName, parseCepFlexible } from "@pedidos/shared";
 
 vi.mock("./brasilapi.js", () => ({
   fetchIbgeMunicipios: vi.fn(async (uf: string) => {
@@ -160,16 +160,30 @@ describe("resolveMunicipioIbge", () => {
     expect(r.codigoIbge).toBeNull();
   });
 
-  it("resolve via CEP quando cidade/UF ausentes", async () => {
+  it("preenche cidade+IBGE via CEP quando cidade vazia", async () => {
     const r = await resolveMunicipioIbge(
       { cep: "40000-000" },
       { allowExternal: true },
     );
     expect(r.codigoIbge).toBe("2927408");
+    expect(r.cidade).toBe("Salvador");
+    expect(r.uf).toBe("BA");
     expect(r.source).toBe("CEP");
   });
 
-  it("CEP inválido não quebra", async () => {
+  it("CEP em notação científica do Excel", async () => {
+    const r = await resolveMunicipioIbge(
+      { cep: "4,37E+07", cidade: "", uf: "BA" },
+      { allowExternal: true },
+    );
+    // 4,37E+07 → 43700000; mock de CEP só trata 40000000 — aqui só valida parse
+    // (resolveFromCep com CEP parseado diferente do mock retorna SP fallback do mock)
+    expect(parseCepFlexible("4,37E+07")).toBe("43700000");
+    expect(parseCepFlexible("4,37E+08")).toBe("43700000");
+    expect(parseCepFlexible("41310-260")).toBe("41310260");
+  });
+
+  it("CEP inválido não quebra se cidade+UF ok", async () => {
     const r = await resolveMunicipioIbge(
       { cep: "00000000", cidade: "Salvador", uf: "BA" },
       { allowExternal: true },
