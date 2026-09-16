@@ -160,13 +160,31 @@ async function validateCustomerRow(
   let fantasia = cell(cells, "nome_fantasia");
   let email = def("email", cell(cells, "email"));
   let telefone = def("telefone", cell(cells, "telefone"));
-  const cep = def("cep", cell(cells, "cep"));
-  const logradouro = def("logradouro", cell(cells, "logradouro"));
-  const numero = def("numero", cell(cells, "numero"));
-  const bairro = def("bairro", cell(cells, "bairro"));
-  const cidade = def("cidade", cell(cells, "cidade"));
-  const uf = def("uf", cell(cells, "uf"));
-  let ibge = def("codigo_ibge", cell(cells, "codigo_ibge"));
+  const cep = def("cep", cell(cells, "cep", "zip", "zipcode", "codigo_postal"));
+  const logradouro = def(
+    "logradouro",
+    cell(cells, "logradouro", "endereco", "rua", "street", "address"),
+  );
+  const numeroRaw = def(
+    "numero",
+    cell(cells, "numero", "num", "nro", "nr", "number"),
+  );
+  // Export de ERP costuma omitir número; S/N é o padrão do cadastro Pedix.
+  const numero = numeroRaw || STREET_NUMBER_SN;
+  const bairro = def(
+    "bairro",
+    cell(cells, "bairro", "distrito", "neighborhood"),
+  );
+  // Fallbacks de alias: CSV com município preenchido e "cidade" vazia (ou remap).
+  const cidade = def(
+    "cidade",
+    cell(cells, "cidade", "municipio", "city", "localidade"),
+  );
+  const uf = def("uf", cell(cells, "uf", "estado", "state", "sigla_uf"));
+  let ibge = def(
+    "codigo_ibge",
+    cell(cells, "codigo_ibge", "ibge", "cod_ibge", "codigoibge", "id_ibge"),
+  );
   const complemento = def("complemento", cell(cells, "complemento"));
   const ie = def("inscricao_estadual", cell(cells, "inscricao_estadual"));
   const comprador = def("comprador", cell(cells, "comprador"));
@@ -312,15 +330,12 @@ async function validateCustomerRow(
     // Se não achar, segue sem vendedor (comum em exports de terceiros).
   }
 
+  // Limite é opcional: vazio, 0, placeholder ou valor não numérico → sem limite.
+  // Exports de ERP costumam preencher 0 / 0,00 / "-" e isso não deve invalidar a linha.
   let creditLimit: number | null = null;
   if (limiteRaw) {
     const n = parseBrNumber(limiteRaw);
-    if (n == null || n <= 0) {
-      errors.push({
-        field: "limite_credito",
-        message: "Limite de crédito inválido.",
-      });
-    } else {
+    if (n != null && n > 0) {
       creditLimit = n;
     }
   }

@@ -25,7 +25,10 @@ export function remapCsvCells(
     const t = normalizeCsvHeader(target);
     const s = normalizeCsvHeader(src);
     if (!t) continue;
-    out[t] = (cells[s] ?? cells[src] ?? "").trim();
+    const next = (cells[s] ?? cells[src] ?? "").trim();
+    // Não apagar valor já presente (ex.: cidade preenchida) com fonte vazia.
+    if (!next && (out[t] ?? "").trim()) continue;
+    out[t] = next;
   }
   return out;
 }
@@ -70,7 +73,10 @@ export function parseCsvText(csvText: string): CsvParseResult {
     for (let c = 0; c < headers.length; c++) {
       const key = headers[c]!;
       if (!key) continue;
-      cells[key] = (values[c] ?? "").trim();
+      const val = (values[c] ?? "").trim();
+      // Cabeçalho duplicado: não sobrescrever valor preenchido com vazio.
+      if (!val && (cells[key] ?? "").trim()) continue;
+      cells[key] = val;
     }
     rows.push({ line: i + 2, cells }); // +2: header is line 1
   }
@@ -141,14 +147,19 @@ export function cell(cells: Record<string, string>, ...keys: string[]): string {
 }
 
 export function parseBrNumber(raw: string): number | null {
-  const t = raw.trim();
-  if (!t) return null;
-  // 1.234,56 or 1234,56 or 1234.56
-  let s = t.replace(/\s/g, "");
+  let s = raw.trim().replace(/\s/g, "");
+  if (!s) return null;
+  // Moeda / placeholders comuns em export de ERP
+  s = s.replace(/^R\$\s?/i, "");
+  if (!s || s === "-" || /^n\/?a$/i.test(s) || /^-+$/.test(s)) return null;
+  // 1.234,56 | 1234,56 | 1.234.567 | 1234.56 | 1.000
   if (s.includes(",") && s.includes(".")) {
     s = s.replace(/\./g, "").replace(",", ".");
   } else if (s.includes(",")) {
-    s = s.replace(",", ".");
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    // milhares BR sem decimal: 1.000 / 1.000.000
+    s = s.replace(/\./g, "");
   }
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
