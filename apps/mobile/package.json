@@ -1,6 +1,6 @@
 {
   "name": "@pedidos/mobile",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {

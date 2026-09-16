@@ -1,9 +1,10 @@
 import { displayMoney } from "@/components/atoms/formatMoney";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { GlassSurface } from "@/components/atoms/GlassSurface";
+import { FilterChipRow } from "@/components/molecules/FilterChipRow";
 import type { SellerOrderListItem } from "@/hooks/screens/useSalesListScreen";
 import {
-    PERIOD_PRESET_LABELS,
+    PERIOD_FILTER_OPTIONS,
     periodRange,
     type PeriodPreset,
 } from "@/lib/period-presets";
@@ -11,20 +12,8 @@ import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
 import { useMemo, useState } from "react";
-import {
-    LayoutChangeEvent,
-    Pressable,
-    StyleSheet,
-    View,
-} from "react-native";
+import { LayoutChangeEvent, StyleSheet, View } from "react-native";
 import { LineChart, ruleTypes } from "react-native-gifted-charts";
-
-const PRESETS: PeriodPreset[] = [
-  "this_month",
-  "last_month",
-  "last_7_days",
-  "last_90_days",
-];
 const CHART_HEIGHT = 220;
 const Y_AXIS_LABEL_WIDTH = 42;
 const X_LABEL_WIDTH = 36;
@@ -204,34 +193,13 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
         {displayMoney(hideValues, total)} em {orderCount} pedido
         {orderCount === 1 ? "" : "s"}
       </ThemedText>
-      <View style={styles.chips}>
-        {PRESETS.map((item) => {
-          const active = item === preset;
-          return (
-            <Pressable
-              key={item}
-              onPress={() => setPreset(item)}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: active ? colors.chipActive : colors.chip,
-                  borderColor: active ? colors.glassHighlight : colors.glassBorder,
-                },
-              ]}
-            >
-              <ThemedText
-                variant="caption"
-                style={{
-                  fontWeight: "600",
-                  color: active ? colors.chipTextActive : colors.chipText,
-                }}
-              >
-                {PERIOD_PRESET_LABELS[item]}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
+      <FilterChipRow
+        scroll={false}
+        style={styles.chips}
+        options={PERIOD_FILTER_OPTIONS}
+        value={preset}
+        onChange={setPreset}
+      />
       {hasSales ? (
         <View style={styles.chartWrap} onLayout={onChartAreaLayout}>
           {parentWidth > 0 ? (
@@ -330,13 +298,7 @@ export function SalesDailyBlock({ orders, hideValues = false }: Props) {
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  chip: {
-    borderWidth: 1,
-    borderRadius: radiiPx.md,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+  chips: { marginTop: 12 },
   chartWrap: {
     marginTop: 8,
     paddingTop: 4,

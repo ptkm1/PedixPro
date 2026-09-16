@@ -3,13 +3,14 @@ import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
 import {
-    Platform,
-    StyleSheet,
-    View,
-    type StyleProp,
-    type ViewStyle,
+  Platform,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 
 type Props = {
@@ -22,9 +23,12 @@ type Props = {
   overflowVisible?: boolean;
 };
 
+/** Fill sólido light — evita “furo” azul de Svg/SurfaceView no Android. */
+const LIGHT_FILL = "#F7F8FA";
+
 /**
  * Vidro suave: blur + tint leve + borda discreta.
- * Android: dimezisBlurView só com blurTarget do SafeScreen.
+ * Light: fill quase sólido (Android Svg não pode furar para o gradiente).
  */
 export function GlassSurface({
   children,
@@ -36,23 +40,45 @@ export function GlassSurface({
 }: Props) {
   const { isDark } = useTheme();
   const blurTarget = useBlurTarget();
-  const androidBlur =
-    Platform.OS === "android" && blurTarget
+  const androidCanBlur = Platform.OS === "android" && Boolean(blurTarget);
+  /** Blur nativo só onde não cria artefato (iOS; Android dark). */
+  const useNativeBlur =
+    Platform.OS === "ios" || (androidCanBlur && isDark);
+
+  const androidBlur = useNativeBlur
+    ? androidCanBlur
       ? ({
           blurMethod: "dimezisBlurViewSdk31Plus" as const,
           blurTarget,
+          blurReductionFactor: isDark ? 3 : 1,
         } as const)
-      : Platform.OS === "android"
-        ? ({ blurMethod: "none" as const } as const)
-        : {};
+      : {}
+    : Platform.OS === "android"
+      ? ({ blurMethod: "none" as const } as const)
+      : {};
 
-  const tint = colorWithAlpha(
-    isDark ? "#0d2438" : "#ffffff",
-    isDark ? 0.45 : 0.55,
-  );
+  const tint = isDark
+    ? colorWithAlpha("#0d2438", 0.45)
+    : useNativeBlur
+      ? colorWithAlpha("#FFFFFF", 0.28)
+      : LIGHT_FILL;
+
   const rim = isDark
-    ? "rgba(125, 211, 252, 0.18)"
-    : "rgba(2, 68, 92, 0.12)";
+    ? "rgba(125, 211, 252, 0.22)"
+    : "rgba(255, 255, 255, 0.98)";
+
+  const shellFill = useNativeBlur
+    ? "transparent"
+    : isDark
+      ? colorWithAlpha("#FFFFFF", 0.55)
+      : LIGHT_FILL;
+
+  const blurIntensity = Platform.OS === "ios" ? (isDark ? 55 : 72) : 48;
+  const blurTint = isDark
+    ? ("systemThinMaterialDark" as const)
+    : ("systemUltraThinMaterialLight" as const);
+
+  const useElevation = isDark || Platform.OS === "ios";
 
   return (
     <View
@@ -62,15 +88,16 @@ export function GlassSurface({
           borderRadius: radius,
           borderColor: rim,
           overflow: overflowVisible ? "visible" : "hidden",
-          backgroundColor:
-            Platform.OS === "android"
-              ? colorWithAlpha(isDark ? "#0d2438" : "#ffffff", 0.55)
-              : "transparent",
+          backgroundColor: shellFill,
+          shadowColor: isDark ? "#000" : "#9CA3AF",
+          shadowOpacity: useElevation ? (isDark ? 0.25 : 0.1) : 0,
+          shadowRadius: isDark ? 10 : 14,
+          shadowOffset: { width: 0, height: isDark ? 4 : 5 },
+          elevation: useElevation && isDark ? 3 : 0,
         },
         style,
       ]}
     >
-      {/* Camada de vidro sempre clipada no radius — evita “vazamento” nos cantos */}
       <View
         pointerEvents="none"
         style={[
@@ -78,15 +105,30 @@ export function GlassSurface({
           { borderRadius: radius, overflow: "hidden" },
         ]}
       >
-        <BlurView
-          intensity={Platform.OS === "ios" ? 55 : 40}
-          tint={isDark ? "dark" : "light"}
-          {...androidBlur}
-          style={StyleSheet.absoluteFillObject}
-        />
+        {useNativeBlur ? (
+          <BlurView
+            intensity={blurIntensity}
+            tint={blurTint}
+            {...androidBlur}
+            style={StyleSheet.absoluteFillObject}
+          />
+        ) : null}
         <View
           style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]}
         />
+        {!isDark && useNativeBlur ? (
+          <LinearGradient
+            colors={[
+              "rgba(255,255,255,0.55)",
+              "rgba(255,255,255,0)",
+              "rgba(0,0,0,0.03)",
+            ]}
+            locations={[0, 0.55, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        ) : null}
         <View
           style={[
             styles.topEdge,
@@ -95,7 +137,7 @@ export function GlassSurface({
               borderTopRightRadius: radius,
               backgroundColor: colorWithAlpha(
                 isDark ? "#a5e8ff" : "#ffffff",
-                isDark ? 0.22 : 0.5,
+                isDark ? 0.22 : 1,
               ),
             },
           ]}
@@ -116,19 +158,19 @@ export function GlassSurface({
 
 const styles = StyleSheet.create({
   shell: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: StyleSheet.hairlineWidth * 1.5,
   },
   topEdge: {
     position: "absolute",
     top: 0,
-    left: 8,
-    right: 8,
-    height: StyleSheet.hairlineWidth,
+    left: 10,
+    right: 10,
+    height: StyleSheet.hairlineWidth * 2,
     zIndex: 2,
-    opacity: 0.7,
   },
   content: {
     position: "relative",
     zIndex: 3,
+    backgroundColor: "transparent",
   },
 });

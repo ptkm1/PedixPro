@@ -38,7 +38,7 @@ function QuickSaleFab() {
   const bottom = tabBarHeight(insets.bottom) + 2;
   const glassTint = colorWithAlpha(
     colors.primary,
-    isDark ? 0.22 : 0.28,
+    isDark ? 0.22 : 0.18,
   );
   const rim = colorWithAlpha(isDark ? "#a5e8ff" : colors.primary, 0.45);
 
@@ -54,15 +54,15 @@ function QuickSaleFab() {
           shadowColor: colors.primary,
           backgroundColor:
             Platform.OS === "android"
-              ? colorWithAlpha(isDark ? "#0d2438" : "#e8f9ff", 0.72)
+              ? colorWithAlpha(isDark ? "#0d2438" : "#ffffff", isDark ? 0.72 : 0.45)
               : "transparent",
         },
       ]}
       onPress={() => router.push("/quick-sale")}
     >
       <BlurView
-        intensity={Platform.OS === "ios" ? 48 : 36}
-        tint={isDark ? "dark" : "light"}
+        intensity={Platform.OS === "ios" ? (isDark ? 48 : 64) : 36}
+        tint={isDark ? "systemThinMaterialDark" : "systemUltraThinMaterialLight"}
         // FAB fica fora do SafeScreen — sem blurTarget no Android
         blurMethod={Platform.OS === "android" ? "none" : undefined}
         style={StyleSheet.absoluteFillObject}
@@ -75,7 +75,7 @@ function QuickSaleFab() {
         pointerEvents="none"
         style={[
           fabStyles.topEdge,
-          { backgroundColor: colorWithAlpha("#ffffff", isDark ? 0.35 : 0.55) },
+          { backgroundColor: colorWithAlpha("#ffffff", isDark ? 0.35 : 0.7) },
         ]}
       />
       <View style={fabStyles.content}>

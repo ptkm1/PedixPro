@@ -1,6 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { sharePdf } from "@/lib/api";
 import {
+    PERIOD_FILTER_PRESETS,
     PERIOD_PRESET_LABELS,
     periodRange,
     type PeriodPreset,
@@ -37,13 +38,6 @@ const REPORT_META: Record<
     filename: "vendas-por-fornecedor.pdf",
   },
 };
-
-const PRESETS: PeriodPreset[] = [
-  "this_month",
-  "last_month",
-  "last_7_days",
-  "last_90_days",
-];
 
 export function useReportsScreen() {
   const { user } = useAuth();
@@ -111,7 +105,7 @@ export function useReportsScreen() {
     },
     isCustomRange: customRange != null,
     range,
-    presets: PRESETS,
+    presets: PERIOD_FILTER_PRESETS,
     periodLabels: PERIOD_PRESET_LABELS,
     scope,
     setScope,

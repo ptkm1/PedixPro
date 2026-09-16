@@ -2,13 +2,13 @@ import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  View,
-  type PressableProps,
-  type StyleProp,
-  type ViewStyle,
+    ActivityIndicator,
+    Pressable,
+    Text,
+    View,
+    type PressableProps,
+    type StyleProp,
+    type ViewStyle,
 } from "react-native";
 
 type Variant = "primary" | "secondary" | "outline" | "ghost" | "destructive";

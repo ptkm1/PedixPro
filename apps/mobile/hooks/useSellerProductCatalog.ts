@@ -5,10 +5,11 @@ import { isNetworkError } from "../lib/network-error";
 import { loadFavoriteIds, toggleFavoriteId } from "../lib/product-favorites";
 import type { SaleProduct } from "../lib/sale/types";
 import {
-  fetchSellerProductsBase,
-  sellerOfflineStaleTime,
+    fetchSellerProductsBase,
+    sellerOfflineStaleTime,
 } from "../lib/seller-offline-queries";
 import { matchesProductSearch } from "../lib/utils/product-search";
+import { useDebouncedValue } from "./useDebouncedValue";
 
 type Options = {
   customerId?: string;
@@ -43,6 +44,7 @@ export function useSellerProductCatalog(options: Options = {}) {
   });
 
   const [productQuery, setProductQuery] = useState("");
+  const debouncedProductQuery = useDebouncedValue(productQuery, 300);
   const [categoryFilterIds, setCategoryFilterIds] = useState<string[]>([]);
   const [supplierFilterIds, setSupplierFilterIds] = useState<string[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -92,7 +94,7 @@ export function useSellerProductCatalog(options: Options = {}) {
       if (catSet && (!p.category || !catSet.has(p.category.id))) return false;
       if (supplierSet && (!p.supplier || !supplierSet.has(p.supplier.id)))
         return false;
-      return matchesProductSearch(p, productQuery);
+      return matchesProductSearch(p, debouncedProductQuery);
     });
     return [...list].sort((a, b) => {
       const ha =
@@ -106,7 +108,7 @@ export function useSellerProductCatalog(options: Options = {}) {
       if (hb !== ha) return hb - ha;
       return a.name.localeCompare(b.name, "pt");
     });
-  }, [products, productQuery, categoryFilterIds, supplierFilterIds]);
+  }, [products, debouncedProductQuery, categoryFilterIds, supplierFilterIds]);
 
   const topSellingProducts = useMemo(() => {
     const hot = products.filter((p) => (p.soldQty ?? 0) > 0);

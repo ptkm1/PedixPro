@@ -2,8 +2,13 @@ import { displayMoney } from "@/components/atoms/formatMoney";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
 import { GlassSurface } from "@/components/atoms/GlassSurface";
+import { FilterChipRow } from "@/components/molecules/FilterChipRow";
 import { useSalesBySupplier } from "@/hooks/screens/useSalesBySupplier";
-import { PERIOD_PRESET_LABELS, type PeriodPreset } from "@/lib/period-presets";
+import {
+    PERIOD_FILTER_OPTIONS_WITH_CUSTOM,
+    type PeriodFilterId,
+    type PeriodPreset,
+} from "@/lib/period-presets";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
@@ -17,13 +22,6 @@ import {
     View,
 } from "react-native";
 import { BarChart, ruleTypes } from "react-native-gifted-charts";
-
-const PRESETS: PeriodPreset[] = [
-  "this_month",
-  "last_month",
-  "last_7_days",
-  "last_90_days",
-];
 
 const CHART_HEIGHT = 200;
 const Y_AXIS_LABEL_WIDTH = 34;
@@ -207,57 +205,22 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
           : ""}
       </ThemedText>
 
-      <View style={styles.chips}>
-        {PRESETS.map((p) => {
-          const active = preset === p;
-          return (
-            <Pressable
-              key={p}
-              onPress={() => {
-                setFocused(null);
-                selectPreset(p);
-              }}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: active ? colors.chipActive : colors.chip,
-                  borderColor: active ? colors.primary : colors.border,
-                },
-              ]}
-            >
-              <ThemedText
-                variant="caption"
-                style={{
-                  fontWeight: "600",
-                  color: active ? colors.chipTextActive : colors.chipText,
-                }}
-              >
-                {PERIOD_PRESET_LABELS[p]}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-        <Pressable
-          onPress={openCustomRange}
-          style={[
-            styles.chip,
-            {
-              backgroundColor: isCustomRange ? colors.chipActive : colors.chip,
-              borderColor: isCustomRange ? colors.primary : colors.border,
-            },
-          ]}
-        >
-          <ThemedText
-            variant="caption"
-            style={{
-              fontWeight: "600",
-              color: isCustomRange ? colors.chipTextActive : colors.chipText,
-            }}
-          >
-            Personalizado
-          </ThemedText>
-        </Pressable>
-      </View>
+      <FilterChipRow
+        scroll={false}
+        style={styles.chips}
+        options={PERIOD_FILTER_OPTIONS_WITH_CUSTOM}
+        value={
+          (isCustomRange ? "custom" : preset) as PeriodFilterId | null
+        }
+        onChange={(id) => {
+          if (id === "custom") {
+            openCustomRange();
+            return;
+          }
+          setFocused(null);
+          selectPreset(id as PeriodPreset);
+        }}
+      />
 
       {customOpen ? (
         <View style={[styles.customRange, { borderColor: colors.border }]}>
@@ -420,17 +383,8 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
 
 const styles = StyleSheet.create({
   chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
     marginTop: 12,
     zIndex: 1,
-  },
-  chip: {
-    borderWidth: 1,
-    borderRadius: radiiPx.md,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
   },
   chartWrap: {
     marginTop: 8,

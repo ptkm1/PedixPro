@@ -1,14 +1,18 @@
 import type { CreatedPurchaseUnit } from "@/components/CreatePurchaseUnitSheet";
 import { apiFetch } from "@/lib/api";
 import {
-  computeMarkupPercent,
-  emptyProductForm,
-  formToProductPayload,
-  productToForm,
-  validateProductForm,
-  type ProductFormTab,
-  type ProductFormValues,
-  type ProductRecord,
+    uploadProductImageFile,
+    validateProductImageFile,
+} from "@/lib/product-image-upload";
+import {
+    computeMarkupPercent,
+    emptyProductForm,
+    formToProductPayload,
+    productToForm,
+    validateProductForm,
+    type ProductFormTab,
+    type ProductFormValues,
+    type ProductRecord,
 } from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FormEvent } from "react";
@@ -70,6 +74,11 @@ export function useProductFormPage() {
     Record<string, string>
   >({});
   const [addPriceTableId, setAddPriceTableId] = useState("");
+  /** Arquivo escolhido no cadastro (upload depois do create). */
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const setField = useCallback(
     <K extends keyof ProductFormValues>(
@@ -135,7 +144,13 @@ export function useProductFormPage() {
   useEffect(() => {
     if (product) {
       setValues(productToForm(product));
-      setAttrs(normalizeAttrsJson(product.attributes));
+      const cat = categories.find((c) => c.id === product.categoryId);
+      const defs = coerceDefs(cat?.attributeSchema);
+      const loaded = normalizeAttrsJson(product.attributes);
+      setAttrs(defs.length > 0 ? pruneAttrs(loaded, defs) : loaded);
+      setPendingImageFile(null);
+      setImagePreviewUrl(null);
+      setImageError(null);
       const items =
         (
           product as ProductRecord & {
@@ -151,7 +166,15 @@ export function useProductFormPage() {
       }
       setPriceTablePrices(map);
     }
-  }, [product]);
+  }, [product, categories]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
 
   const markupPercent = useMemo(() => {
     const cost = values.costPrice.trim() ? Number(values.costPrice) : null;
@@ -167,16 +190,30 @@ export function useProductFormPage() {
   }, [values.costPrice, priceTablePrices]);
 
   const create = useMutation({
-    mutationFn: (
+    mutationFn: async (
       body: ReturnType<typeof formToProductPayload> & {
         priceTablePrices?: Array<{ priceTableId: string; price: number }>;
       },
-    ) =>
-      apiFetch<ProductRecord>("/admin/products", {
+    ) => {
+      const created = await apiFetch<ProductRecord>("/admin/products", {
         method: "POST",
         body: JSON.stringify(body),
-      }),
+      });
+      if (pendingImageFile) {
+        const publicUrl = await uploadProductImageFile(
+          created.id,
+          pendingImageFile,
+        );
+        return apiFetch<ProductRecord>(`/admin/products/${created.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ imageUrl: publicUrl }),
+        });
+      }
+      return created;
+    },
     onSuccess: async () => {
+      setPendingImageFile(null);
+      setImagePreviewUrl(null);
       await qc.invalidateQueries({ queryKey: ["admin", "products"] });
       await qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
       navigate("/produtos");
@@ -185,16 +222,31 @@ export function useProductFormPage() {
   });
 
   const update = useMutation({
-    mutationFn: (
+    mutationFn: async (
       body: ReturnType<typeof formToProductPayload> & {
         priceTablePrices?: Array<{ priceTableId: string; price: number }>;
       },
-    ) =>
-      apiFetch<ProductRecord>(`/admin/products/${productId}`, {
+    ) => {
+      let nextBody = body;
+      if (pendingImageFile && productId) {
+        const previousUrl = values.imageUrl.trim() || null;
+        const publicUrl = await uploadProductImageFile(
+          productId,
+          pendingImageFile,
+        );
+        nextBody = { ...body, imageUrl: publicUrl };
+        // best-effort: limpar URL antiga via PATCH só com a nova; delete do objeto
+        // antigo fica a cargo da troca no servidor se/quando houver GC.
+        void previousUrl;
+      }
+      return apiFetch<ProductRecord>(`/admin/products/${productId}`, {
         method: "PATCH",
-        body: JSON.stringify(body),
-      }),
+        body: JSON.stringify(nextBody),
+      });
+    },
     onSuccess: async () => {
+      setPendingImageFile(null);
+      setImagePreviewUrl(null);
       await qc.invalidateQueries({ queryKey: ["admin", "products"] });
       await qc.invalidateQueries({ queryKey: ["admin", "product", productId] });
       await qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
@@ -203,7 +255,88 @@ export function useProductFormPage() {
     onError: (e: Error) => setFormError(e.message),
   });
 
-  const pending = create.isPending || update.isPending;
+  const pending = create.isPending || update.isPending || imageBusy;
+
+  const onImageFileChange = useCallback(
+    async (file: File | null) => {
+      setImageError(null);
+      if (!file) return;
+
+      const err = validateProductImageFile(file);
+      if (err) {
+        setImageError(err);
+        return;
+      }
+
+      if (imagePreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+      const preview = URL.createObjectURL(file);
+      setImagePreviewUrl(preview);
+      setPendingImageFile(file);
+
+      // Em edição, sobe na hora para o catálogo refletir rápido.
+      if (isEdit && productId) {
+        setImageBusy(true);
+        try {
+          const publicUrl = await uploadProductImageFile(productId, file);
+          setField("imageUrl", publicUrl);
+          setPendingImageFile(null);
+          await apiFetch<ProductRecord>(`/admin/products/${productId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ imageUrl: publicUrl }),
+          });
+          await qc.invalidateQueries({
+            queryKey: ["admin", "product", productId],
+          });
+        } catch (e) {
+          setImageError(
+            e instanceof Error ? e.message : "Falha ao enviar a imagem.",
+          );
+        } finally {
+          setImageBusy(false);
+        }
+      }
+    },
+    [imagePreviewUrl, isEdit, productId, qc, setField],
+  );
+
+  const removeProductImage = useCallback(async () => {
+    setImageError(null);
+    if (imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setImagePreviewUrl(null);
+    setPendingImageFile(null);
+
+    if (isEdit && productId && values.imageUrl.trim()) {
+      setImageBusy(true);
+      try {
+        await apiFetch<ProductRecord>(`/admin/products/${productId}/image`, {
+          method: "DELETE",
+        });
+        setField("imageUrl", "");
+        await qc.invalidateQueries({
+          queryKey: ["admin", "product", productId],
+        });
+      } catch (e) {
+        setImageError(
+          e instanceof Error ? e.message : "Falha ao remover a imagem.",
+        );
+      } finally {
+        setImageBusy(false);
+      }
+      return;
+    }
+    setField("imageUrl", "");
+  }, [
+    imagePreviewUrl,
+    isEdit,
+    productId,
+    qc,
+    setField,
+    values.imageUrl,
+  ]);
 
   const handleSubmit = useCallback(
     (e: FormEvent) => {
@@ -244,8 +377,15 @@ export function useProductFormPage() {
             priceTablePrices: syncPrices,
           });
         } else {
+          // No create, imageUrl só entra se já for URL externa; arquivo sobe depois.
+          const { imageUrl, ...rest } = payload;
           create.mutate({
-            ...payload,
+            ...rest,
+            ...(pendingImageFile
+              ? {}
+              : imageUrl
+                ? { imageUrl }
+                : { imageUrl: null }),
             priceTablePrices: syncPrices,
           });
         }
@@ -253,7 +393,7 @@ export function useProductFormPage() {
         setFormError(err instanceof Error ? err.message : "Erro ao salvar.");
       }
     },
-    [attrs, create, isEdit, priceTablePrices, update, values],
+    [attrs, create, isEdit, pendingImageFile, priceTablePrices, update, values],
   );
 
   const onCategoryChange = useCallback(
@@ -342,5 +482,11 @@ export function useProductFormPage() {
     setAddPriceTableId,
     addProductToPriceTable,
     applyCreatedPriceTable,
+    imagePreviewUrl,
+    imageBusy,
+    imageError,
+    onImageFileChange,
+    removeProductImage,
+    displayImageUrl: imagePreviewUrl || values.imageUrl.trim() || null,
   };
 }

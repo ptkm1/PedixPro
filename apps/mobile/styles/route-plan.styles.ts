@@ -61,13 +61,6 @@ export function createRoutePlanStyles(c: AppColors) {
       marginTop: 12,
       alignItems: "center",
     },
-    filterChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 20,
-      borderWidth: 1,
-    },
-    filterChipTxt: { fontSize: 13, fontWeight: "600" },
     visitBanner: {
       marginHorizontal: 16,
       marginTop: 12,
