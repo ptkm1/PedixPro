@@ -1,10 +1,10 @@
 import {
-    cepDigitsOnly,
     cnpjDigitsOnly,
     cpfDigitsOnly,
     FIELD_NOT_APPLICABLE,
     isValidCnpj,
     isValidCpf,
+    parseCepFlexible,
     STATE_REGISTRATION_UNAVAILABLE,
     STREET_NUMBER_SN,
     type CsvColumnMap,
@@ -153,11 +153,11 @@ async function validateCustomerRow(
     cell(cells, "bairro", "distrito", "neighborhood"),
   );
   // Fallbacks de alias: CSV com município preenchido e "cidade" vazia (ou remap).
-  const cidade = def(
+  let cidade = def(
     "cidade",
     cell(cells, "cidade", "municipio", "city", "localidade"),
   );
-  const uf = def("uf", cell(cells, "uf", "estado", "state", "sigla_uf"));
+  let uf = def("uf", cell(cells, "uf", "estado", "state", "sigla_uf"));
   let ibge = def(
     "codigo_ibge",
     cell(cells, "codigo_ibge", "ibge", "cod_ibge", "codigoibge", "id_ibge"),
@@ -263,7 +263,54 @@ async function validateCustomerRow(
     }
   }
 
-  const cepD = cepDigitsOnly(cep);
+  // Excel costuma exportar CEP em notação científica (4,37E+08).
+  const cepD = parseCepFlexible(cep);
+
+  let ibgeD: string | null = null;
+  let ibgeStatus = "⚠ Município não localizado";
+  // Resolve município ANTES de exigir cidade: CEP/CNPJ podem preencher cidade+IBGE.
+  {
+    const ibgeResolution = await resolveMunicipioIbge({
+      codigoIbge: ibge,
+      cep: cepD.length === 8 ? cepD : cep,
+      cidade,
+      uf,
+      cnpj: documentType === "CNPJ" ? documento : null,
+    });
+    warnings.push(...ibgeResolution.warnings);
+    ibgeD = ibgeResolution.codigoIbge;
+    if (!cidade && ibgeResolution.cidade) {
+      cidade = ibgeResolution.cidade;
+    } else if (
+      ibgeD &&
+      ibgeResolution.cidade &&
+      cidade &&
+      // Canonicaliza nome quando o IBGE bateu (ex.: SALVADOR → Salvador)
+      ibgeResolution.source === "CIDADE_UF"
+    ) {
+      cidade = ibgeResolution.cidade;
+    } else if (
+      ibgeD &&
+      ibgeResolution.cidade &&
+      (!cidade || ibgeResolution.corrected)
+    ) {
+      cidade = ibgeResolution.cidade;
+    }
+    if (!uf && ibgeResolution.uf) {
+      uf = ibgeResolution.uf;
+    } else if (ibgeResolution.uf && ibgeD) {
+      uf = ibgeResolution.uf;
+    }
+    if (ibgeD) {
+      if (ibgeResolution.corrected) ibgeStatus = "⚠ Código IBGE corrigido";
+      else if (ibgeResolution.source === "CSV")
+        ibgeStatus = "✓ Código IBGE informado";
+      else ibgeStatus = "✓ Identificado automaticamente";
+    } else {
+      warnings.push("codigo_ibge pendente — resolva antes de emitir NF-e.");
+    }
+  }
+
   if (!cepD) errors.push({ field: "cep", message: "CEP é obrigatório." });
   else if (cepD.length !== 8)
     errors.push({ field: "cep", message: "CEP deve ter 8 dígitos." });
@@ -278,33 +325,10 @@ async function validateCustomerRow(
   if (!bairro) errors.push({ field: "bairro", message: "Bairro é obrigatório." });
   if (!cidade) errors.push({ field: "cidade", message: "Cidade é obrigatória." });
 
-  const state = uf.trim().toUpperCase();
+  const state = (uf ?? "").trim().toUpperCase();
   if (!state) errors.push({ field: "uf", message: "UF é obrigatória." });
   else if (!/^[A-Z]{2}$/.test(state))
     errors.push({ field: "uf", message: "UF inválida (2 letras)." });
-
-  let ibgeD: string | null = null;
-  let ibgeStatus = "⚠ Município não localizado";
-  // IBGE: resolução automática (CSV → CEP → CNPJ → cidade+UF). Não bloqueia importação.
-  {
-    const ibgeResolution = await resolveMunicipioIbge({
-      codigoIbge: ibge,
-      cep: cepD.length === 8 ? cepD : cep,
-      cidade,
-      uf: state,
-      cnpj: documentType === "CNPJ" ? documento : null,
-    });
-    warnings.push(...ibgeResolution.warnings);
-    ibgeD = ibgeResolution.codigoIbge;
-    if (ibgeD) {
-      if (ibgeResolution.corrected) ibgeStatus = "⚠ Código IBGE corrigido";
-      else if (ibgeResolution.source === "CSV")
-        ibgeStatus = "✓ Código IBGE informado";
-      else ibgeStatus = "✓ Identificado automaticamente";
-    } else {
-      warnings.push("codigo_ibge pendente — resolva antes de emitir NF-e.");
-    }
-  }
 
   let sellerId: string | null = null;
   if (vendedorRef) {
