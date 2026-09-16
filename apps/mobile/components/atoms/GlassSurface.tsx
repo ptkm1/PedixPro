@@ -1,3 +1,4 @@
+import { useBlurTarget } from "@/lib/blur-target";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
@@ -17,11 +18,13 @@ type Props = {
   contentStyle?: StyleProp<ViewStyle>;
   padded?: boolean;
   radius?: number;
+  /** Permite conteúdo (tooltip) sair do card; o vidro continua clipado. */
+  overflowVisible?: boolean;
 };
 
 /**
  * Vidro suave: blur + tint leve + borda discreta.
- * Sem sombra forte nem gradiente marcado.
+ * Android: dimezisBlurView só com blurTarget do SafeScreen.
  */
 export function GlassSurface({
   children,
@@ -29,8 +32,19 @@ export function GlassSurface({
   contentStyle,
   padded = true,
   radius = radiiPx["2xl"],
+  overflowVisible = false,
 }: Props) {
   const { isDark } = useTheme();
+  const blurTarget = useBlurTarget();
+  const androidBlur =
+    Platform.OS === "android" && blurTarget
+      ? ({
+          blurMethod: "dimezisBlurViewSdk31Plus" as const,
+          blurTarget,
+        } as const)
+      : Platform.OS === "android"
+        ? ({ blurMethod: "none" as const } as const)
+        : {};
 
   const tint = colorWithAlpha(
     isDark ? "#0d2438" : "#ffffff",
@@ -47,6 +61,7 @@ export function GlassSurface({
         {
           borderRadius: radius,
           borderColor: rim,
+          overflow: overflowVisible ? "visible" : "hidden",
           backgroundColor:
             Platform.OS === "android"
               ? colorWithAlpha(isDark ? "#0d2438" : "#ffffff", 0.55)
@@ -55,33 +70,37 @@ export function GlassSurface({
         style,
       ]}
     >
-      <BlurView
-        intensity={Platform.OS === "ios" ? 55 : 40}
-        tint={isDark ? "dark" : "light"}
-        blurMethod={
-          Platform.OS === "android" ? "dimezisBlurView" : undefined
-        }
-        style={StyleSheet.absoluteFillObject}
-      />
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]}
-      />
-      {/* Filete bem fino no topo */}
+      {/* Camada de vidro sempre clipada no radius — evita “vazamento” nos cantos */}
       <View
         pointerEvents="none"
         style={[
-          styles.topEdge,
-          {
-            borderTopLeftRadius: radius,
-            borderTopRightRadius: radius,
-            backgroundColor: colorWithAlpha(
-              isDark ? "#a5e8ff" : "#ffffff",
-              isDark ? 0.22 : 0.5,
-            ),
-          },
+          StyleSheet.absoluteFillObject,
+          { borderRadius: radius, overflow: "hidden" },
         ]}
-      />
+      >
+        <BlurView
+          intensity={Platform.OS === "ios" ? 55 : 40}
+          tint={isDark ? "dark" : "light"}
+          {...androidBlur}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]}
+        />
+        <View
+          style={[
+            styles.topEdge,
+            {
+              borderTopLeftRadius: radius,
+              borderTopRightRadius: radius,
+              backgroundColor: colorWithAlpha(
+                isDark ? "#a5e8ff" : "#ffffff",
+                isDark ? 0.22 : 0.5,
+              ),
+            },
+          ]}
+        />
+      </View>
       <View
         style={[
           styles.content,
@@ -97,7 +116,6 @@ export function GlassSurface({
 
 const styles = StyleSheet.create({
   shell: {
-    overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
   },
   topEdge: {

@@ -63,7 +63,8 @@ function QuickSaleFab() {
       <BlurView
         intensity={Platform.OS === "ios" ? 48 : 36}
         tint={isDark ? "dark" : "light"}
-        blurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+        // FAB fica fora do SafeScreen — sem blurTarget no Android
+        blurMethod={Platform.OS === "android" ? "none" : undefined}
         style={StyleSheet.absoluteFillObject}
       />
       <View

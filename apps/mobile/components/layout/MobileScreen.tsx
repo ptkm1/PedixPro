@@ -14,6 +14,7 @@ export const MOBILE_TAB_SCROLL_BOTTOM = 100;
 type Props = {
   children: ReactNode;
   scroll?: boolean;
+  scrollEnabled?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
   contentContainerStyle?: ScrollViewProps["contentContainerStyle"];
@@ -23,6 +24,7 @@ type Props = {
 export function MobileScreen({
   children,
   scroll = true,
+  scrollEnabled = true,
   refreshing,
   onRefresh,
   contentContainerStyle,
@@ -47,6 +49,7 @@ export function MobileScreen({
         { paddingBottom: bottomPad },
         contentContainerStyle,
       ]}
+      scrollEnabled={scrollEnabled}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       refreshControl={
