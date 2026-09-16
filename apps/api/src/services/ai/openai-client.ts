@@ -32,6 +32,7 @@ export async function openAiChatJson(params: {
   system: string;
   user: string;
   timeoutMs?: number;
+  maxCompletionTokens?: number;
 }): Promise<OpenAiChatResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -59,6 +60,7 @@ export async function openAiChatJson(params: {
       body: JSON.stringify({
         model,
         temperature: 0.3,
+        max_tokens: params.maxCompletionTokens ?? 1200,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: params.system },
