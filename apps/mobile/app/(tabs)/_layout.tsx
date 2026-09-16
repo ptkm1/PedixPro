@@ -1,6 +1,7 @@
 import { SafeScreen, TabBarIcon } from "@/components/layout";
 import { useAuth } from "@/context/AuthContext";
 import type { EventArg, NavigationState } from "@react-navigation/native";
+import { BlurView } from "expo-blur";
 import { Redirect, Tabs, useRouter } from "expo-router";
 import {
     ClipboardCheck,
@@ -19,14 +20,27 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../lib/theme";
+import { colorWithAlpha } from "../../lib/theme/colorAlpha";
 
 const TAB_BAR_HEIGHT = Platform.select({ ios: 84, android: 64 }) ?? 64;
+
+function tabBarHeight(bottomInset: number) {
+  return (
+    TAB_BAR_HEIGHT +
+    Math.max(bottomInset - (Platform.OS === "ios" ? 20 : 0), 0)
+  );
+}
 
 function QuickSaleFab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
-  const bottom = Math.max(insets.bottom, 8) + TAB_BAR_HEIGHT - 8;
+  const { colors, isDark } = useTheme();
+  const bottom = tabBarHeight(insets.bottom) + 2;
+  const glassTint = colorWithAlpha(
+    colors.primary,
+    isDark ? 0.22 : 0.28,
+  );
+  const rim = colorWithAlpha(isDark ? "#a5e8ff" : colors.primary, 0.45);
 
   return (
     <Pressable
@@ -34,18 +48,39 @@ function QuickSaleFab() {
       accessibilityLabel="Nova venda"
       style={[
         fabStyles.wrap,
-        { bottom, backgroundColor: colors.primary, shadowColor: colors.shadow },
+        {
+          bottom,
+          borderColor: rim,
+          shadowColor: colors.primary,
+          backgroundColor:
+            Platform.OS === "android"
+              ? colorWithAlpha(isDark ? "#0d2438" : "#e8f9ff", 0.72)
+              : "transparent",
+        },
       ]}
       onPress={() => router.push("/quick-sale")}
     >
-      <ClipboardCheck
-        color={colors.primaryForeground}
-        size={22}
-        strokeWidth={2.5}
+      <BlurView
+        intensity={Platform.OS === "ios" ? 48 : 36}
+        tint={isDark ? "dark" : "light"}
+        blurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+        style={StyleSheet.absoluteFillObject}
       />
-      <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 14 }}>
-        Nova venda
-      </Text>
+      <View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFillObject, { backgroundColor: glassTint }]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          fabStyles.topEdge,
+          { backgroundColor: colorWithAlpha("#ffffff", isDark ? 0.35 : 0.55) },
+        ]}
+      />
+      <View style={fabStyles.content}>
+        <ClipboardCheck color={colors.primary} size={22} strokeWidth={2.5} />
+        <Text style={[fabStyles.label, { color: colors.primary }]}>Nova venda</Text>
+      </View>
     </Pressable>
   );
 }
@@ -106,9 +141,7 @@ export default function TabsLayout() {
     return <Redirect href="/login" />;
   }
 
-  const tabHeight =
-    TAB_BAR_HEIGHT +
-    Math.max(insets.bottom - (Platform.OS === "ios" ? 20 : 0), 0);
+  const tabHeight = tabBarHeight(insets.bottom);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -133,6 +166,8 @@ export default function TabsLayout() {
               insets.bottom,
               Platform.OS === "ios" ? 20 : 8,
             ),
+            elevation: 0,
+            shadowOpacity: 0,
           },
           sceneStyle: { backgroundColor: colors.background },
         }}
@@ -198,9 +233,29 @@ const fabStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     elevation: 8,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    overflow: "hidden",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 6,
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
     zIndex: 50,
+  },
+  topEdge: {
+    position: "absolute",
+    top: 0,
+    left: 12,
+    right: 12,
+    height: StyleSheet.hairlineWidth,
+    zIndex: 2,
+  },
+  content: {
+    zIndex: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  label: {
+    fontWeight: "700",
+    fontSize: 14,
   },
 });

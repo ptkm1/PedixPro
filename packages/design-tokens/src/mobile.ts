@@ -48,6 +48,10 @@ export function semanticToAppColors(c: SemanticColors) {
     onDarkSubtle: c.mutedForeground,
     footerBackdrop: c.background + "f2",
     surfaceOverlay: c.card + "e8",
+    glassFill: c.card,
+    glassBorder: c.border,
+    glassHighlight: c.primary,
+    backgroundGradientEnd: c.background,
   };
 }
 

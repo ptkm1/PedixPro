@@ -1,7 +1,8 @@
 import { ThemedText } from "@/components/atoms/ThemedText";
+import { GlassSurface } from "@/components/atoms/GlassSurface";
 import {
-  RecentSaleDivider,
-  RecentSaleRow,
+    RecentSaleDivider,
+    RecentSaleRow,
 } from "@/components/molecules/RecentSaleRow";
 import type { SellerOrderListItem } from "@/hooks/screens/useSalesListScreen";
 import { useTheme } from "@/lib/theme";
@@ -30,12 +31,7 @@ export function RecentSalesBlock({
   const visible = orders.slice(0, limit);
 
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
+    <GlassSurface padded={false}>
       <View style={styles.header}>
         <View style={styles.headerText}>
           <ThemedText variant="titleSm">Vendas recentes</ThemedText>
@@ -49,8 +45,8 @@ export function RecentSalesBlock({
             style={({ pressed }) => [
               styles.viewAllPill,
               {
-                borderColor: colors.border,
-                backgroundColor: colors.background,
+                borderColor: colors.glassBorder,
+                backgroundColor: colors.glassFill,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
@@ -76,10 +72,12 @@ export function RecentSalesBlock({
           Nenhuma venda ainda.
         </ThemedText>
       ) : (
-        <View style={[styles.list, { borderTopColor: colors.border }]}>
+        <View style={[styles.list, { borderTopColor: colors.glassBorder }]}>
           {visible.map((order, index) => (
             <View key={order.id}>
-              {index > 0 ? <RecentSaleDivider color={colors.border} /> : null}
+              {index > 0 ? (
+                <RecentSaleDivider color={colors.glassBorder} />
+              ) : null}
               <RecentSaleRow order={order} hideValues={hideValues} />
             </View>
           ))}
@@ -95,16 +93,11 @@ export function RecentSalesBlock({
           ) : null}
         </View>
       )}
-    </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: radiiPx.lg,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -120,14 +113,13 @@ const styles = StyleSheet.create({
   },
   viewAllPill: {
     borderWidth: 1,
-    borderRadius: 9999,
-    paddingHorizontal: 12,
+    borderRadius: radiiPx.md,
+    paddingHorizontal: 10,
     paddingVertical: 6,
   },
   list: {
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     position: "relative",
-    paddingVertical: 8,
   },
   listOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -1,5 +1,6 @@
 import { displayMoney } from "@/components/atoms/formatMoney";
 import { ThemedText } from "@/components/atoms/ThemedText";
+import { CommerceProIcon } from "@/components/brand/CommerceProBrand";
 import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
 import { HeaderIconButton } from "@/components/molecules/HeaderIconButton";
 import { GoalGaugeBlock } from "@/components/molecules/GoalGaugeBlock";
@@ -14,29 +15,27 @@ import { useHomeValuesHidden } from "@/hooks/useHomeValuesHidden";
 import { useManualSaleSync } from "@/hooks/useManualSaleSync";
 import { apiFetch } from "@/lib/api";
 import {
-  fetchSellerCommissionDashboard,
-  sellerOfflineStaleTime,
+    fetchSellerCommissionDashboard,
+    sellerOfflineStaleTime,
 } from "@/lib/seller-offline-queries";
 import { useTheme } from "@/lib/theme";
-import { colorWithAlpha } from "@/lib/theme/colorAlpha";
-import { radiiPx } from "@pedidos/design-tokens";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import {
-  Bell,
-  ClipboardList,
-  DollarSign,
-  Eye,
-  EyeOff,
-  FileText,
-  Package,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  ShoppingCart,
-  TrendingUp,
-  Upload,
-  Users,
+    Bell,
+    ClipboardList,
+    DollarSign,
+    Eye,
+    EyeOff,
+    FileText,
+    Package,
+    Plus,
+    RefreshCw,
+    RotateCcw,
+    ShoppingCart,
+    TrendingUp,
+    Upload,
+    Users,
 } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
@@ -83,13 +82,6 @@ export default function HomeScreen() {
     },
   });
   const firstName = user?.name?.split(" ")[0] ?? "Vendedor";
-  const initials =
-    user?.name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() ?? "?";
   const today = new Date().toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "numeric",
@@ -139,17 +131,9 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Meu perfil"
             onPress={() => router.push("/(tabs)/profile")}
-            style={[
-              styles.avatarBtn,
-              { backgroundColor: colorWithAlpha(colors.primary, 0.15) },
-            ]}
+            style={styles.avatarBtn}
           >
-            <ThemedText
-              variant="caption"
-              style={{ color: colors.primary, fontWeight: "700" }}
-            >
-              {initials}
-            </ThemedText>
+            <CommerceProIcon size={36} onBrand />
           </Pressable>
         }
         rightAction={
@@ -372,9 +356,10 @@ const styles = StyleSheet.create({
   avatarBtn: {
     width: 40,
     height: 40,
-    borderRadius: radiiPx.md,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   headerActions: {
     flexDirection: "row",

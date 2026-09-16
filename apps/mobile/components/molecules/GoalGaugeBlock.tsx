@@ -1,19 +1,21 @@
 import { displayMoney } from "@/components/atoms/formatMoney";
+import { GlassSurface } from "@/components/atoms/GlassSurface";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { useTheme } from "@/lib/theme";
-import { radiiPx } from "@pedidos/design-tokens";
-import { useMemo } from "react";
+import { colorWithAlpha } from "@/lib/theme/colorAlpha";
+import { useId, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-/** Mesmo modelo do preview web: M left A r r 0 0 1 right (arco superior). */
 const WIDTH = 240;
-const STROKE = 26;
+const STROKE = 24;
 const R = 92;
 const CX = WIDTH / 2;
-/** Baseline do gauge (pontas esquerda/direita). */
 const CY = R + STROKE / 2;
 const HEIGHT = R + STROKE;
+const PAD = 10;
+const SVG_W = WIDTH + PAD * 2;
+const SVG_H = HEIGHT + 6;
 
 type Props = {
   title: string;
@@ -24,32 +26,32 @@ type Props = {
 };
 
 function pointOnArc(t: number) {
-  // t=0 esquerda, t=0.5 topo, t=1 direita — arco superior.
-  // θ: π → 3π/2 → 2π (com y↓, sin(3π/2)=-1 = cima).
   const theta = Math.PI + t * Math.PI;
   return {
-    x: CX + R * Math.cos(theta),
-    y: CY + R * Math.sin(theta),
+    x: CX + R * Math.cos(theta) + PAD,
+    y: CY + R * Math.sin(theta) + 2,
   };
 }
 
 function SemiGauge({
   percent,
   trackColor,
-  fillColor,
+  gradientFrom,
+  gradientTo,
   textColor,
 }: {
   percent: number;
   trackColor: string;
-  fillColor: string;
+  gradientFrom: string;
+  gradientTo: string;
   textColor: string;
 }) {
   const clamped = Math.max(0, Math.min(100, percent));
   const start = pointOnArc(0);
   const end = pointOnArc(1);
   const progress = pointOnArc(clamped / 100);
+  const gradId = `goalBarGrad-${useId().replace(/:/g, "")}`;
 
-  // Igual ao preview web: large-arc=0, sweep=1 → semi-círculo de cima.
   const trackPath = `M ${start.x} ${start.y} A ${R} ${R} 0 0 1 ${end.x} ${end.y}`;
   const progressPath =
     clamped <= 0
@@ -64,7 +66,21 @@ function SemiGauge({
         </ThemedText>
       </View>
       <View style={styles.svgLayer} pointerEvents="none">
-        <Svg width={WIDTH} height={HEIGHT}>
+        <Svg width={SVG_W} height={SVG_H}>
+          <Defs>
+            {/* Gradiente horizontal só na tinta do stroke (dentro da barra) */}
+            <LinearGradient
+              id={gradId}
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="0%"
+            >
+              <Stop offset="0%" stopColor={gradientFrom} />
+              <Stop offset="100%" stopColor={gradientTo} />
+            </LinearGradient>
+          </Defs>
+
           <Path
             d={trackPath}
             stroke={trackColor}
@@ -72,10 +88,11 @@ function SemiGauge({
             fill="none"
             strokeLinecap="round"
           />
+
           {progressPath ? (
             <Path
               d={progressPath}
-              stroke={fillColor}
+              stroke={`url(#${gradId})`}
               strokeWidth={STROKE}
               fill="none"
               strokeLinecap="round"
@@ -94,84 +111,86 @@ export function GoalGaugeBlock({
   hideValues = false,
   onPress,
 }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const hasGoal = target > 0;
   const percent = useMemo(
     () => (hasGoal ? Math.min(100, (current / target) * 100) : 0),
     [current, hasGoal, target],
   );
 
+  const displayTitle = title.replace(/\s*\(seed-seller-charts\)/gi, "").trim();
+
+  // Como no print: azul mais profundo à esquerda → ciano claro à direita
+  const gradientFrom = isDark ? "#0284c7" : "#2563eb";
+  const gradientTo = colors.primary;
+
   const body = (
     <>
       <ThemedText variant="titleSm">Meta atingida</ThemedText>
       <ThemedText variant="bodySm" muted style={{ marginTop: 4 }}>
         {hasGoal
-          ? `${title} · ${displayMoney(hideValues, current)} de ${displayMoney(hideValues, target)}`
+          ? `${displayTitle} · ${displayMoney(hideValues, current)} de ${displayMoney(hideValues, target)}`
           : "Nenhuma meta definida para o mês"}
       </ThemedText>
       <View style={styles.gaugeArea}>
         <SemiGauge
           percent={percent}
-          trackColor={colors.border}
-          fillColor={colors.primary}
+          trackColor={
+            isDark
+              ? colorWithAlpha(colors.primary, 0.14)
+              : colorWithAlpha("#94a3b8", 0.55)
+          }
+          gradientFrom={gradientFrom}
+          gradientTo={gradientTo}
           textColor={colors.text}
         />
       </View>
     </>
   );
 
-  // View evita clip do Pressable no Android; o toque fica só no wrapper.
   if (!onPress) {
     return (
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <GlassSurface style={styles.card} contentStyle={styles.cardPad}>
         {body}
-      </View>
+      </GlassSurface>
     );
   }
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          opacity: pressed ? 0.94 : 1,
-        },
-      ]}
+      style={({ pressed }) => [{ opacity: pressed ? 0.94 : 1 }]}
     >
-      {body}
+      <GlassSurface style={styles.card} contentStyle={styles.cardPad}>
+        {body}
+      </GlassSurface>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: radiiPx.lg,
-    borderWidth: 1,
+  card: {},
+  cardPad: {
     paddingTop: 14,
     paddingHorizontal: 14,
-    paddingBottom: 20,
+    paddingBottom: 18,
   },
   gaugeArea: {
-    marginTop: 16,
-    height: HEIGHT + 8,
+    marginTop: 10,
+    height: SVG_H,
     alignItems: "center",
     justifyContent: "flex-start",
-    overflow: "visible",
   },
   gaugeWrap: {
-    width: WIDTH,
-    height: HEIGHT,
+    width: SVG_W,
+    height: SVG_H,
     position: "relative",
-    overflow: "visible",
   },
   percentBehind: {
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 10,
+    bottom: 4,
     zIndex: 1,
     elevation: 1,
     alignItems: "center",

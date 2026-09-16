@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import {
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-  type ScrollViewProps,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    View,
+    type ScrollViewProps,
 } from "react-native";
 import { useTheme } from "@/lib/theme";
 
@@ -33,13 +33,15 @@ export function MobileScreen({
 
   if (!scroll) {
     return (
-      <View style={[styles.fill, { backgroundColor: colors.background }]}>{children}</View>
+      <View style={[styles.fill, { backgroundColor: "transparent" }]}>
+        {children}
+      </View>
     );
   }
 
   return (
     <ScrollView
-      style={[styles.fill, { backgroundColor: colors.background }]}
+      style={[styles.fill, { backgroundColor: "transparent" }]}
       contentContainerStyle={[
         styles.content,
         { paddingBottom: bottomPad },

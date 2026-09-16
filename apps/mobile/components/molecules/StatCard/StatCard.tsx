@@ -1,7 +1,8 @@
 import { ThemedText } from "@/components/atoms/ThemedText";
+import { GlassSurface } from "@/components/atoms/GlassSurface";
+import { GlowIcon } from "@/components/atoms/GlowIcon";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
-import { radiiPx } from "@pedidos/design-tokens";
 import type { LucideIcon } from "lucide-react-native";
 import { TrendingDown, TrendingUp } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -29,21 +30,9 @@ export function StatCard({
 }: Props) {
   const { colors } = useTheme();
   const isPositive = trend ? trend.value >= 0 : true;
-  return (
-    <Pressable
-      disabled={!onPress}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        compact && styles.cardCompact,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          opacity: onPress && pressed ? 0.92 : 1,
-        },
-        style,
-      ]}
-    >
+
+  const body = (
+    <View style={[styles.inner, compact && styles.innerCompact]}>
       <View style={styles.row}>
         <View style={styles.body}>
           <ThemedText variant="bodySm" muted>
@@ -89,16 +78,32 @@ export function StatCard({
           ) : null}
         </View>
         {Icon ? (
-          <View
-            style={[
-              styles.iconWrap,
-              { backgroundColor: colorWithAlpha(colors.primary, 0.12) },
-            ]}
-          >
-            <Icon color={colors.primary} size={16} />
-          </View>
+          <GlowIcon
+            Icon={Icon}
+            size={compact ? 15 : 16}
+            glowSize={compact ? 28 : 36}
+          />
         ) : null}
       </View>
+    </View>
+  );
+
+  if (!onPress) {
+    return (
+      <GlassSurface style={[styles.card, style]} padded={false}>
+        {body}
+      </GlassSurface>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [{ flex: 1, minWidth: 0, opacity: pressed ? 0.92 : 1 }, style]}
+    >
+      <GlassSurface style={styles.card} padded={false}>
+        {body}
+      </GlassSurface>
     </Pressable>
   );
 }
@@ -120,65 +125,58 @@ export function ProgressStat({
   const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0;
 
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
-      <View style={styles.progressHead}>
-        <ThemedText variant="bodySm" muted>
-          {title}
-        </ThemedText>
-        <ThemedText
-          variant="bodySm"
-          style={{ color: colors.primary, fontWeight: "600" }}
-        >
-          {pct.toFixed(1)}%
-        </ThemedText>
-      </View>
-      <View style={{ marginTop: 12 }}>
-        <View style={styles.progressValues}>
-          <ThemedText variant="titleSm">{formatValue(current)}</ThemedText>
+    <GlassSurface style={styles.card} padded={false}>
+      <View style={styles.inner}>
+        <View style={styles.progressHead}>
           <ThemedText variant="bodySm" muted>
-            de {formatValue(target)}
+            {title}
+          </ThemedText>
+          <ThemedText
+            variant="bodySm"
+            style={{ color: colors.primary, fontWeight: "600" }}
+          >
+            {pct.toFixed(1)}%
           </ThemedText>
         </View>
-        <View style={[styles.track, { backgroundColor: colors.surfaceMuted }]}>
+        <View style={{ marginTop: 12 }}>
+          <View style={styles.progressValues}>
+            <ThemedText variant="titleSm">{formatValue(current)}</ThemedText>
+            <ThemedText variant="bodySm" muted>
+              de {formatValue(target)}
+            </ThemedText>
+          </View>
           <View
             style={[
-              styles.fill,
-              { width: `${pct}%`, backgroundColor: colors.primary },
+              styles.track,
+              { backgroundColor: colorWithAlpha(colors.primary, 0.15) },
             ]}
-          />
+          >
+            <View
+              style={[
+                styles.fill,
+                { width: `${pct}%`, backgroundColor: colors.primary },
+              ]}
+            />
+          </View>
         </View>
       </View>
-    </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radiiPx.lg,
-    borderWidth: 1,
-    padding: 16,
     flex: 1,
     minWidth: 0,
   },
-  cardCompact: { padding: 12 },
+  inner: { padding: 16 },
+  innerCompact: { padding: 12 },
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
   },
   body: { flex: 1, minWidth: 0 },
-  iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: radiiPx.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   trendRow: {
     flexDirection: "row",
     alignItems: "center",

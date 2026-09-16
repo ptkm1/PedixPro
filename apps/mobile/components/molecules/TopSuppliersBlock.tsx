@@ -1,6 +1,7 @@
 import { displayMoney } from "@/components/atoms/formatMoney";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
+import { GlassSurface } from "@/components/atoms/GlassSurface";
 import { useSalesBySupplier } from "@/hooks/screens/useSalesBySupplier";
 import { PERIOD_PRESET_LABELS, type PeriodPreset } from "@/lib/period-presets";
 import { useTheme } from "@/lib/theme";
@@ -199,12 +200,7 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
   };
 
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
+    <GlassSurface>
       <ThemedText variant="titleSm">Top fornecedores</ThemedText>
       <ThemedText variant="bodySm" muted style={{ marginTop: 4 }}>
         Suas vendas confirmadas por indústria
@@ -386,16 +382,11 @@ export function TopSuppliersBlock({ hideValues = false }: Props) {
           ) : null}
         </View>
       )}
-    </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: radiiPx.lg,
-    borderWidth: 1,
-    padding: 14,
-  },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
