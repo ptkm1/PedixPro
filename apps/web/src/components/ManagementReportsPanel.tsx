@@ -1,17 +1,17 @@
 import { AppSelect } from "@/components/ui/app-select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import {
-  PERIOD_PRESET_LABELS,
-  periodRange,
-  type PeriodPreset,
+    PERIOD_PRESET_LABELS,
+    periodRange,
+    type PeriodPreset,
 } from "@/lib/period-presets";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -48,10 +48,8 @@ function PeriodBar(props: {
           key={p}
           type="button"
           onClick={() => props.onPreset(p)}
-          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-            props.preset === p
-              ? "bg-primary text-primary-foreground"
-              : "border border-border bg-card text-foreground hover:bg-background"
+          className={`glass-chip transition ${
+            props.preset === p ? "glass-chip-active" : ""
           }`}
         >
           {PERIOD_PRESET_LABELS[p]}

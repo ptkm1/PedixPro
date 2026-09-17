@@ -234,7 +234,7 @@ export function PositivacaoRadialWidget() {
   }
 
   return (
-    <section className="surface-card flex h-full flex-col p-4">
+    <section className="surface-card-glass flex h-full flex-col p-4">
       <div className="min-w-0">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">
           Positivação

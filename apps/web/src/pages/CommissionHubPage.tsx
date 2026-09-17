@@ -76,7 +76,7 @@ export function CommissionHubPage() {
               <div
                 key={c.to}
                 aria-disabled="true"
-                className="surface-card flex cursor-not-allowed gap-4 p-5 opacity-50"
+                className="surface-card-glass flex cursor-not-allowed gap-4 p-5 opacity-50"
               >
                 {content}
               </div>
@@ -87,7 +87,7 @@ export function CommissionHubPage() {
             <Link
               key={c.to}
               to={c.to}
-              className="group surface-card flex gap-4 p-5 transition hover:border-primary/40 hover:shadow-md"
+              className="group surface-card-glass flex gap-4 p-5 transition hover:border-primary/40 hover:shadow-md"
             >
               {content}
             </Link>

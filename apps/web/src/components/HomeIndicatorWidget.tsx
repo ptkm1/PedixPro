@@ -1,31 +1,31 @@
 import { DatePicker } from "@/components/ui/date-picker";
 import { apiFetch } from "@/lib/api";
 import {
-  CUSTOM_PERIOD_LABEL,
-  PERIOD_PRESET_LABELS,
-  periodRange,
-  periodRangeYmd,
-  validateCustomPeriod,
-  ymdToIsoRange,
-  type PeriodMode,
-  type PeriodPreset,
+    CUSTOM_PERIOD_LABEL,
+    PERIOD_PRESET_LABELS,
+    periodRange,
+    periodRangeYmd,
+    validateCustomPeriod,
+    ymdToIsoRange,
+    type PeriodMode,
+    type PeriodPreset,
 } from "@/lib/period-presets";
 import { cn } from "@/lib/utils";
 import {
-  HOME_INDICATOR_SHORT_LABELS,
-  type HomeChartIndicatorKey,
+    HOME_INDICATOR_SHORT_LABELS,
+    type HomeChartIndicatorKey,
 } from "@pedidos/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
+    Bar,
+    BarChart,
+    CartesianGrid,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
 } from "recharts";
 
 export type HomeIndicatorSummary = {
@@ -172,17 +172,15 @@ export function HomeIndicatorWidget({
 
   const pillClass = (active: boolean) =>
     cn(
-      "rounded-md font-medium transition-colors",
+      "glass-chip transition-colors",
       compact ? "px-2 py-1 text-[10px]" : "px-3 py-1.5 text-xs",
-      active
-        ? "bg-sidebar-primary text-sidebar-primary-foreground"
-        : "border border-border bg-card text-muted-foreground hover:bg-muted",
+      active && "glass-chip-active",
     );
 
   return (
     <section
       className={cn(
-        "surface-card h-full p-4",
+        "surface-card-glass h-full p-4",
         compact ? "sm:p-4" : "mt-6 sm:p-6",
       )}
     >

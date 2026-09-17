@@ -25,7 +25,7 @@ export function PublicSiteHeader({ variant }: Props) {
     );
 
   return (
-    <header className="relative z-10 border-b border-border/50 bg-card/40 backdrop-blur-md">
+    <header className="glass-chrome relative z-10 border-b border-border bg-card">
       <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-4 sm:max-w-none sm:px-6">
         <AppLogo to="/login" inverted />
         <div className="flex items-center gap-2">

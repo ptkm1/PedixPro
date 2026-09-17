@@ -3,27 +3,27 @@ import { CommerceProWordmark } from "@/components/brand/CommerceProBrand";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-  applyNavOrder,
-  clearNavOrder,
-  loadNavOrder,
-  navOrderStorageKey,
-  saveNavOrder,
+    applyNavOrder,
+    clearNavOrder,
+    loadNavOrder,
+    navOrderStorageKey,
+    saveNavOrder,
 } from "@/lib/nav-order";
 import { staffRoleLabel, userInitials } from "@/lib/staff";
 import { cn } from "@/lib/utils";
 import { LogOut, RotateCcw } from "lucide-react";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type DragEvent,
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+    type DragEvent,
 } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  navForRole,
-  splitMainAndSettingsNav,
-  type NavItem,
+    navForRole,
+    splitMainAndSettingsNav,
+    type NavItem,
 } from "./navConfig";
 
 type Props = {
@@ -125,7 +125,7 @@ export function DashboardSidebar({ onNavigate, className }: Props) {
   return (
     <aside
       className={cn(
-        "flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar",
+        "glass-chrome flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar",
         className,
       )}
     >

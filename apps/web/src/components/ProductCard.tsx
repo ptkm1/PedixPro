@@ -2,9 +2,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  formatProductStockLabel,
-  formatProductUnitLabel,
-  isProductSaleBlockedByStock,
+    formatProductStockLabel,
+    formatProductUnitLabel,
+    isProductSaleBlockedByStock,
 } from "@pedidos/shared";
 import { Package, Pencil, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -43,7 +43,7 @@ export function ProductCard({ product, onDelete, className }: Props) {
   return (
     <article
       className={cn(
-        "surface-card group flex h-full flex-col overflow-hidden transition-all hover:border-primary/35",
+        "surface-card-glass group flex h-full flex-col overflow-hidden transition-all hover:border-primary/35",
         className,
       )}
     >
