@@ -36,6 +36,14 @@ export type {
   SubscriptionPayMethod,
 } from "./billing.js";
 
+export {
+  DIRECT_SALE_LABEL,
+  DIRECT_SALE_OPTION_LABEL,
+  ORDER_SELLER_FILTER_DIRECT,
+  isDirectSaleSellerId,
+  orderSellerDisplayName,
+} from "./order-seller.js";
+
 export type Role = "ADMIN" | "SELLER" | "SUPERVISOR" | "MANAGER";
 
 export type OrderStatus =

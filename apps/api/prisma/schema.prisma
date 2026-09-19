@@ -567,6 +567,7 @@ model User {
   allowedEstablishmentIds  Json?
   cancelledReceivables     Receivable[]      @relation("ReceivableCancelledBy")
   receivableEvents         ReceivableEvent[]
+  ordersCreated            Order[]           @relation("OrderCreatedBy")
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -1377,8 +1378,12 @@ model Order {
   /// Estabelecimento (CNPJ) emissor — snapshot no momento da venda.
   establishmentId String
   establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
-  sellerId       String
-  seller         Seller       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  /// Null = venda direta (sem comissão / fora de metas individuais).
+  sellerId       String?
+  seller         Seller?      @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  /// Quem lançou o pedido (ADM/Gestor/Vendedor). Independente de `sellerId`.
+  createdByUserId String?
+  createdByUser   User?       @relation("OrderCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   customerId     String?
   customer       Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   paymentConditionId String?
@@ -1411,6 +1416,8 @@ model Order {
 
   @@unique([organizationId, orderNumber])
   @@index([organizationId, createdAt])
+  @@index([organizationId, sellerId])
+  @@index([organizationId, createdByUserId])
   @@index([organizationId, paymentConditionId])
   @@index([organizationId, situationId])
   @@index([organizationId, establishmentId])

@@ -22,7 +22,14 @@ import {
 } from "@/lib/order-kanban";
 import { isWebAdmin } from "@/lib/staff";
 import { cn } from "@/lib/utils";
-import { SYSTEM_SITUATION_CODES, canRead } from "@pedidos/shared";
+import {
+  DIRECT_SALE_LABEL,
+  DIRECT_SALE_OPTION_LABEL,
+  ORDER_SELLER_FILTER_DIRECT,
+  SYSTEM_SITUATION_CODES,
+  canRead,
+  canWrite as canWritePermission,
+} from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, Printer } from "lucide-react";
 import { useState } from "react";
@@ -46,7 +53,9 @@ type Order = {
   notes: string | null;
   creditHoldReasons?: unknown;
   createdAt: string;
-  seller: { user: { name: string; email: string } };
+  sellerId?: string | null;
+  seller: { id?: string; user: { name: string; email: string } } | null;
+  createdByUser?: { id: string; name: string; email: string } | null;
   customer: { name: string; email: string | null } | null;
   items: {
     id: string;
@@ -54,6 +63,8 @@ type Order = {
     productName: string;
     quantity: number;
     unitPrice: unknown;
+    commissionPercent?: unknown;
+    commissionAmount?: unknown;
     product: {
       id?: string;
       name: string;
@@ -70,11 +81,21 @@ function formatMoney(value: unknown) {
   });
 }
 
+const EDITABLE_SELLER_STATUSES = new Set([
+  "DRAFT",
+  "CONFIRMED",
+  "PENDING_CREDIT_APPROVAL",
+]);
 
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { user } = useAuth();
-  const canWrite = isWebAdmin(user?.role);
+  const canWriteOrders = Boolean(
+    user &&
+      (user.role === "ADMIN" || user.role === "MANAGER") &&
+      canWritePermission(user.role, "orders", user.permissions),
+  );
+  const canWriteStage = isWebAdmin(user?.role);
   const canPrint80mm = Boolean(
     user && canRead(user.role, "orders_print_80mm", user.permissions),
   );
@@ -89,10 +110,19 @@ export function OrderDetailPage() {
     enabled: !!orderId,
   });
 
+  const { data: lookups } = useQuery({
+    queryKey: ["admin", "orders", "lookups", user?.organizationId],
+    queryFn: () =>
+      apiFetch<{ sellers: { id: string; name: string }[] }>(
+        "/admin/orders/lookups",
+      ),
+    enabled: canWriteOrders,
+  });
+
   const { data: situations = [] } = useQuery({
     queryKey: ["admin", "order-situations"],
     queryFn: () => apiFetch<OrderSituation[]>("/admin/order-situations"),
-    enabled: canWrite,
+    enabled: canWriteStage,
   });
 
   const patchSituation = useMutation({
@@ -112,6 +142,23 @@ export function OrderDetailPage() {
       });
     },
   });
+
+  const patchSeller = useMutation({
+    mutationFn: (sellerId: string | null) =>
+      apiFetch(`/admin/orders/${orderId}/seller`, {
+        method: "PATCH",
+        body: JSON.stringify({ sellerId }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "order", orderId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "orders"] });
+    },
+  });
+
+  const canEditSeller =
+    canWriteOrders &&
+    order &&
+    EDITABLE_SELLER_STATUSES.has(order.status ?? "");
 
   async function handlePrintPdf() {
     if (!orderId) return;
@@ -285,7 +332,7 @@ export function OrderDetailPage() {
                 Exportar PDF
               </Button>
             </div>
-            {canWrite ? (
+            {canWriteStage ? (
               <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                 <span className="text-sm text-muted-foreground">Etapa</span>
                 <AppSelect
@@ -328,14 +375,54 @@ export function OrderDetailPage() {
           </div>
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Vendedor
+              Vendedor responsável
             </dt>
-            <dd className="mt-1.5 text-sm font-medium text-foreground">
-              {order.seller.user.name}
-            </dd>
-            <dd className="mt-0.5 text-xs text-muted-foreground">
-              {order.seller.user.email}
-            </dd>
+            {canEditSeller ? (
+              <dd className="mt-1.5">
+                <AppSelect
+                  value={order.sellerId ?? ORDER_SELLER_FILTER_DIRECT}
+                  disabled={patchSeller.isPending}
+                  triggerClassName="w-full min-w-[14rem]"
+                  options={[
+                    {
+                      value: ORDER_SELLER_FILTER_DIRECT,
+                      label: DIRECT_SALE_OPTION_LABEL,
+                    },
+                    ...(lookups?.sellers ?? []).map((s) => ({
+                      value: s.id,
+                      label: s.name,
+                    })),
+                  ]}
+                  onValueChange={(v) => {
+                    const next =
+                      !v || v === ORDER_SELLER_FILTER_DIRECT ? null : v;
+                    patchSeller.mutate(next);
+                  }}
+                />
+                {patchSeller.isError ? (
+                  <p className="mt-1 text-xs text-destructive">
+                    {(patchSeller.error as Error).message ||
+                      "Não foi possível alterar o vendedor."}
+                  </p>
+                ) : null}
+              </dd>
+            ) : (
+              <>
+                <dd className="mt-1.5 text-sm font-medium text-foreground">
+                  {order.seller?.user.name ?? DIRECT_SALE_LABEL}
+                </dd>
+                {order.seller?.user.email ? (
+                  <dd className="mt-0.5 text-xs text-muted-foreground">
+                    {order.seller.user.email}
+                  </dd>
+                ) : null}
+              </>
+            )}
+            {order.createdByUser ? (
+              <dd className="mt-1 text-xs text-muted-foreground">
+                Lançado por {order.createdByUser.name}
+              </dd>
+            ) : null}
           </div>
           <div className="sm:col-span-2">
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

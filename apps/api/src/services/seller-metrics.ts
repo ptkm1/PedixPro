@@ -85,12 +85,16 @@ export async function sellerRankingForPeriod(
   });
 
   const sellers = await prisma.seller.findMany({
-    where: { organizationId, id: { in: grouped.map((g) => g.sellerId) } },
+    where: {
+      organizationId,
+      id: { in: grouped.map((g) => g.sellerId).filter((id): id is string => id != null) },
+    },
     include: { user: { select: { name: true } } },
   });
   const nameBySeller = new Map(sellers.map((s) => [s.id, s.user.name]));
 
   const rows = grouped
+    .filter((g): g is typeof g & { sellerId: string } => g.sellerId != null)
     .map((g) => ({
       sellerId: g.sellerId,
       name: nameBySeller.get(g.sellerId) ?? "—",

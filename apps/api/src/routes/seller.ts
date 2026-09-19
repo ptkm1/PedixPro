@@ -10,11 +10,12 @@ import {
     auditFromAuth,
 } from "../services/audit-log.js";
 import { buildAdminMobileRankingDashboard, buildSellerCommissionDashboard } from "../services/commission-dashboard.js";
-import { teamMemberSellerIds } from "../auth/org-roles.js";
+import { teamMemberSellerIds, sellerScopeWhere } from "../auth/org-roles.js";
 import { buildSellerCustomerCreditSnapshot } from "../services/credit.js";
 import {
     createSaleOrder,
     findIdempotentSale,
+    orgAllowedProductIds,
     replySaleCreateError,
     sellerAllowedProductIds,
 } from "../services/create-sale-order.js";
@@ -57,8 +58,10 @@ import { recordSellerLocation } from "../services/seller-location-write.js";
 import { decToNum } from "../util/money.js";
 import {
     canAccessSellerApi,
+    isStaffSaleActor,
     mobileOrderWhere,
     requireSellerActor,
+    resolveSaleSellerId,
 } from "../util/mobile-seller-access.js";
 import { resolveMobileReportSellerIds } from "../util/mobile-report-scope.js";
 import { sendZodError } from "../util/zod-reply.js";
@@ -73,7 +76,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(401).send({ error: "Não autorizado" });
       }
       if (!canAccessSellerApi(req.auth)) {
-        return reply.status(403).send({ error: "Apenas vendedores" });
+        return reply.status(403).send({ error: "Sem acesso ao app" });
       }
     },
   );
@@ -136,11 +139,27 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       id: user!.id,
       email: user!.email,
       name: user!.name,
+      role: auth.role,
       sellerId: auth.sellerId,
       commissionPercent: user!.seller
         ? decToNum(user!.seller.commissionPercent)
         : null,
+      canAssignSeller: isStaffSaleActor(auth),
     };
+  });
+
+  /** Lista vendedores ativos (staff) para picker de Nova Venda. */
+  app.get("/sale-sellers", async (req, reply) => {
+    const auth = req.auth!;
+    if (!isStaffSaleActor(auth)) {
+      return reply.status(403).send({ error: "Apenas administradores e gestores" });
+    }
+    const rows = await prisma.seller.findMany({
+      where: { ...sellerScopeWhere(auth), active: true },
+      select: { id: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return rows.map((s) => ({ id: s.id, name: s.user.name }));
   });
 
   app.patch("/me", async (req, reply) => {
@@ -422,10 +441,10 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/sales", async (req, reply) => {
     const auth = req.auth!;
-    const sellerId = requireSellerActor(auth, reply);
-    if (!sellerId) return;
     const body = z
       .object({
+        /** Staff (ADM/Gestor): vendedor responsável; omit/null = venda direta. Vendedor ignora. */
+        sellerId: z.string().min(1).nullable().optional(),
         customerId: z.string().min(1),
         paymentConditionId: z.string().min(1),
         establishmentId: z.string().min(1).optional(),
@@ -447,8 +466,40 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       })
       .safeParse(req.body);
     if (!body.success) {
-        return sendZodError(reply, body.error, req);
+      return sendZodError(reply, body.error, req);
+    }
+
+    const resolved = resolveSaleSellerId(auth, body.data.sellerId, reply);
+    if (!resolved.ok) return;
+    const sellerId = resolved.sellerId;
+
+    if (isStaffSaleActor(auth)) {
+      const { canWriteEffectiveForUser } = await import(
+        "../services/role-permissions.js"
+      );
+      if (
+        !(await canWriteEffectiveForUser(
+          auth.organizationId,
+          auth.sub,
+          auth.role,
+          "orders",
+        ))
+      ) {
+        return reply
+          .status(403)
+          .send({ error: "Sem permissão para criar pedidos" });
       }
+    }
+
+    if (sellerId && isStaffSaleActor(auth)) {
+      const inScope = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth), active: true },
+        select: { id: true },
+      });
+      if (!inScope) {
+        return reply.status(400).send({ error: "Vendedor inválido" });
+      }
+    }
 
     const clientMutationId = body.data.clientMutationId?.trim();
     if (clientMutationId) {
@@ -465,43 +516,74 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const showUnassigned = await getSellerShowUnassignedCustomers(
-      auth.organizationId,
-    );
-    const c = await prisma.customer.findFirst({
-      where: {
-        id: body.data.customerId,
-        ...sellerCustomerSellableWhere(
-          auth.organizationId,
-          sellerId,
-          showUnassigned,
-        ),
-      },
-    });
-    if (!c) {
-      const pending = await prisma.customer.findFirst({
+    if (sellerId) {
+      const showUnassigned = await getSellerShowUnassignedCustomers(
+        auth.organizationId,
+      );
+      const c = await prisma.customer.findFirst({
+        where: {
+          id: body.data.customerId,
+          ...sellerCustomerSellableWhere(
+            auth.organizationId,
+            sellerId,
+            showUnassigned,
+          ),
+        },
+      });
+      if (!c) {
+        const pending = await prisma.customer.findFirst({
+          where: {
+            id: body.data.customerId,
+            organizationId: auth.organizationId,
+            sellerId,
+            approvalStatus: { in: ["PENDING", "REJECTED"] },
+          },
+          select: { approvalStatus: true },
+        });
+        if (pending?.approvalStatus === "PENDING") {
+          return reply.status(400).send({
+            error: "Cliente aguardando validação do escritório",
+          });
+        }
+        if (pending?.approvalStatus === "REJECTED") {
+          return reply
+            .status(400)
+            .send({ error: "Cadastro do cliente foi rejeitado" });
+        }
+        // Staff pode vender para qualquer cliente aprovado da org
+        if (!isStaffSaleActor(auth)) {
+          return reply.status(400).send({ error: "Cliente inválido" });
+        }
+        const staffCustomer = await prisma.customer.findFirst({
+          where: {
+            id: body.data.customerId,
+            organizationId: auth.organizationId,
+            approvalStatus: "APPROVED",
+          },
+          select: { id: true },
+        });
+        if (!staffCustomer) {
+          return reply.status(400).send({ error: "Cliente inválido" });
+        }
+      }
+    } else {
+      const staffCustomer = await prisma.customer.findFirst({
         where: {
           id: body.data.customerId,
           organizationId: auth.organizationId,
-          sellerId,
-          approvalStatus: { in: ["PENDING", "REJECTED"] },
+          approvalStatus: "APPROVED",
         },
-        select: { approvalStatus: true },
+        select: { id: true },
       });
-      if (pending?.approvalStatus === "PENDING") {
-        return reply.status(400).send({
-          error: "Cliente aguardando validação do escritório",
-        });
+      if (!staffCustomer) {
+        return reply.status(400).send({ error: "Cliente inválido" });
       }
-      if (pending?.approvalStatus === "REJECTED") {
-        return reply
-          .status(400)
-          .send({ error: "Cadastro do cliente foi rejeitado" });
-      }
-      return reply.status(400).send({ error: "Cliente inválido" });
     }
 
     try {
+      const allowedProductIds = sellerId
+        ? await sellerAllowedProductIds(sellerId, auth.organizationId)
+        : await orgAllowedProductIds(auth.organizationId);
       return await createSaleOrder({
         organizationId: auth.organizationId,
         actorUserId: auth.sub,
@@ -518,12 +600,9 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         status: body.data.status,
         operation: body.data.operation,
         clientMutationId,
-        source: "seller",
+        source: isStaffSaleActor(auth) ? "admin" : "seller",
         actorRole: auth.role,
-        allowedProductIds: await sellerAllowedProductIds(
-          sellerId,
-          auth.organizationId,
-        ),
+        allowedProductIds,
       });
     } catch (e) {
       if (replySaleCreateError(reply, e)) return;

@@ -388,7 +388,9 @@ export default function HomeScreen() {
 
         <View style={{ gap: 10 }}>
           <ThemedText variant="titleSm">Ações rápidas</ThemedText>
-          {user?.role === "SELLER" ? (
+          {user?.role === "SELLER" ||
+          user?.role === "ADMIN" ||
+          user?.role === "MANAGER" ? (
             <>
               <QuickAction
                 icon={Plus}
@@ -397,12 +399,14 @@ export default function HomeScreen() {
                 variant="primary"
                 onPress={goQuickSale}
               />
-              <QuickAction
-                icon={RotateCcw}
-                label="Repetir venda"
-                description="Escolher um pedido recente para pré-preencher"
-                onPress={goRepeatSale}
-              />
+              {user?.role === "SELLER" ? (
+                <QuickAction
+                  icon={RotateCcw}
+                  label="Repetir venda"
+                  description="Escolher um pedido recente para pré-preencher"
+                  onPress={goRepeatSale}
+                />
+              ) : null}
             </>
           ) : null}
           <QuickAction

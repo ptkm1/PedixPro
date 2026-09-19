@@ -18,7 +18,7 @@ export type KanbanOrder = {
   } | null;
   totalAmount: unknown;
   createdAt: string;
-  seller: { user: { name: string } };
+  seller: { user: { name: string } } | null;
   customer: {
     name: string;
     city?: string | null;
@@ -100,7 +100,9 @@ export function OrderKanbanCard({
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span>{new Date(order.createdAt).toLocaleDateString("pt-BR")}</span>
         <span aria-hidden="true">·</span>
-        <span className="truncate">{order.seller.user.name}</span>
+        <span className="truncate">
+          {order.seller?.user.name ?? "VENDA DIRETA"}
+        </span>
         <span aria-hidden="true">·</span>
         <span className="tabular-nums">
           {order.items.length} {order.items.length === 1 ? "item" : "itens"}

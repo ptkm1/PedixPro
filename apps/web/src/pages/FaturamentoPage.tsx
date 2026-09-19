@@ -956,7 +956,9 @@ export function FaturamentoPage() {
                           <td className="px-4 py-3">
                             {o.customer?.name ?? "—"}
                           </td>
-                          <td className="px-4 py-3">{o.seller.user.name}</td>
+                          <td className="px-4 py-3">
+                            {o.seller?.user.name ?? "VENDA DIRETA"}
+                          </td>
                           <td className="px-4 py-3">
                             R$ {Number(o.totalAmount).toFixed(2)}
                           </td>

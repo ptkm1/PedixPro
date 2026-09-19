@@ -111,14 +111,17 @@ export async function resolveCommissionBaselinePercent(
 /**
  * Comissão efetiva por linha:
  * regra por produto > por categoria > regra geral > tipo do vendedor > faixa progressiva (FIXED) > % cadastro.
+ * Sem vendedor (venda direta) → 0.
  */
 export async function resolveCommissionPercent(
   organizationId: string,
-  sellerId: string,
+  sellerId: string | null | undefined,
   productId: string,
   categoryId: string | null,
   ctx?: CommissionResolveContext,
 ): Promise<number> {
+  if (!sellerId) return 0;
+
   const seller = await prisma.seller.findFirst({
     where: { id: sellerId, organizationId },
     select: { commissionType: true, commissionPercent: true },

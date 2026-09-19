@@ -12,6 +12,8 @@ export type OfflineSaleQueuePayload = {
   clientMutationId: string;
   customerId: string;
   paymentConditionId: string;
+  /** Staff: vendedor atribuído; null/omit = venda direta. Vendedor ignora. */
+  sellerId?: string | null;
   operation?: "SALE";
   status: "CONFIRMED";
   notes?: string;

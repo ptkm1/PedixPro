@@ -29,7 +29,8 @@ export type ComputedSaleLine = {
 
 export type ComputeSaleOrderParams = {
   organizationId: string;
-  sellerId: string;
+  /** Null = venda direta (comissão 0). */
+  sellerId: string | null;
   customerId?: string | null;
   priceTableId?: string | null;
   items: SaleLineInput[];
@@ -66,18 +67,25 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
   }
 
   const periodBounds = calendarMonthBounds(at);
-  const mtdBefore = await sellerConfirmedRevenueInPeriod(
-    params.organizationId,
-    params.sellerId,
-    periodBounds.start,
-    periodBounds.end,
-  );
+  const mtdBefore =
+    params.sellerId != null
+      ? await sellerConfirmedRevenueInPeriod(
+          params.organizationId,
+          params.sellerId,
+          periodBounds.start,
+          periodBounds.end,
+        )
+      : 0;
 
   const computedLines: ComputedSaleLine[] = [];
 
   for (const input of params.items) {
     if (params.allowedProductIds && !params.allowedProductIds.has(input.productId)) {
-      throw new OrderPricingError(`Produto não liberado para este vendedor: ${input.productId}`);
+      throw new OrderPricingError(
+        params.sellerId
+          ? `Produto não liberado para este vendedor: ${input.productId}`
+          : `Produto inválido: ${input.productId}`,
+      );
     }
 
     const prod = await prisma.product.findFirst({
@@ -110,13 +118,16 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
       );
     }
 
-    const commissionPercent = await resolveCommissionPercent(
-      params.organizationId,
-      params.sellerId,
-      prod.id,
-      prod.categoryId,
-      { mtdConfirmedRevenue: mtdBefore },
-    );
+    const commissionPercent =
+      params.sellerId != null
+        ? await resolveCommissionPercent(
+            params.organizationId,
+            params.sellerId,
+            prod.id,
+            prod.categoryId,
+            { mtdConfirmedRevenue: mtdBefore },
+          )
+        : 0;
     const lineTotal = roundMoney(unitPrice * input.quantity);
     const commissionAmount = roundMoney((lineTotal * commissionPercent) / 100);
 

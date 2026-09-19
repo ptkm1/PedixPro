@@ -32,6 +32,7 @@ const createdOrderInclude = {
   items: true,
   customer: true,
   paymentCondition: true,
+  createdByUser: { select: { id: true, name: true, email: true } },
   establishment: {
     select: {
       id: true,
@@ -78,10 +79,22 @@ export async function sellerAllowedProductIds(
   return new Set(ids);
 }
 
+/** Catálogo completo da org (venda direta / staff sem vendedor). */
+export async function orgAllowedProductIds(
+  organizationId: string,
+): Promise<Set<string>> {
+  const rows = await prisma.product.findMany({
+    where: { organizationId },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
 export type CreateSaleOrderParams = {
   organizationId: string;
   actorUserId: string;
-  sellerId: string;
+  /** Null = venda direta (sem comissão). */
+  sellerId: string | null;
   customerId: string;
   paymentConditionId: string;
   priceTableId?: string | null;
@@ -121,7 +134,7 @@ export function replySaleCreateError(reply: FastifyReply, err: unknown): boolean
 export async function findIdempotentSale(params: {
   clientMutationId: string;
   organizationId: string;
-  sellerId: string;
+  sellerId: string | null;
 }) {
   const dup = await prisma.order.findUnique({
     where: { clientMutationId: params.clientMutationId },
@@ -137,6 +150,30 @@ export async function findIdempotentSale(params: {
   return dup;
 }
 
+function notifySellerPayload(order: {
+  id: string;
+  totalAmount: unknown;
+  sellerId: string | null;
+  seller: {
+    user: { name: string };
+    managerUserId?: string | null;
+  } | null;
+  customer: { name: string } | null;
+}) {
+  return {
+    id: order.id,
+    totalAmount: order.totalAmount,
+    sellerId: order.sellerId ?? undefined,
+    seller: order.seller
+      ? {
+          user: order.seller.user,
+          managerUserId: order.seller.managerUserId,
+        }
+      : { user: { name: "VENDA DIRETA" }, managerUserId: null },
+    customer: order.customer,
+  };
+}
+
 export async function createSaleOrder(params: CreateSaleOrderParams) {
   const clientMutationId = params.clientMutationId?.trim();
   if (clientMutationId) {
@@ -148,11 +185,13 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
     if (dup) return dup;
   }
 
-  const seller = await prisma.seller.findFirst({
-    where: { id: params.sellerId, organizationId: params.organizationId },
-    select: { id: true },
-  });
-  if (!seller) throw new SaleCreateError("Vendedor inválido", 400);
+  if (params.sellerId) {
+    const seller = await prisma.seller.findFirst({
+      where: { id: params.sellerId, organizationId: params.organizationId },
+      select: { id: true },
+    });
+    if (!seller) throw new SaleCreateError("Vendedor inválido", 400);
+  }
 
   const customer = await prisma.customer.findFirst({
     where: { id: params.customerId, organizationId: params.organizationId },
@@ -262,6 +301,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
         organizationId: params.organizationId,
         establishmentId: establishment.id,
         sellerId: params.sellerId,
+        createdByUserId: params.actorUserId,
         customerId: params.customerId,
         paymentConditionId: params.paymentConditionId,
         operation: params.operation ?? "SALE",
@@ -293,16 +333,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
   if (order.status === "PENDING_CREDIT_APPROVAL") {
     await notifyAdminsCreditPending({
       organizationId: params.organizationId,
-      order: {
-        id: order.id,
-        totalAmount: order.totalAmount,
-        sellerId: order.sellerId,
-        seller: {
-          user: order.seller.user,
-          managerUserId: order.seller.managerUserId,
-        },
-        customer: order.customer,
-      },
+      order: notifySellerPayload(order),
     });
   }
 
@@ -311,16 +342,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
     void reactivateCustomerOnSale(order.customerId);
     void notifySaleConfirmed({
       organizationId: params.organizationId,
-      order: {
-        id: order.id,
-        totalAmount: order.totalAmount,
-        sellerId: order.sellerId,
-        seller: {
-          user: order.seller.user,
-          managerUserId: order.seller.managerUserId,
-        },
-        customer: order.customer,
-      },
+      order: notifySellerPayload(order),
     });
   }
 
@@ -333,10 +355,12 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
       metadata: {
         status: order.status,
         sellerId: order.sellerId,
+        createdByUserId: order.createdByUserId,
         customerId: order.customerId,
         itemCount: order.items.length,
         totalAmount: Number(order.totalAmount),
         source: params.source,
+        directSale: order.sellerId == null,
       },
     },
   );

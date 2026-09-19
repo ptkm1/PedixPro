@@ -456,6 +456,23 @@ export default function QuickSaleScreen() {
               <ChevronDown size={18} color={colors.textSecondary} />
             </Pressable>
 
+            {s.canPickSeller ? (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
+                  Vendedor responsável
+                </Text>
+                <Pressable
+                  style={styles.selectBtn}
+                  onPress={() => s.setSellerPickerOpen(true)}
+                >
+                  <Text style={styles.selectBtnTxt} numberOfLines={2}>
+                    {s.assignedSellerLabel ?? "Venda Direta"}
+                  </Text>
+                  <ChevronDown size={18} color={colors.textSecondary} />
+                </Pressable>
+              </>
+            ) : null}
+
             <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
               Operação do pedido
             </Text>
@@ -914,6 +931,58 @@ export default function QuickSaleScreen() {
             />
           </SafeScreen>
         </Modal>
+
+        {s.canPickSeller ? (
+          <Modal
+            visible={s.sellerPickerOpen}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => s.setSellerPickerOpen(false)}
+          >
+            <SafeScreen>
+              <MobileHeader
+                title="Vendedor responsável"
+                showBack
+                onBack={() => s.setSellerPickerOpen(false)}
+              />
+              <FlatList
+                data={[
+                  {
+                    id: "__direct__",
+                    name: "Venda Direta — Sem comissão para vendedor",
+                  },
+                  ...s.saleSellers,
+                ]}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: 16, gap: 4 }}
+                renderItem={({ item }) => {
+                  const active = item.id === s.assignedSellerId;
+                  return (
+                    <Pressable
+                      style={[
+                        styles.paymentRow,
+                        active && styles.paymentRowActive,
+                      ]}
+                      onPress={() => {
+                        s.setAssignedSellerId(item.id);
+                        s.setSellerPickerOpen(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.paymentRowTxt,
+                          active && styles.paymentRowTxtActive,
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                    </Pressable>
+                  );
+                }}
+              />
+            </SafeScreen>
+          </Modal>
+        ) : null}
       </KeyboardAvoidingScreen>
     </SafeScreen>
   );

@@ -217,7 +217,11 @@ export default function TabsLayout() {
         <Tabs.Screen name="reports" options={HIDDEN_TAB} />
         <Tabs.Screen name="imports" options={HIDDEN_TAB} />
       </Tabs>
-      {user.role === "SELLER" ? <QuickSaleFab /> : null}
+      {user.role === "SELLER" ||
+      user.role === "ADMIN" ||
+      user.role === "MANAGER" ? (
+        <QuickSaleFab />
+      ) : null}
     </View>
   );
 }

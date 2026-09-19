@@ -531,10 +531,13 @@ export function OrdersPage() {
             onValueChange={setSellerId}
             emptyLabel="Todos"
             placeholder="Todos"
-            options={sellers.map((s) => ({
-              value: s.id,
-              label: s.user.name,
-            }))}
+            options={[
+              { value: "__direct__", label: "Venda Direta" },
+              ...sellers.map((s) => ({
+                value: s.id,
+                label: s.user.name,
+              })),
+            ]}
           />
         </FormField>
         {establishments.length > 1 ? (
@@ -731,7 +734,7 @@ export function OrdersPage() {
                       )}
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      {o.seller.user.name}
+                      {o.seller?.user.name ?? "VENDA DIRETA"}
                     </TableCell>
                     <TableCell className="px-4 py-3 text-sm text-muted-foreground">
                       {o.establishment

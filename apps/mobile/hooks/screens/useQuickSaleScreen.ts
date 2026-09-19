@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmtMoney } from "../../components/atoms/formatMoney";
+import { useAuth } from "../../context/AuthContext";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useAppToast } from "../../context/ToastContext";
 import { apiFetch } from "../../lib/api";
@@ -35,6 +36,7 @@ import type {
   SaleCustomer,
   SaleProduct,
 } from "../../lib/sale/types";
+import { canAssignSaleSeller } from "../../lib/seller-login-messages";
 import {
   fetchSellerCustomers,
   sellerOfflineStaleTime,
@@ -44,10 +46,16 @@ import { computeCatalogTileWidths } from "../../lib/utils/catalog-layout";
 import { useNetInfoOnline } from "../useNetInfoOnline";
 import { useOrderSyncMode } from "../useOrderSyncMode";
 import { useSellerProductCatalog } from "../useSellerProductCatalog";
+import {
+  DIRECT_SALE_OPTION_LABEL,
+  ORDER_SELLER_FILTER_DIRECT,
+} from "@pedidos/shared";
 
 type SubmitSaleResult =
   | { mode: "online"; status?: string }
   | { mode: "offlineQueued" };
+
+type SaleSellerOption = { id: string; name: string };
 
 function digitsOnly(v: string): string {
   return v.replace(/\D/g, "");
@@ -73,6 +81,7 @@ function formatDoc(c: SaleCustomer): string {
 
 export function useQuickSaleScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { showToast } = useAppToast();
   const { alert } = useConfirm();
   const { customerId: customerIdParam, repeatSaleId: repeatSaleIdParam } =
@@ -85,6 +94,12 @@ export function useQuickSaleScreen() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const layout = computeCatalogTileWidths(useWindowDimensions().width);
+
+  const canPickSeller = Boolean(user?.role && canAssignSaleSeller(user.role));
+  const [assignedSellerId, setAssignedSellerId] = useState<string>(
+    ORDER_SELLER_FILTER_DIRECT,
+  );
+  const [sellerPickerOpen, setSellerPickerOpen] = useState(false);
 
   const [tab, setTab] = useState<QuickSaleTab>("clientes");
   const [customerId, setCustomerIdState] = useState<string | undefined>();
@@ -227,6 +242,38 @@ export function useQuickSaleScreen() {
     staleTime: sellerOfflineStaleTime,
     queryFn: () => apiFetch<PaymentCondition[]>("/seller/payment-conditions"),
   });
+
+  const { data: saleSellers = [] } = useQuery({
+    queryKey: ["seller", "sale-sellers"],
+    enabled: canPickSeller,
+    staleTime: sellerOfflineStaleTime,
+    queryFn: () => apiFetch<SaleSellerOption[]>("/seller/sale-sellers"),
+  });
+
+  const assignedSellerLabel = useMemo(() => {
+    if (!canPickSeller) return null;
+    if (
+      !assignedSellerId ||
+      assignedSellerId === ORDER_SELLER_FILTER_DIRECT
+    ) {
+      return DIRECT_SALE_OPTION_LABEL;
+    }
+    return (
+      saleSellers.find((s) => s.id === assignedSellerId)?.name ??
+      DIRECT_SALE_OPTION_LABEL
+    );
+  }, [canPickSeller, assignedSellerId, saleSellers]);
+
+  const apiAssignedSellerId = useMemo(() => {
+    if (!canPickSeller) return undefined;
+    if (
+      !assignedSellerId ||
+      assignedSellerId === ORDER_SELLER_FILTER_DIRECT
+    ) {
+      return null;
+    }
+    return assignedSellerId;
+  }, [canPickSeller, assignedSellerId]);
 
   useEffect(() => {
     if (paymentConditionId) return;
@@ -448,6 +495,7 @@ export function useQuickSaleScreen() {
         paymentConditionId,
         operation: "SALE" as const,
         status: "CONFIRMED" as const,
+        ...(canPickSeller ? { sellerId: apiAssignedSellerId ?? null } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         items: lines.map((l) => ({
           productId: l.productId,
@@ -677,6 +725,13 @@ export function useQuickSaleScreen() {
     selectedPaymentCondition,
     paymentPickerOpen,
     setPaymentPickerOpen,
+    canPickSeller,
+    saleSellers,
+    assignedSellerId,
+    setAssignedSellerId,
+    assignedSellerLabel,
+    sellerPickerOpen,
+    setSellerPickerOpen,
     notes,
     setNotes,
     catalog,

@@ -81,6 +81,18 @@ export async function goalAchievedAmount(
       end,
     );
   }
+  /** Meta ALL inclui vendas diretas (sellerId null) no faturamento geral. */
+  if (goal.scope === "ALL") {
+    const agg = await prisma.order.aggregate({
+      where: {
+        organizationId,
+        status: "CONFIRMED",
+        createdAt: { gte: start, lte: end },
+      },
+      _sum: { totalAmount: true },
+    });
+    return roundMoney(decToNum(agg._sum.totalAmount ?? 0));
+  }
   const sellerIds = await resolveGoalSellerIds(organizationId, goal);
   return sellersConfirmedRevenueInPeriod(organizationId, sellerIds, start, end);
 }
