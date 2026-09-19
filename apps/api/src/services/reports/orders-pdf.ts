@@ -1,6 +1,7 @@
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
 import { decToNum } from "../../util/money.js";
+import { sellerLabelOrDirect } from "../../util/order-seller-filter.js";
 import { drawOrderPdfContents, type OrderPdfInput } from "../order-pdf.js";
 import { loadOrderForPdf, orderToPdfInput } from "../order-pdf-load.js";
 import { applyOrderExtras } from "./extra-filters.js";
@@ -251,7 +252,10 @@ export async function buildOrdersPdf(
         code: orderCode(o),
         date: shortDateTime(o.createdAt),
         customer: shortName(o.customer?.name ?? "—", withProfit ? 14 : 16),
-        seller: shortName(o.seller.user.name, withProfit ? 12 : 14),
+        seller: shortName(
+          sellerLabelOrDirect(o.seller?.user.name),
+          withProfit ? 12 : 14,
+        ),
         status: o.situation?.name ?? STATUS_LABEL[o.status] ?? o.status,
         items: String(o.items.length),
         total: money(amount),

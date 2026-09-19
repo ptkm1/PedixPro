@@ -10,6 +10,7 @@ import {
   nfeGtin,
 } from "../../fiscal/nfe-prod-fields.js";
 import { decToNum } from "../../util/money.js";
+import { sellerLabelOrDirect } from "../../util/order-seller-filter.js";
 
 export class NfeXmlError extends Error {
   constructor(message: string) {
@@ -307,7 +308,7 @@ export async function listFiscalOrders(
     totalAmount: Number(o.totalAmount),
     createdAt: o.createdAt.toISOString(),
     customerName: o.customer?.tradeName || o.customer?.name || "—",
-    sellerName: o.seller.user.name,
+    sellerName: sellerLabelOrDirect(o.seller?.user.name),
     itemCount: o._count.items,
   }));
 }

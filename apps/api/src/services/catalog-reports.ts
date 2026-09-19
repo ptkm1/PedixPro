@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 import { calendarMonthBounds } from "./seller-metrics.js";
 import { orderCode } from "./reports/pdf-common.js";
 
@@ -74,7 +75,7 @@ export async function buildCustomerAbcReport(params: {
     const row = byCustomer.get(o.customerId) ?? {
       customerId: o.customerId,
       name: o.customer?.name ?? "—",
-      sellerName: o.seller.user.name,
+      sellerName: sellerLabelOrDirect(o.seller?.user.name),
       orderCount: 0,
       totalAmount: 0,
     };
@@ -601,7 +602,7 @@ export async function buildProductPositivacaoByCustomerReport(params: {
     const row = map.get(key) ?? {
       customerId,
       customerName: it.order.customer?.name ?? "—",
-      sellerName: it.order.seller.user.name,
+      sellerName: sellerLabelOrDirect(it.order.seller?.user.name),
       productId: it.productId,
       productName: it.productName,
       sku: it.product.sku,
@@ -678,7 +679,7 @@ export async function buildCommissionByOrderReport(params: {
       orderId: o.id,
       orderCode: orderCode(o),
       createdAt: o.createdAt.toISOString(),
-      sellerName: o.seller.user.name,
+      sellerName: sellerLabelOrDirect(o.seller?.user.name),
       customerName: o.customer?.name ?? "—",
       revenue,
       commission,
@@ -751,7 +752,9 @@ export async function buildInvoicedOrdersReport(params: {
     orderAmount: inv.order
       ? roundMoney(decToNum(inv.order.totalAmount))
       : null,
-    sellerName: inv.order?.seller.user.name ?? "—",
+    sellerName: inv.order
+      ? sellerLabelOrDirect(inv.order.seller?.user.name)
+      : "—",
     customerName:
       inv.order?.customer?.tradeName ||
       inv.order?.customer?.name ||

@@ -2,6 +2,7 @@ import type { HomeChartIndicatorKey } from "@pedidos/shared";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 
 /**
  * Rentabilidade = receita − custo.
@@ -144,14 +145,15 @@ async function buildSalesBySeller(params: {
   for (const o of orders) {
     const amount = decToNum(o.totalAmount);
     totalAmount += amount;
-    const row = map.get(o.sellerId) ?? {
-      label: o.seller.user.name,
+    const sellerKey = o.sellerId ?? "__direct__";
+    const row = map.get(sellerKey) ?? {
+      label: sellerLabelOrDirect(o.seller?.user.name),
       totalAmount: 0,
       orderCount: 0,
     };
     row.totalAmount += amount;
     row.orderCount += 1;
-    map.set(o.sellerId, row);
+    map.set(sellerKey, row);
   }
 
   const rows = [...map.entries()]
