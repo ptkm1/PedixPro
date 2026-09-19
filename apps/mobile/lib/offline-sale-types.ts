@@ -21,6 +21,7 @@ export type OfflineSaleQueuePayload = {
     productId: string;
     quantity: number;
     discountPercent?: number;
+    priceTableId?: string;
   }>;
   snapshot?: OfflineSaleSnapshot;
 };

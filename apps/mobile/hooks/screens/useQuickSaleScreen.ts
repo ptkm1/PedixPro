@@ -23,15 +23,18 @@ import {
   LAST_CUSTOMER_STORAGE_KEY,
   PRODUCT_DOUBLE_TAP_MS,
   syncCartLinesWithProducts,
+  type BumpCartQtyOptions,
 } from "../../lib/sale/cart";
 import {
-  getCartStockBlockMessage,
-  getProductStockBlockMessage,
-} from "../../lib/sale/stock";
+  filterCachedPriceOptionsForProduct,
+  type CachedPriceTable,
+} from "../../lib/sale/price-table-options";
+import { getCartStockBlockMessage, getProductStockBlockMessage } from "../../lib/sale/stock";
 import type {
   CartLine,
   CreditOverview,
   PaymentCondition,
+  ProductPriceTableOption,
   QuickSaleTab,
   SaleCustomer,
   SaleProduct,
@@ -39,7 +42,11 @@ import type {
 import { canAssignSaleSeller } from "../../lib/seller-login-messages";
 import {
   fetchSellerCustomers,
+  fetchSellerOrgSettings,
+  fetchSellerPriceTables,
   sellerOfflineStaleTime,
+  SELLER_ORG_SETTINGS_KEY,
+  SELLER_PRICE_TABLES_KEY,
 } from "../../lib/seller-offline-queries";
 import { findProductByBarcode } from "../../lib/utils/barcode";
 import { computeCatalogTileWidths } from "../../lib/utils/catalog-layout";
@@ -50,6 +57,7 @@ import {
   DIRECT_SALE_OPTION_LABEL,
   ORDER_SELLER_FILTER_DIRECT,
 } from "@pedidos/shared";
+import { isNetworkError } from "../../lib/network-error";
 
 type SubmitSaleResult =
   | { mode: "online"; status?: string }
@@ -128,6 +136,12 @@ export function useQuickSaleScreen() {
   } | null>(null);
   const [paymentPickerOpen, setPaymentPickerOpen] = useState(false);
   const [notes, setNotes] = useState("");
+  const [priceTablePicker, setPriceTablePicker] = useState<{
+    product: SaleProduct;
+    qty: number;
+    options: ProductPriceTableOption[];
+    loading: boolean;
+  } | null>(null);
   const productTapTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
@@ -137,6 +151,20 @@ export function useQuickSaleScreen() {
   const { orderSyncMode } = useOrderSyncMode();
   const catalog = useSellerProductCatalog({ customerId });
   const { products } = catalog;
+
+  const { data: orgSettings } = useQuery({
+    queryKey: SELLER_ORG_SETTINGS_KEY,
+    staleTime: sellerOfflineStaleTime,
+    queryFn: fetchSellerOrgSettings,
+  });
+  const orgDefaultMaxDiscount =
+    orgSettings?.defaultMaxSellerDiscountPercent ?? null;
+
+  const { data: cachedPriceTables = [] } = useQuery({
+    queryKey: SELLER_PRICE_TABLES_KEY,
+    staleTime: sellerOfflineStaleTime,
+    queryFn: fetchSellerPriceTables,
+  });
 
   const setCustomerId = useCallback((id: string | undefined) => {
     setCustomerIdState(id);
@@ -303,8 +331,10 @@ export function useQuickSaleScreen() {
   }, []);
 
   useEffect(() => {
-    setCart((prev) => syncCartLinesWithProducts(prev, products));
-  }, [products]);
+    setCart((prev) =>
+      syncCartLinesWithProducts(prev, products, orgDefaultMaxDiscount),
+    );
+  }, [products, orgDefaultMaxDiscount]);
 
   useEffect(() => {
     if (!scanMsg) return;
@@ -378,7 +408,7 @@ export function useQuickSaleScreen() {
   const canAccessFinalize = !!customerId && cartLines.length > 0;
 
   const bumpQty = useCallback(
-    (p: SaleProduct, delta: number): boolean => {
+    (p: SaleProduct, delta: number, opts?: BumpCartQtyOptions): boolean => {
       if (!customerId) {
         setErr("Selecione um cliente antes de adicionar produtos.");
         setTab("clientes");
@@ -396,11 +426,135 @@ export function useQuickSaleScreen() {
         return false;
       }
       setErr(null);
-      setCart((prev) => bumpCartQty(prev, p, delta));
+      setCart((prev) =>
+        bumpCartQty(prev, p, delta, {
+          ...opts,
+          orgDefaultMaxDiscount:
+            opts?.orgDefaultMaxDiscount ?? orgDefaultMaxDiscount,
+        }),
+      );
       return true;
     },
-    [alert, cart, customerId],
+    [alert, cart, customerId, orgDefaultMaxDiscount],
   );
+
+  const resolvePriceOptions = useCallback(
+    async (productId: string): Promise<ProductPriceTableOption[]> => {
+      if (!customerId) return [];
+      try {
+        const res = await apiFetch<{ options: ProductPriceTableOption[] }>(
+          `/seller/products/${productId}/price-options?customerId=${encodeURIComponent(customerId)}`,
+        );
+        return res.options ?? [];
+      } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        return filterCachedPriceOptionsForProduct({
+          tables: cachedPriceTables as CachedPriceTable[],
+          productId,
+          customerId,
+          regionId: selectedCustomer?.regionId ?? null,
+        });
+      }
+    },
+    [cachedPriceTables, customerId, selectedCustomer?.regionId],
+  );
+
+  const applyProductWithPriceOption = useCallback(
+    (
+      p: SaleProduct,
+      qty: number,
+      option: ProductPriceTableOption | null,
+    ): boolean => {
+      const priced: SaleProduct = option
+        ? {
+            ...p,
+            effectiveUnitPrice: option.effectiveUnitPrice,
+            catalogUnitPrice: option.catalogUnitPrice,
+            promotionLabel: option.promotionLabel,
+          }
+        : p;
+      return bumpQty(priced, qty, {
+        priceTableId: option?.priceTableId ?? null,
+        priceTableName: option?.name ?? null,
+        effectiveUnitPrice: option?.effectiveUnitPrice,
+        catalogUnitPrice: option?.catalogUnitPrice,
+        promotionLabel: option?.promotionLabel ?? null,
+        orgDefaultMaxDiscount,
+      });
+    },
+    [bumpQty, orgDefaultMaxDiscount],
+  );
+
+  const beginAddProduct = useCallback(
+    async (p: SaleProduct, qty: number) => {
+      if (!customerId) {
+        setErr("Selecione um cliente antes de adicionar produtos.");
+        setTab("clientes");
+        return;
+      }
+      // Já no carrinho: só altera quantidade (mantém tabela/preço escolhidos).
+      if (cart[p.id]) {
+        bumpQty(p, qty);
+        return;
+      }
+
+      setPriceTablePicker({
+        product: p,
+        qty,
+        options: [],
+        loading: true,
+      });
+      try {
+        const options = await resolvePriceOptions(p.id);
+        if (options.length <= 1) {
+          setPriceTablePicker(null);
+          const ok = applyProductWithPriceOption(p, qty, options[0] ?? null);
+          if (!ok) return;
+          return;
+        }
+        setPriceTablePicker({
+          product: p,
+          qty,
+          options,
+          loading: false,
+        });
+      } catch (e) {
+        setPriceTablePicker(null);
+        const msg =
+          e instanceof Error
+            ? e.message
+            : "Não foi possível carregar tabelas de preço.";
+        setErr(msg);
+        void alert({
+          title: "Tabela de preço",
+          description: msg,
+          tone: "danger",
+        });
+      }
+    },
+    [
+      alert,
+      applyProductWithPriceOption,
+      bumpQty,
+      cart,
+      customerId,
+      resolvePriceOptions,
+    ],
+  );
+
+  const confirmPriceTableOption = useCallback(
+    (option: ProductPriceTableOption) => {
+      if (!priceTablePicker) return;
+      const { product, qty } = priceTablePicker;
+      setPriceTablePicker(null);
+      applyProductWithPriceOption(product, qty, option);
+    },
+    [applyProductWithPriceOption, priceTablePicker],
+  );
+
+  const closePriceTablePicker = useCallback(() => {
+    setPriceTablePicker(null);
+  }, []);
 
   const scheduleProductTap = useCallback(
     (p: SaleProduct) => {
@@ -415,21 +569,33 @@ export function useQuickSaleScreen() {
       if (pending !== undefined) {
         clearTimeout(pending);
         timers.delete(id);
-        bumpQty(p, 2);
+        void beginAddProduct(p, 2);
         return;
       }
       const t = setTimeout(() => {
         timers.delete(id);
-        bumpQty(p, 1);
+        void beginAddProduct(p, 1);
       }, PRODUCT_DOUBLE_TAP_MS);
       timers.set(id, t);
     },
-    [bumpQty, customerId],
+    [beginAddProduct, customerId],
   );
 
-  const cycleDiscount = useCallback((productId: string) => {
-    setCart((prev) => cycleCartLineDiscount(prev, productId));
-  }, []);
+  const cycleDiscount = useCallback(
+    (productId: string) => {
+      setCart((prev) => {
+        const result = cycleCartLineDiscount(prev, productId);
+        if (result.hitMax) {
+          showToast({
+            message: `Desconto máximo deste produto: ${result.maxPct}%`,
+            tone: "warning",
+          });
+        }
+        return result.cart;
+      });
+    },
+    [showToast],
+  );
 
   const onBarcode = useCallback(
     (raw: string) => {
@@ -443,23 +609,29 @@ export function useQuickSaleScreen() {
       const p = findProductByBarcode(products, raw);
       setBarcodeOpen(false);
       if (p && typeof p.effectiveUnitPrice === "number") {
-        const added = bumpQty(p, 1);
-        if (added) {
+        void (async () => {
+          const before = cart[p.id]?.qty ?? 0;
+          await beginAddProduct(p, 1);
+          // beginAddProduct é async; feedback simples
           setScanMsgOk(true);
-          setScanMsg(`Produto adicionado: ${p.name}`);
-        } else {
-          setScanMsgOk(false);
-          setScanMsg(
-            getProductStockBlockMessage(p, cart[p.id]?.qty ?? 0, 1) ??
-              `Não foi possível adicionar ${p.name}.`,
-          );
-        }
+          setScanMsg(`Produto: ${p.name}`);
+          if (
+            getProductStockBlockMessage(p, before, 1) &&
+            !cart[p.id]
+          ) {
+            setScanMsgOk(false);
+            setScanMsg(
+              getProductStockBlockMessage(p, before, 1) ??
+                `Não foi possível adicionar ${p.name}.`,
+            );
+          }
+        })();
       } else {
         setScanMsgOk(false);
         setScanMsg(`Não existe produto com o código ${codeLabel} no sistema.`);
       }
     },
-    [cart, products, bumpQty, customerId],
+    [cart, products, beginAddProduct, customerId],
   );
 
   const cartProductStub = useCallback(
@@ -503,6 +675,7 @@ export function useQuickSaleScreen() {
           ...(l.discountPercent > 0
             ? { discountPercent: l.discountPercent }
             : {}),
+          ...(l.priceTableId ? { priceTableId: l.priceTableId } : {}),
         })),
         clientMutationId,
       };
@@ -747,6 +920,9 @@ export function useQuickSaleScreen() {
     bumpQty,
     scheduleProductTap,
     cycleDiscount,
+    priceTablePicker,
+    confirmPriceTableOption,
+    closePriceTablePicker,
     cartProductStub,
     cartLineTotal,
     barcodeOpen,

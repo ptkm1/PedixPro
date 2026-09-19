@@ -58,6 +58,177 @@ function priceTableSpecificity(t: {
   return (t.customerId ? 1 : 0) + (t.sellerId ? 1 : 0) + (t.regionId ? 1 : 0);
 }
 
+function sortPriceTablesByCommercialRank<
+  T extends {
+    customerId: string | null;
+    sellerId: string | null;
+    regionId: string | null;
+    priority: number;
+    updatedAt: Date;
+  },
+>(tables: T[]): T[] {
+  return [...tables].sort((a, b) => {
+    const sp = priceTableSpecificity(b) - priceTableSpecificity(a);
+    if (sp !== 0) return sp;
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return b.updatedAt.getTime() - a.updatedAt.getTime();
+  });
+}
+
+/** Where Prisma das tabelas aplicáveis ao contexto comercial (cliente/vendedor/região + vigência). */
+export function applicablePriceTablesWhere(
+  organizationId: string,
+  ctx: Pick<PriceResolutionContext, "sellerId" | "customerId" | "regionId" | "at">,
+) {
+  const at = ctx.at ?? new Date();
+  const customerOk =
+    ctx.customerId != null
+      ? { OR: [{ customerId: null }, { customerId: ctx.customerId }] }
+      : { customerId: null };
+
+  const sellerOk =
+    ctx.sellerId != null
+      ? { OR: [{ sellerId: null }, { sellerId: ctx.sellerId }] }
+      : { sellerId: null };
+
+  const regionOk =
+    ctx.regionId != null
+      ? { OR: [{ regionId: null }, { regionId: ctx.regionId }] }
+      : { regionId: null };
+
+  return {
+    organizationId,
+    AND: [
+      { OR: [{ validFrom: null }, { validFrom: { lte: at } }] },
+      { OR: [{ validTo: null }, { validTo: { gte: at } }] },
+      customerOk,
+      sellerOk,
+      regionOk,
+    ],
+  };
+}
+
+export type ApplicablePriceTableRow = {
+  id: string;
+  name: string;
+  priority: number;
+  customerId: string | null;
+  sellerId: string | null;
+  regionId: string | null;
+  validFrom: Date | null;
+  validTo: Date | null;
+  updatedAt: Date;
+};
+
+/** Lista tabelas vigentes e no escopo comercial do contexto (sem exigir item de produto). */
+export async function listApplicablePriceTables(
+  organizationId: string,
+  ctx: Pick<PriceResolutionContext, "sellerId" | "customerId" | "regionId" | "at"> = {},
+): Promise<ApplicablePriceTableRow[]> {
+  const tables = await prisma.priceTable.findMany({
+    where: applicablePriceTablesWhere(organizationId, ctx),
+    select: {
+      id: true,
+      name: true,
+      priority: true,
+      customerId: true,
+      sellerId: true,
+      regionId: true,
+      validFrom: true,
+      validTo: true,
+      updatedAt: true,
+    },
+  });
+  return sortPriceTablesByCommercialRank(tables);
+}
+
+/**
+ * Garante que a tabela existe na org, está no escopo comercial e (se productId) tem preço do produto.
+ * Usado quando o cliente força `priceTableId` — não confiar só em membership da org.
+ */
+export async function assertPriceTableApplicableForSale(params: {
+  organizationId: string;
+  priceTableId: string;
+  productId?: string;
+  ctx: Pick<PriceResolutionContext, "sellerId" | "customerId" | "regionId" | "at">;
+}): Promise<void> {
+  const table = await prisma.priceTable.findFirst({
+    where: {
+      id: params.priceTableId,
+      ...applicablePriceTablesWhere(params.organizationId, params.ctx),
+    },
+    select: { id: true, name: true },
+  });
+  if (!table) {
+    throw new Error(
+      "Tabela de preço inválida ou fora do escopo comercial desta operação.",
+    );
+  }
+  if (params.productId) {
+    const item = await prisma.priceTableItem.findFirst({
+      where: { priceTableId: table.id, productId: params.productId },
+      select: { id: true },
+    });
+    if (!item) {
+      throw new Error(
+        `Tabela «${table.name}» não possui preço para o produto selecionado.`,
+      );
+    }
+  }
+}
+
+export type ProductPriceTableOption = {
+  priceTableId: string;
+  name: string;
+  priority: number;
+  catalogUnitPrice: number;
+  effectiveUnitPrice: number;
+  promotionLabel: string | null;
+};
+
+/**
+ * Tabelas aplicáveis à operação que têm preço válido para o produto (com promoções).
+ * Uma query de itens em lote — sem N+1 por tabela.
+ */
+export async function listProductPriceTableOptions(
+  organizationId: string,
+  productId: string,
+  ctx: PriceResolutionContext = {},
+): Promise<ProductPriceTableOption[]> {
+  const tables = await listApplicablePriceTables(organizationId, ctx);
+  if (!tables.length) return [];
+
+  const items = await prisma.priceTableItem.findMany({
+    where: {
+      productId,
+      priceTableId: { in: tables.map((t) => t.id) },
+    },
+    select: { priceTableId: true, price: true },
+  });
+  if (!items.length) return [];
+
+  const itemByTable = new Map(items.map((i) => [i.priceTableId, i]));
+  const out: ProductPriceTableOption[] = [];
+
+  for (const t of tables) {
+    if (!itemByTable.has(t.id)) continue;
+    const priced = await resolveEffectiveUnitPrice(organizationId, productId, {
+      ...ctx,
+      priceTableId: t.id,
+    });
+    out.push({
+      priceTableId: t.id,
+      name: t.name,
+      priority: t.priority,
+      catalogUnitPrice: priced.catalogUnitPrice,
+      effectiveUnitPrice: priced.effectiveUnitPrice,
+      promotionLabel: priced.promotionLabel,
+    });
+  }
+
+  return out;
+}
+
 /**
  * Catálogo por produto: escolhe a melhor `PriceTable` aplicável ao contexto (cliente > vendedor > região > global),
  * depois prioridade da tabela; senão `basePrice`.
@@ -72,11 +243,12 @@ export async function resolveCatalogUnitPrice(
   });
   if (!product) throw new Error("Produto não encontrado");
 
-  const at = ctx.at ?? new Date();
-
   if (ctx.priceTableId) {
     const table = await prisma.priceTable.findFirst({
-      where: { id: ctx.priceTableId, organizationId },
+      where: {
+        id: ctx.priceTableId,
+        ...applicablePriceTablesWhere(organizationId, ctx),
+      },
       select: { id: true },
     });
     if (table) {
@@ -85,38 +257,10 @@ export async function resolveCatalogUnitPrice(
       });
       if (forced) return decToNum(forced.price);
     }
+    // Tabela forçada inválida/sem item: cai no ranking automático (compat).
   }
 
-  const customerOk =
-    ctx.customerId != null
-      ? { OR: [{ customerId: null }, { customerId: ctx.customerId }] }
-      : { customerId: null };
-
-  const sellerOk =
-    ctx.sellerId != null ? { OR: [{ sellerId: null }, { sellerId: ctx.sellerId }] } : { sellerId: null };
-
-  const regionOk =
-    ctx.regionId != null ? { OR: [{ regionId: null }, { regionId: ctx.regionId }] } : { regionId: null };
-
-  const tables = await prisma.priceTable.findMany({
-    where: {
-      organizationId,
-      AND: [
-        { OR: [{ validFrom: null }, { validFrom: { lte: at } }] },
-        { OR: [{ validTo: null }, { validTo: { gte: at } }] },
-        customerOk,
-        sellerOk,
-        regionOk,
-      ],
-    },
-  });
-
-  tables.sort((a, b) => {
-    const sp = priceTableSpecificity(b) - priceTableSpecificity(a);
-    if (sp !== 0) return sp;
-    if (b.priority !== a.priority) return b.priority - a.priority;
-    return b.updatedAt.getTime() - a.updatedAt.getTime();
-  });
+  const tables = await listApplicablePriceTables(organizationId, ctx);
 
   if (tables.length) {
     const ids = tables.map((t) => t.id);
