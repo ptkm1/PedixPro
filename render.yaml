@@ -1,6 +1,11 @@
-# Render — serviço existente: Nexus-GO (api.pedixpro.com.br)
+# Render — Blueprint Pedix Pro
+# - Nexus-GO: produção (branch default do blueprint / main) → api.pedixpro.com.br
+# - Nexus-GO-QA: homologação (branch qa) → api-qa.pedixpro.com.br
 # Postgres: Neon (não use o banco gerenciado do Render).
 # Docs: https://render.com/docs/blueprint-spec
+#
+# QA: NUNCA colar DATABASE_URL / DIRECT_URL de produção no Nexus-GO-QA.
+# Secrets (sync: false) ficam só no dashboard Render — não no git.
 services:
   - type: web
     name: Nexus-GO
@@ -77,4 +82,108 @@ services:
       - key: R2_BUCKET
         sync: false
       - key: R2_PUBLIC_BASE_URL
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Homologação (QA) — branch Git `qa`
+  # Patrick: criar/clonar serviço no dashboard (ou sync Blueprint) e preencher
+  # sync:false com Neon branch `qa` + JWT/Asaas sandbox ≠ prod.
+  # Domínio sugerido: api-qa.pedixpro.com.br
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: Nexus-GO-QA
+    runtime: node
+    region: oregon
+    plan: starter
+    branch: qa
+    rootDir: .
+    buildCommand: >-
+      corepack enable &&
+      corepack prepare pnpm@10.22.0 --activate &&
+      pnpm install --frozen-lockfile &&
+      pnpm build:shared &&
+      pnpm exec prisma generate --config apps/api/prisma.config.ts &&
+      pnpm --filter @pedidos/api build
+    preDeployCommand: bash scripts/prisma-migrate-deploy.sh
+    startCommand: API_HOST=0.0.0.0 API_PORT=$PORT node apps/api/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      # OBRIGATÓRIO: Neon branch permanente `qa` (pooled). NÃO usar endpoint de prod.
+      - key: DATABASE_URL
+        sync: false
+      # OBRIGATÓRIO: mesma branch Neon `qa`, host SEM -pooler (migrate).
+      - key: DIRECT_URL
+        sync: false
+      # Novos secrets ≠ produção
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: WEB_PUBLIC_URL
+        value: https://app-qa.pedixpro.com.br
+      - key: WEB_APP_ORIGIN
+        value: https://app-qa.pedixpro.com.br
+      - key: SITE_PUBLIC_URL
+        value: https://qa.pedixpro.com.br
+      - key: PEDIXPRO_APP_URL
+        value: https://app-qa.pedixpro.com.br
+      - key: PEDIXPRO_LANDING_URL
+        value: https://qa.pedixpro.com.br
+      - key: PAYMENT_GATEWAY
+        value: asaas
+      - key: ASAAS_ENVIRONMENT
+        value: sandbox
+      - key: ASAAS_BASE_URL
+        value: https://api-sandbox.asaas.com/v3
+      - key: ASAAS_CHECKOUT_URL_PREFIX
+        value: https://sandbox.asaas.com/checkoutSession/show
+      # Chave e token sandbox (≠ live/prod) — dashboard only
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_WEBHOOK_TOKEN
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: PedixPro QA <noreply@pedixpro.com.br>
+      - key: WEB_PUSH_SUBJECT
+        value: mailto:suporte@pedixpro.com.br
+      # Crons off no MVP QA (Neon Free / scale-to-zero)
+      - key: STOCK_EXPIRY_CRON
+        value: "0"
+      - key: FISCAL_TRANSMIT_CRON
+        value: "0"
+      - key: STOCK_EXPIRY_CRON_TZ
+        value: America/Sao_Paulo
+      - key: AI_INDICATORS_ENABLED
+        value: "false"
+      - key: GOOGLE_ROUTES_ENABLED
+        value: "false"
+      - key: CNPJ_PROVIDER
+        value: brasilapi
+      # R2 QA opcional (bucket pedixpro-product-images-qa) — omitir = upload falha controlada
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_PUBLIC_BASE_URL
+        sync: false
+      # Opcionais se testar jobs / NF-e / push (gerar valores ≠ prod)
+      - key: CRON_SECRET
+        sync: false
+      - key: FISCAL_ENCRYPTION_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_PUBLIC_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_PRIVATE_KEY
         sync: false
