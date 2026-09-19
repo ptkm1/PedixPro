@@ -25,7 +25,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "surface-card relative overflow-hidden p-5 transition-all",
+        "surface-card-glass relative overflow-hidden p-5 transition-all",
         onClick && "cursor-pointer card-hover",
         className,
       )}

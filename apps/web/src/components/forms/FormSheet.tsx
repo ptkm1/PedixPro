@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
@@ -40,7 +40,7 @@ export function FormSheet({
       <SheetContent
         side="bottom"
         className={cn(
-          "flex max-h-[90vh] w-full flex-col gap-0 rounded-t-sm p-0",
+          "glass !bg-[color:var(--glass-fill)] flex max-h-[90vh] w-full flex-col gap-0 rounded-t-2xl border-[color:var(--glass-border)] p-0",
           contentClassName,
         )}
       >

@@ -1,23 +1,23 @@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 import { stageBadgeClass } from "@/lib/order-kanban";
 import { formatOrderCode } from "@/lib/order-code";
 import { cn } from "@/lib/utils";
 import {
-  formatRelativeSaleDate,
-  formatSaleItemCount,
-  orderStatusLabel,
-  paymentConditionLabel,
-  situationCodeFromOrderStatus,
-  type OrderStatus,
+    formatRelativeSaleDate,
+    formatSaleItemCount,
+    orderStatusLabel,
+    paymentConditionLabel,
+    situationCodeFromOrderStatus,
+    type OrderStatus,
 } from "@pedidos/shared";
 import { Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -119,7 +119,7 @@ export function RecentSalesList({
   const isRefetching = isFetching && !isLoading;
 
   return (
-    <section className="surface-card relative mt-6 overflow-hidden">
+    <section className="surface-card-glass relative mt-6 overflow-hidden">
       <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-4 sm:px-6">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-foreground">

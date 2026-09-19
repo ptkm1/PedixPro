@@ -18,7 +18,7 @@ export function HomeSlot({
   return (
     <div
       className={cn(
-        "flex flex-col rounded-xl border border-border bg-card shadow-sm",
+        "surface-card-glass flex flex-col",
         minHeightClassName,
         className,
       )}

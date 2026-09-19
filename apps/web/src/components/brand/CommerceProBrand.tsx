@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 import {
-  APP_BRAND_PRIMARY,
-  PEDIX_PRO_ICON_ASPECT,
-  PEDIX_PRO_ICON_PATHS,
-  PEDIX_PRO_ICON_VIEWBOX,
+    APP_BRAND_PRIMARY,
+    PEDIX_PRO_ICON_ASPECT,
+    PEDIX_PRO_ICON_PATHS,
+    PEDIX_PRO_ICON_VIEWBOX,
 } from "@pedidos/shared";
 
 /** Escala do P dentro do squircle (onBrand) — padding ~16% por lado. */
@@ -23,7 +23,6 @@ export function CommerceProIcon({
   className,
   onBrand = false,
 }: IconProps) {
-  const fill = onBrand ? "#FFFFFF" : APP_BRAND_PRIMARY;
   const width = size;
   const height = size * PEDIX_PRO_ICON_ASPECT;
 
@@ -34,7 +33,11 @@ export function CommerceProIcon({
       viewBox={PEDIX_PRO_ICON_VIEWBOX}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={cn("shrink-0", className)}
+      className={cn(
+        "shrink-0",
+        !onBrand && "text-[color:var(--brand-logo)]",
+        className,
+      )}
       aria-hidden
     >
       {onBrand ? (
@@ -57,7 +60,7 @@ export function CommerceProIcon({
         </>
       ) : (
         PEDIX_PRO_ICON_PATHS.map((d) => (
-          <path key={d.slice(0, 24)} d={d} fill={fill} />
+          <path key={d.slice(0, 24)} d={d} fill="currentColor" />
         ))
       )}
     </svg>
@@ -75,7 +78,7 @@ type WordmarkProps = {
 export function CommerceProWordmark({
   className,
   iconSize = 40,
-  onDark = false,
+  onDark: _onDark = false,
   showIcon = true,
 }: WordmarkProps) {
   const textStyle = {
@@ -88,16 +91,13 @@ export function CommerceProWordmark({
       {showIcon ? <CommerceProIcon size={iconSize} /> : null}
       <div className="leading-none">
         <p
-          className={cn(
-            "font-bold tracking-tight",
-            onDark ? "text-primary" : "text-foreground",
-          )}
+          className="font-bold tracking-tight text-[color:var(--brand-logo)]"
           style={textStyle}
         >
           Pedix
         </p>
         <p
-          className="mt-1 font-bold tracking-tight text-primary"
+          className="mt-1 font-bold tracking-tight text-[color:var(--brand-logo)]"
           style={textStyle}
         >
           Pro

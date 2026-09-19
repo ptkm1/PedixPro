@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { PublicSiteHeader } from "./PublicSiteHeader";
+import { useTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 type Props = {
   variant: "login" | "register";
@@ -7,9 +9,15 @@ type Props = {
 };
 
 export function PublicAuthLayout({ variant, children }: Props) {
+  const { glassEnabled } = useTheme();
+
   return (
-    <div className="relative flex min-h-screen flex-col bg-background">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.72_0.19_160/0.15),transparent_50%)]" />
+    <div
+      className={cn(
+        "relative flex min-h-dvh flex-col",
+        glassEnabled ? "bg-transparent" : "bg-background",
+      )}
+    >
       <PublicSiteHeader variant={variant} />
       {children}
     </div>

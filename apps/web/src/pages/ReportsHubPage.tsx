@@ -1,14 +1,14 @@
 import { useAuth } from "@/auth/AuthContext";
 import { canRead, planHasFeature, type PlanFeature } from "@pedidos/shared";
 import {
-  BarChart3,
-  ClipboardList,
-  Lightbulb,
-  Package,
-  Percent,
-  Receipt,
-  Users,
-  type LucideIcon,
+    BarChart3,
+    ClipboardList,
+    Lightbulb,
+    Package,
+    Percent,
+    Receipt,
+    Users,
+    type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -273,7 +273,7 @@ export function ReportsHubPage() {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="group surface-card flex gap-3 p-4 transition hover:border-primary/40 hover:shadow-md"
+                  className="group surface-card-glass flex gap-3 p-4 transition hover:border-primary/40 hover:shadow-md"
                 >
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition group-hover:bg-primary/10 group-hover:text-primary">
                     <ClipboardList className="h-4 w-4" />

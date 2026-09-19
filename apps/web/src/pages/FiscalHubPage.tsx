@@ -61,7 +61,7 @@ export function FiscalHubPage() {
             <Link
               key={c.to}
               to={c.to}
-              className="group surface-card flex gap-4 p-5 transition hover:border-primary/40 hover:shadow-md"
+              className="group surface-card-glass flex gap-4 p-5 transition hover:border-primary/40 hover:shadow-md"
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                 <Icon className="h-6 w-6" />
