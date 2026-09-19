@@ -27,6 +27,7 @@ import {
 } from "./product-stock.js";
 import { listSellerCatalogProductIds } from "./seller-product-catalog.js";
 import { resolveEstablishmentForOrder, EstablishmentError } from "./establishments.js";
+import { assertPriceTableApplicableForSale } from "./price-resolve.js";
 
 const createdOrderInclude = {
   items: true,
@@ -156,7 +157,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
 
   const customer = await prisma.customer.findFirst({
     where: { id: params.customerId, organizationId: params.organizationId },
-    select: { id: true },
+    select: { id: true, regionId: true },
   });
   if (!customer) throw new SaleCreateError("Cliente inválido", 400);
 
@@ -173,14 +174,22 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
   }
 
   if (params.priceTableId) {
-    const table = await prisma.priceTable.findFirst({
-      where: {
-        id: params.priceTableId,
+    try {
+      await assertPriceTableApplicableForSale({
         organizationId: params.organizationId,
-      },
-      select: { id: true },
-    });
-    if (!table) throw new SaleCreateError("Tabela de preço inválida", 400);
+        priceTableId: params.priceTableId,
+        ctx: {
+          sellerId: params.sellerId,
+          customerId: params.customerId,
+          regionId: customer.regionId,
+        },
+      });
+    } catch (e) {
+      throw new SaleCreateError(
+        e instanceof Error ? e.message : "Tabela de preço inválida",
+        400,
+      );
+    }
   }
 
   const sale = await computeSaleOrder({

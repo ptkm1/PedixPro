@@ -750,6 +750,11 @@ export default function QuickSaleScreen() {
                               {" · "}Subtotal R${" "}
                               {fmtMoney(s.cartLineTotal(line))}
                             </Text>
+                            {line.priceTableName ? (
+                              <Text style={styles.cartMeta} numberOfLines={1}>
+                                Tabela: {line.priceTableName}
+                              </Text>
+                            ) : null}
                           </View>
                           <View style={styles.cartActions}>
                             <View style={styles.qtyRow}>
@@ -782,12 +787,24 @@ export default function QuickSaleScreen() {
                               </Pressable>
                             </View>
                             <Pressable
-                              style={styles.discBtn}
+                              style={[
+                                styles.discBtn,
+                                line.maxSellerDiscountPercent <= 0 &&
+                                  styles.discBtnDis,
+                              ]}
+                              disabled={line.maxSellerDiscountPercent <= 0}
                               onPress={() => s.cycleDiscount(line.productId)}
                             >
                               <Text style={styles.discBtnTxt}>
-                                Desc. {line.discountPercent}%
+                                {line.maxSellerDiscountPercent <= 0
+                                  ? "Sem desc."
+                                  : `Desc. ${line.discountPercent}%`}
                               </Text>
+                              {line.maxSellerDiscountPercent > 0 ? (
+                                <Text style={styles.discBtnHint}>
+                                  Máx. {line.maxSellerDiscountPercent}%
+                                </Text>
+                              ) : null}
                             </Pressable>
                           </View>
                         </View>
@@ -912,6 +929,61 @@ export default function QuickSaleScreen() {
                 );
               }}
             />
+          </SafeScreen>
+        </Modal>
+
+        <Modal
+          visible={Boolean(s.priceTablePicker)}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => s.closePriceTablePicker()}
+        >
+          <SafeScreen>
+            <MobileHeader
+              title="Tabela de preço"
+              showBack
+              onBack={() => s.closePriceTablePicker()}
+            />
+            {s.priceTablePicker?.product ? (
+              <Text style={styles.priceTableProduct} numberOfLines={2}>
+                {s.priceTablePicker.product.name}
+              </Text>
+            ) : null}
+            {s.priceTablePicker?.loading ? (
+              <View style={styles.priceTableLoading}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.warn}>Carregando tabelas…</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={s.priceTablePicker?.options ?? []}
+                keyExtractor={(item) => item.priceTableId}
+                contentContainerStyle={{ padding: 16, gap: 8 }}
+                ListEmptyComponent={
+                  <Text style={styles.warn}>
+                    Nenhuma tabela disponível para este produto nesta operação.
+                  </Text>
+                }
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={[styles.paymentRow, { flexDirection: "row", alignItems: "center" }]}
+                    onPress={() => s.confirmPriceTableOption(item)}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.paymentRowTxt}>{item.name}</Text>
+                      {item.promotionLabel ? (
+                        <Text style={styles.priceTablePromo}>
+                          {item.promotionLabel}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.priceTablePrice}>
+                      R$ {fmtMoney(item.effectiveUnitPrice)}
+                    </Text>
+                  </Pressable>
+                )}
+              />
+            )}
           </SafeScreen>
         </Modal>
       </KeyboardAvoidingScreen>

@@ -88,7 +88,7 @@ export function useOfflineEditScreen(localId: string) {
   const productById = useMemo(() => {
     const map = new Map<
       string,
-      { name: string; unitPrice: number }
+      { name: string; unitPrice: number; maxDiscount: number }
     >();
     for (const p of products ?? []) {
       const unit =
@@ -97,7 +97,14 @@ export function useOfflineEditScreen(localId: string) {
           : typeof p.catalogUnitPrice === "number"
             ? p.catalogUnitPrice
             : Number(p.basePrice) || 0;
-      map.set(p.id, { name: p.name, unitPrice: unit });
+      const maxFromEff = Number(p.maxSellerDiscountPercentEffective);
+      const maxFromProd = Number(p.maxSellerDiscountPercent);
+      const maxDiscount = Number.isFinite(maxFromEff)
+        ? Math.min(100, Math.max(0, maxFromEff))
+        : Number.isFinite(maxFromProd)
+          ? Math.min(100, Math.max(0, maxFromProd))
+          : 0;
+      map.set(p.id, { name: p.name, unitPrice: unit, maxDiscount });
     }
     return map;
   }, [products]);
@@ -230,13 +237,18 @@ export function useOfflineEditScreen(localId: string) {
     }
     setSaving(true);
     try {
-      const items = lines.map((l) => ({
-        productId: l.productId,
-        quantity: l.quantity,
-        ...(l.discountPercent > 0
-          ? { discountPercent: l.discountPercent }
-          : {}),
-      }));
+      const items = lines.map((l) => {
+        const prev = basePayload.items.find((i) => i.productId === l.productId);
+        const maxDisc = productById.get(l.productId)?.maxDiscount ?? 0;
+        const rawDisc = Math.min(100, Math.max(0, l.discountPercent));
+        const disc = Math.min(rawDisc, maxDisc);
+        return {
+          productId: l.productId,
+          quantity: l.quantity,
+          ...(disc > 0 ? { discountPercent: disc } : {}),
+          ...(prev?.priceTableId ? { priceTableId: prev.priceTableId } : {}),
+        };
+      });
       const lineSummaries = lines.map((l) => {
         const disc = Math.min(100, Math.max(0, l.discountPercent)) / 100;
         const lineTotal = l.unitPrice * l.quantity * (1 - disc);
@@ -269,6 +281,7 @@ export function useOfflineEditScreen(localId: string) {
       setSaving(false);
     }
   }, [
+    productById,
     alert,
     basePayload,
     lines,

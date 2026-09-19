@@ -32,7 +32,7 @@ import {
     sendOrderPdf80mmReply,
     sendOrderPdfReply,
 } from "../services/order-pdf-load.js";
-import { resolveEffectiveUnitPrice } from "../services/price-resolve.js";
+import { resolveEffectiveUnitPrice, listProductPriceTableOptions } from "../services/price-resolve.js";
 import { getProductStockLevels } from "../services/product-stock.js";
 import { buildSalesByCustomerPdf } from "../services/reports/sales-by-customer-pdf.js";
 import { buildSalesBySupplierPdf } from "../services/reports/sales-by-supplier-pdf.js";
@@ -112,6 +112,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         customerRegistrationMode: true,
         sellerCanEditQueuedSales: true,
         autoInactivateCustomersAfterMonths: true,
+        defaultMaxSellerDiscountPercent: true,
       },
     });
     if (!org)
@@ -123,6 +124,9 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       sellerCanEditQueuedSales: org.sellerCanEditQueuedSales,
       autoInactivateCustomersAfterMonths:
         org.autoInactivateCustomersAfterMonths,
+      defaultMaxSellerDiscountPercent: decToNum(
+        org.defaultMaxSellerDiscountPercent,
+      ),
     };
   });
 
@@ -441,6 +445,8 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
               quantity: z.number().int().positive(),
               /** Desconto extra do vendedor sobre o preço já promocional (limitado por produto/org). */
               discountPercent: z.number().min(0).max(100).optional(),
+              /** Tabela escolhida no lançamento do item (escopo comercial validado no servidor). */
+              priceTableId: z.string().min(1).optional(),
             }),
           )
           .min(1),
@@ -513,6 +519,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           productId: i.productId,
           quantity: i.quantity,
           discountPercent: i.discountPercent,
+          priceTableId: i.priceTableId,
         })),
         notes: body.data.notes,
         status: body.data.status,
@@ -689,6 +696,142 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       body.data.productIds,
     );
     return { products };
+  });
+
+  /**
+   * Tabelas de preço válidas para o produto na operação (cliente/vendedor/região),
+   * com preço efetivo — usado no sheet de escolha ao lançar item.
+   */
+  app.get("/products/:id/price-options", async (req, reply) => {
+    const auth = req.auth!;
+    const { id: productId } = idParam.parse(req.params);
+    const q = z
+      .object({ customerId: z.string().min(1) })
+      .safeParse(req.query);
+    if (!q.success) {
+      return sendZodError(reply, q.error, req);
+    }
+
+    const sellerId =
+      auth.role === "ADMIN" ? (auth.sellerId ?? null) : auth.sellerId!;
+    if (auth.role !== "ADMIN" && !sellerId) {
+      return reply.status(403).send({ error: "Vendedor não vinculado" });
+    }
+
+    const catalogIds =
+      auth.role === "ADMIN"
+        ? (
+            await prisma.product.findMany({
+              where: { organizationId: auth.organizationId },
+              select: { id: true },
+            })
+          ).map((p) => p.id)
+        : await listSellerCatalogProductIds(
+            auth.organizationId,
+            auth.sellerId!,
+          );
+    if (!catalogIds.includes(productId)) {
+      return reply.status(404).send({ error: "Produto não encontrado" });
+    }
+
+    let regionId: string | null = null;
+    if (auth.role === "ADMIN") {
+      const cust = await prisma.customer.findFirst({
+        where: {
+          id: q.data.customerId,
+          organizationId: auth.organizationId,
+        },
+        select: { regionId: true },
+      });
+      if (!cust) return reply.status(400).send({ error: "Cliente inválido" });
+      regionId = cust.regionId ?? null;
+    } else {
+      const showUnassigned = await getSellerShowUnassignedCustomers(
+        auth.organizationId,
+      );
+      const cust = await prisma.customer.findFirst({
+        where: {
+          id: q.data.customerId,
+          ...sellerCustomerSellableWhere(
+            auth.organizationId,
+            auth.sellerId!,
+            showUnassigned,
+          ),
+        },
+        select: { regionId: true },
+      });
+      if (!cust) return reply.status(400).send({ error: "Cliente inválido" });
+      regionId = cust.regionId ?? null;
+    }
+
+    const options = await listProductPriceTableOptions(
+      auth.organizationId,
+      productId,
+      {
+        sellerId,
+        customerId: q.data.customerId,
+        regionId,
+        quantity: 1,
+      },
+    );
+    return { options };
+  });
+
+  /**
+   * Snapshot de tabelas + itens para sync offline (escopo do vendedor).
+   * O client filtra por cliente/região com a mesma regra comercial.
+   */
+  app.get("/price-tables", async (req) => {
+    const auth = req.auth!;
+    const sellerId =
+      auth.role === "ADMIN" ? (auth.sellerId ?? null) : auth.sellerId!;
+    const at = new Date();
+    const sellerOk =
+      sellerId != null
+        ? { OR: [{ sellerId: null }, { sellerId }] }
+        : { sellerId: null };
+
+    const tables = await prisma.priceTable.findMany({
+      where: {
+        organizationId: auth.organizationId,
+        AND: [
+          { OR: [{ validFrom: null }, { validFrom: { lte: at } }] },
+          { OR: [{ validTo: null }, { validTo: { gte: at } }] },
+          sellerOk,
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        priority: true,
+        customerId: true,
+        sellerId: true,
+        regionId: true,
+        validFrom: true,
+        validTo: true,
+        updatedAt: true,
+        items: {
+          select: { productId: true, price: true },
+        },
+      },
+      orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+    });
+
+    return tables.map((t) => ({
+      id: t.id,
+      name: t.name,
+      priority: t.priority,
+      customerId: t.customerId,
+      sellerId: t.sellerId,
+      regionId: t.regionId,
+      validFrom: t.validFrom?.toISOString() ?? null,
+      validTo: t.validTo?.toISOString() ?? null,
+      updatedAt: t.updatedAt.toISOString(),
+      items: t.items.map((i) => ({
+        productId: i.productId,
+        price: decToNum(i.price),
+      })),
+    }));
   });
 
   app.get("/customers", async (req) => {

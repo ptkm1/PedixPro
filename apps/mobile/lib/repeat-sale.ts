@@ -100,7 +100,7 @@ export function buildCartFromRepeatSale(
         ? unit
         : (existing?.effectiveUnitPrice ?? 0),
       discountPercent: 0,
-      maxSellerDiscountPercent: existing?.maxSellerDiscountPercent ?? 50,
+      maxSellerDiscountPercent: existing?.maxSellerDiscountPercent ?? 0,
     };
   }
   return cart;
