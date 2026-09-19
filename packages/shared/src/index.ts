@@ -429,6 +429,24 @@ export type {
   PlanLimits,
 } from "./plans.js";
 export {
+  CATALOG_PRICE_DISPLAY_MODE_LABELS,
+  CATALOG_PRICE_DISPLAY_MODES,
+  CATALOG_PRICE_INLINE_MAX,
+  DEFAULT_CATALOG_PRICE_DISPLAY_MODE,
+  filterValidCatalogPrices,
+  isCatalogPriceDisplayMode,
+  isValidCatalogPrice,
+  parseCatalogPriceDisplayMode,
+  pickCatalogDisplayPrice,
+  resolveCatalogPriceDisplay,
+  shouldCollapseCatalogPrices,
+} from "./catalog-price-display.js";
+export type {
+  CatalogPriceDisplayKind,
+  CatalogPriceDisplayMode,
+  CatalogProductPrice,
+} from "./catalog-price-display.js";
+export {
   formatInsufficientStockMessage,
   formatOutOfStockMessage,
   formatProductPriceWithUnit,

@@ -104,6 +104,7 @@ import { EstablishmentsSettingsPage } from "./pages/settings/EstablishmentsSetti
 import { HomePanelSettingsPage } from "./pages/settings/HomePanelSettingsPage";
 import { OrderFlowSettingsPage } from "./pages/settings/OrderFlowSettingsPage";
 import { OrderSyncSettingsPage } from "./pages/settings/OrderSyncSettingsPage";
+import { CatalogPriceDisplaySettingsPage } from "./pages/settings/CatalogPriceDisplaySettingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -433,6 +434,10 @@ function AppRoutes() {
             <Route
               path="configuracoes/pedidos-sincronizacao"
               element={<OrderSyncSettingsPage />}
+            />
+            <Route
+              path="configuracoes/catalogo-precos"
+              element={<CatalogPriceDisplaySettingsPage />}
             />
             <Route
               path="configuracoes/fluxo-pedido"

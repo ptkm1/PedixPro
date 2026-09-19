@@ -528,6 +528,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         where: { id: auth.organizationId },
         select: {
           orderSyncMode: true,
+          catalogPriceDisplayMode: true,
           sellerShowUnassignedCustomers: true,
           customerRegistrationMode: true,
           sellerCanEditQueuedSales: true,
@@ -540,6 +541,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const homeIndicatorLimit = homeIndicatorLimitForPlan(sub.planId);
     return {
       orderSyncMode: org?.orderSyncMode ?? ("AUTO" as const),
+      catalogPriceDisplayMode:
+        org?.catalogPriceDisplayMode ?? ("LOWEST" as const),
       sellerShowUnassignedCustomers: org?.sellerShowUnassignedCustomers ?? true,
       customerRegistrationMode:
         org?.customerRegistrationMode ?? ("AUTO" as const),
@@ -562,6 +565,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const body = z
       .object({
         orderSyncMode: z.enum(["AUTO", "MANUAL"]).optional(),
+        catalogPriceDisplayMode: z
+          .enum(["ALL", "LOWEST", "HIGHEST"])
+          .optional(),
         sellerShowUnassignedCustomers: z.boolean().optional(),
         customerRegistrationMode: z
           .enum(["AUTO", "REQUIRE_APPROVAL"])
@@ -581,6 +587,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     if (
       body.data.orderSyncMode === undefined &&
+      body.data.catalogPriceDisplayMode === undefined &&
       body.data.sellerShowUnassignedCustomers === undefined &&
       body.data.customerRegistrationMode === undefined &&
       body.data.sellerCanEditQueuedSales === undefined &&
@@ -618,6 +625,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ...(body.data.orderSyncMode !== undefined
           ? { orderSyncMode: body.data.orderSyncMode }
           : {}),
+        ...(body.data.catalogPriceDisplayMode !== undefined
+          ? { catalogPriceDisplayMode: body.data.catalogPriceDisplayMode }
+          : {}),
         ...(body.data.sellerShowUnassignedCustomers !== undefined
           ? {
               sellerShowUnassignedCustomers:
@@ -644,6 +654,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
       select: {
         orderSyncMode: true,
+        catalogPriceDisplayMode: true,
         sellerShowUnassignedCustomers: true,
         customerRegistrationMode: true,
         sellerCanEditQueuedSales: true,
@@ -654,6 +665,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return {
       ok: true,
       orderSyncMode: updated.orderSyncMode,
+      catalogPriceDisplayMode: updated.catalogPriceDisplayMode,
       sellerShowUnassignedCustomers: updated.sellerShowUnassignedCustomers,
       customerRegistrationMode: updated.customerRegistrationMode,
       sellerCanEditQueuedSales: updated.sellerCanEditQueuedSales,
