@@ -17,9 +17,21 @@ import { apiFetch } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { formatOrderMoney } from "@/lib/order-kanban";
 import { cn } from "@/lib/utils";
+import {
+  DIRECT_SALE_OPTION_LABEL,
+  ORDER_SELLER_FILTER_DIRECT,
+} from "@pedidos/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+/** Sentinel no select: venda direta (API recebe null). */
+const SELLER_DIRECT = ORDER_SELLER_FILTER_DIRECT;
+
+function resolveApiSellerId(sellerId: string): string | null {
+  if (!sellerId || sellerId === SELLER_DIRECT) return null;
+  return sellerId;
+}
 
 type LookupSeller = { id: string; name: string };
 type LookupCustomer = {
@@ -193,7 +205,7 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
       (user?.sellerId && sellers.some((s) => s.id === user.sellerId)
         ? user.sellerId
         : "") ||
-      (sellers.length === 1 ? sellers[0].id : "");
+      (sellers.length === 1 ? sellers[0].id : SELLER_DIRECT);
     setSellerId((prev) => prev || preferredSeller);
     setPaymentConditionId((prev) => {
       if (prev) return prev;
@@ -212,25 +224,28 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
     });
   }, [open, paymentConditionId, applicablePriceTables]);
 
+  const apiSellerId = resolveApiSellerId(sellerId);
+
   const catalogQ = useQuery({
     queryKey: [
       "admin",
       "orders",
       "catalog",
       user?.organizationId,
-      sellerId,
+      apiSellerId ?? "direct",
       customerId || "",
       priceTableId || "",
     ],
     queryFn: () => {
-      const qs = new URLSearchParams({ sellerId });
+      const qs = new URLSearchParams();
+      if (apiSellerId) qs.set("sellerId", apiSellerId);
       if (customerId) qs.set("customerId", customerId);
       if (priceTableId) qs.set("priceTableId", priceTableId);
       return apiFetch<{ products: CatalogProduct[] }>(
         `/admin/orders/catalog?${qs.toString()}`,
       );
     },
-    enabled: open && Boolean(sellerId),
+    enabled: open,
   });
   const products = catalogQ.data?.products ?? [];
 
@@ -264,7 +279,7 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
       "orders",
       "preview",
       user?.organizationId,
-      sellerId,
+      apiSellerId ?? "direct",
       customerId,
       priceTableId,
       debouncedItems,
@@ -273,7 +288,7 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
       apiFetch<PreviewResponse>("/admin/orders/preview", {
         method: "POST",
         body: JSON.stringify({
-          sellerId,
+          sellerId: apiSellerId,
           customerId,
           priceTableId: priceTableId || undefined,
           items: debouncedItems,
@@ -281,14 +296,13 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
       }),
     enabled:
       open &&
-      Boolean(sellerId && customerId && debouncedItems.length > 0),
+      Boolean(customerId && debouncedItems.length > 0),
     retry: false,
   });
 
   const fieldErrors = useMemo(() => {
     if (!showValidation) return {} as Record<string, string>;
     const err: Record<string, string> = {};
-    if (!sellerId) err.sellerId = "Selecione o vendedor responsável.";
     if (!customerId) err.customerId = "Selecione o cliente.";
     if (!paymentConditionId) {
       err.paymentConditionId = "Selecione a condição de pagamento.";
@@ -302,7 +316,6 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
     return err;
   }, [
     showValidation,
-    sellerId,
     customerId,
     paymentConditionId,
     priceTableId,
@@ -333,7 +346,7 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
       apiFetch<CreatedOrder>("/admin/orders", {
         method: "POST",
         body: JSON.stringify({
-          sellerId,
+          sellerId: apiSellerId,
           customerId,
           paymentConditionId,
           priceTableId: priceTableId || undefined,
@@ -352,7 +365,6 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
   function submit(status: "DRAFT" | "CONFIRMED") {
     setShowValidation(true);
     if (
-      !sellerId ||
       !customerId ||
       !paymentConditionId ||
       (applicablePriceTables.length > 0 && !priceTableId) ||
@@ -479,24 +491,26 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
           />
         </FormField>
         <FormField
-          label="Vendedor"
+          label="Vendedor responsável"
           htmlFor="new-order-seller"
-          required
           error={fieldErrors.sellerId}
-          hint="Obrigatório. Se você for vendedor, já vem selecionado."
+          hint="Opcional. Sem seleção ou «Venda Direta» = sem comissão."
         >
           <AppSelect
             id="new-order-seller"
-            value={sellerId}
+            value={sellerId || SELLER_DIRECT}
             onValueChange={(id) => {
               setSellerId(id);
               setLines((prev) =>
                 prev.map((l) => ({ ...l, productId: "" })),
               );
             }}
-            placeholder="Selecione o vendedor"
+            placeholder="Venda Direta"
             invalid={Boolean(fieldErrors.sellerId)}
-            options={sellers.map((s) => ({ value: s.id, label: s.name }))}
+            options={[
+              { value: SELLER_DIRECT, label: DIRECT_SALE_OPTION_LABEL },
+              ...sellers.map((s) => ({ value: s.id, label: s.name })),
+            ]}
           />
         </FormField>
         <FormField

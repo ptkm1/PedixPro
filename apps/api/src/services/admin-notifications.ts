@@ -11,13 +11,17 @@ import { canWriteEffective } from "./role-permissions.js";
 type OrderNotifyPayload = {
   id: string;
   totalAmount: unknown;
-  sellerId?: string;
+  sellerId?: string | null;
   seller: {
     user: { name: string };
     managerUserId?: string | null;
-  };
+  } | null;
   customer: { name: string } | null;
 };
+
+function sellerDisplayName(order: OrderNotifyPayload): string {
+  return order.seller?.user.name?.trim() || "VENDA DIRETA";
+}
 
 async function notifyAdminsCreditPendingEmail(params: {
   adminEmails: string[];
@@ -28,7 +32,7 @@ async function notifyAdminsCreditPendingEmail(params: {
 
   const total = decToNum(params.order.totalAmount);
   const cust = params.order.customer?.name ?? "Cliente sem nome";
-  const seller = params.order.seller.user.name;
+  const seller = sellerDisplayName(params.order);
   const subject = "[PedixPro] Pedido aguardando aprovação de crédito";
   const webBase = (process.env.WEB_APP_ORIGIN ?? "").replace(/\/$/, "");
   const detailPath = `/pedidos/${params.order.id}`;
@@ -69,7 +73,7 @@ export async function notifyAdminsCreditPending(params: {
     select: { id: true, email: true },
   });
 
-  const managerId = params.order.seller.managerUserId ?? null;
+  const managerId = params.order.seller?.managerUserId ?? null;
   const userIds = [
     ...admins.map((a) => a.id),
     ...(managerId ? [managerId] : []),
@@ -79,7 +83,7 @@ export async function notifyAdminsCreditPending(params: {
 
   const total = decToNum(params.order.totalAmount);
   const cust = params.order.customer?.name ?? "Cliente sem nome";
-  const seller = params.order.seller.user.name;
+  const seller = sellerDisplayName(params.order);
   const title = "Pedido aguardando crédito";
   const body = `${seller} · ${cust} · R$ ${total.toFixed(2)} — aprove em Pedidos.`;
 
@@ -90,7 +94,7 @@ export async function notifyAdminsCreditPending(params: {
     type: "CREDIT_PENDING",
     data: {
       orderId: params.order.id,
-      sellerId: params.order.sellerId,
+      sellerId: params.order.sellerId ?? undefined,
       href: `/pedidos/${params.order.id}`,
     },
   });
@@ -111,13 +115,15 @@ export async function notifySaleConfirmed(params: {
   organizationId: string;
   order: OrderNotifyPayload;
 }): Promise<void> {
-  const sellerRow = await prisma.seller.findFirst({
-    where: {
-      id: params.order.sellerId,
-      organizationId: params.organizationId,
-    },
-    select: { managerUserId: true },
-  });
+  const sellerRow = params.order.sellerId
+    ? await prisma.seller.findFirst({
+        where: {
+          id: params.order.sellerId,
+          organizationId: params.organizationId,
+        },
+        select: { managerUserId: true },
+      })
+    : null;
 
   const admins = await prisma.user.findMany({
     where: { organizationId: params.organizationId, role: "ADMIN" },
@@ -127,7 +133,7 @@ export async function notifySaleConfirmed(params: {
   const userIds = [
     ...admins.map((a) => a.id),
     ...(sellerRow?.managerUserId ? [sellerRow.managerUserId] : []),
-    ...(params.order.seller.managerUserId
+    ...(params.order.seller?.managerUserId
       ? [params.order.seller.managerUserId]
       : []),
   ];
@@ -136,7 +142,7 @@ export async function notifySaleConfirmed(params: {
 
   const total = decToNum(params.order.totalAmount);
   const cust = params.order.customer?.name ?? "Cliente sem nome";
-  const seller = params.order.seller.user.name;
+  const seller = sellerDisplayName(params.order);
 
   await notifyUsers({
     userIds,
@@ -145,7 +151,7 @@ export async function notifySaleConfirmed(params: {
     type: "SALE_CONFIRMED",
     data: {
       orderId: params.order.id,
-      sellerId: params.order.sellerId,
+      sellerId: params.order.sellerId ?? undefined,
       href: `/pedidos/${params.order.id}`,
     },
   });

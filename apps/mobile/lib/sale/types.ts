@@ -1,3 +1,5 @@
+import type { CatalogProductPrice } from "@pedidos/shared";
+
 export type SaleProduct = {
   id: string;
   name: string;
@@ -7,6 +9,8 @@ export type SaleProduct = {
   basePrice: unknown;
   catalogUnitPrice?: number;
   effectiveUnitPrice?: number;
+  /** Preços por tabela para exibição no catálogo (só visualização). */
+  prices?: CatalogProductPrice[];
   promotionLabel?: string | null;
   featured?: boolean;
   hasActivePromotion?: boolean;
@@ -40,6 +44,7 @@ export type SaleCustomer = {
   tradeName?: string | null;
   city?: string | null;
   state?: string | null;
+  regionId?: string | null;
   approvalStatus?: "APPROVED" | "PENDING" | "REJECTED";
 };
 
@@ -74,6 +79,18 @@ export type CartLine = {
   promotionLabel?: string | null;
   discountPercent: number;
   maxSellerDiscountPercent: number;
+  /** Tabela escolhida no lançamento (null = auto-resolve / sem tabela). */
+  priceTableId?: string | null;
+  priceTableName?: string | null;
+};
+
+export type ProductPriceTableOption = {
+  priceTableId: string;
+  name: string;
+  priority: number;
+  catalogUnitPrice: number;
+  effectiveUnitPrice: number;
+  promotionLabel: string | null;
 };
 
 export type QuickSaleTab = "clientes" | "produtos" | "finalizar";

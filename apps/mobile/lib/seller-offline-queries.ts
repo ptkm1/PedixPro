@@ -1,4 +1,8 @@
 import type { CustomerRecord } from "@pedidos/shared";
+import {
+  parseCatalogPriceDisplayMode,
+  type CatalogPriceDisplayMode,
+} from "@pedidos/shared";
 import type { QueryClient } from "@tanstack/react-query";
 import type { CommissionDashboard } from "../hooks/screens/useCommissionScreen";
 import type { SellerOrderListItem } from "../hooks/screens/useSalesListScreen";
@@ -9,16 +13,19 @@ import {
   CACHE_META_ORG_SETTINGS,
   getCachedCustomerById,
   getCachedCustomers,
+  getCachedPriceTables,
   getCachedProducts,
   getCachedSales,
   getCacheMeta,
   markCacheSynced,
   replaceCachedCustomers,
+  replaceCachedPriceTables,
   replaceCachedProducts,
   replaceCachedSales,
   setCacheMeta,
   upsertCachedCustomer,
 } from "./offline-read-cache";
+import type { CachedPriceTable } from "./sale/price-table-options";
 import type { SaleProduct } from "./sale/types";
 
 export type OrderSyncMode = "AUTO" | "MANUAL";
@@ -26,9 +33,12 @@ export type CustomerRegistrationMode = "AUTO" | "REQUIRE_APPROVAL";
 
 export type SellerOrgSettings = {
   orderSyncMode: OrderSyncMode;
+  catalogPriceDisplayMode?: CatalogPriceDisplayMode;
   sellerShowUnassignedCustomers?: boolean;
   customerRegistrationMode?: CustomerRegistrationMode;
   sellerCanEditQueuedSales?: boolean;
+  /** Default da org quando o produto não tem máx. próprio (sync offline). */
+  defaultMaxSellerDiscountPercent?: number;
 };
 
 export const SELLER_PRODUCTS_BASE_KEY = ["seller", "products", ""] as const;
@@ -43,6 +53,7 @@ export const SELLER_ORG_SETTINGS_KEY = [
   "organization",
   "settings",
 ] as const;
+export const SELLER_PRICE_TABLES_KEY = ["seller", "price-tables"] as const;
 
 const STALE_MS = 10 * 60 * 1000;
 
@@ -74,11 +85,33 @@ function normalizeOrgSettings(raw: unknown): SellerOrgSettings {
       (raw as { sellerCanEditQueuedSales?: unknown })
         .sellerCanEditQueuedSales === true,
   );
+  const catalogPriceDisplayMode = parseCatalogPriceDisplayMode(
+    raw &&
+      typeof raw === "object"
+      ? (raw as { catalogPriceDisplayMode?: unknown }).catalogPriceDisplayMode
+      : undefined,
+  );
+  const defaultMaxRaw =
+    raw &&
+    typeof raw === "object" &&
+    (raw as { defaultMaxSellerDiscountPercent?: unknown })
+      .defaultMaxSellerDiscountPercent;
+  const defaultMax =
+    typeof defaultMaxRaw === "number" && Number.isFinite(defaultMaxRaw)
+      ? defaultMaxRaw
+      : typeof defaultMaxRaw === "string" &&
+          Number.isFinite(Number(defaultMaxRaw))
+        ? Number(defaultMaxRaw)
+        : undefined;
   return {
     orderSyncMode: mode,
+    catalogPriceDisplayMode,
     sellerShowUnassignedCustomers: showUnassigned,
     customerRegistrationMode: registrationMode,
     sellerCanEditQueuedSales: canEditQueued,
+    ...(defaultMax != null
+      ? { defaultMaxSellerDiscountPercent: defaultMax }
+      : {}),
   };
 }
 
@@ -104,6 +137,17 @@ export async function fetchSellerProductsBase(): Promise<SaleProduct[]> {
       return rows.length > 0 ? rows : null;
     },
     writeCache: (data) => replaceCachedProducts(data),
+  });
+}
+
+export async function fetchSellerPriceTables(): Promise<CachedPriceTable[]> {
+  return fetchWithOfflineCache({
+    url: "/seller/price-tables",
+    readCache: async () => {
+      const rows = await getCachedPriceTables<CachedPriceTable>();
+      return rows && rows.length > 0 ? rows : null;
+    },
+    writeCache: (data) => replaceCachedPriceTables(data),
   });
 }
 
@@ -156,13 +200,14 @@ export async function fetchSellerCommissionDashboard(): Promise<CommissionDashbo
 
 /** Prefetch + hydrate React Query + SQLite. Falhas não propagam. */
 export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
-  const [products, customers, sales, commission, orgSettings] =
+  const [products, customers, sales, commission, orgSettings, priceTables] =
     await Promise.all([
       fetchSellerProductsBase().catch(() => null),
       fetchSellerCustomers().catch(() => null),
       fetchSellerSales().catch(() => null),
       fetchSellerCommissionDashboard().catch(() => null),
       fetchSellerOrgSettings().catch(() => null),
+      fetchSellerPriceTables().catch(() => null),
     ]);
 
   if (products) qc.setQueryData(SELLER_PRODUCTS_BASE_KEY, products);
@@ -175,14 +220,23 @@ export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
   if (sales) qc.setQueryData(SELLER_SALES_KEY, sales);
   if (commission) qc.setQueryData(SELLER_COMMISSION_KEY, commission);
   if (orgSettings) qc.setQueryData(SELLER_ORG_SETTINGS_KEY, orgSettings);
+  if (priceTables) qc.setQueryData(SELLER_PRICE_TABLES_KEY, priceTables);
 
-  if (products || customers || sales || commission || orgSettings) {
+  if (
+    products ||
+    customers ||
+    sales ||
+    commission ||
+    orgSettings ||
+    priceTables
+  ) {
     const n =
       (products?.length ?? 0) +
       (customers?.length ?? 0) +
       (sales?.length ?? 0) +
       (commission ? 1 : 0) +
-      (orgSettings ? 1 : 0);
+      (orgSettings ? 1 : 0) +
+      (priceTables?.length ?? 0);
     await markCacheSynced(n).catch(() => undefined);
     notifyOfflineOutboxChanged();
   }

@@ -140,9 +140,12 @@ import {
 } from "../services/order-pricing.js";
 import {
     createSaleOrder,
+    orgAllowedProductIds,
     replySaleCreateError,
     sellerAllowedProductIds,
 } from "../services/create-sale-order.js";
+import { reassignOrderSeller } from "../services/reassign-order-seller.js";
+import { applyOrderSellerFilter } from "../util/order-seller-filter.js";
 import { checkCustomer, evaluateOrderCredit } from "../services/credit.js";
 import { bankingAdminRoutes } from "./banking-admin.js";
 import { boletosAdminRoutes } from "./boletos-admin.js";
@@ -528,6 +531,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         where: { id: auth.organizationId },
         select: {
           orderSyncMode: true,
+          catalogPriceDisplayMode: true,
           sellerShowUnassignedCustomers: true,
           customerRegistrationMode: true,
           sellerCanEditQueuedSales: true,
@@ -540,6 +544,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const homeIndicatorLimit = homeIndicatorLimitForPlan(sub.planId);
     return {
       orderSyncMode: org?.orderSyncMode ?? ("AUTO" as const),
+      catalogPriceDisplayMode:
+        org?.catalogPriceDisplayMode ?? ("LOWEST" as const),
       sellerShowUnassignedCustomers: org?.sellerShowUnassignedCustomers ?? true,
       customerRegistrationMode:
         org?.customerRegistrationMode ?? ("AUTO" as const),
@@ -562,6 +568,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const body = z
       .object({
         orderSyncMode: z.enum(["AUTO", "MANUAL"]).optional(),
+        catalogPriceDisplayMode: z
+          .enum(["ALL", "LOWEST", "HIGHEST"])
+          .optional(),
         sellerShowUnassignedCustomers: z.boolean().optional(),
         customerRegistrationMode: z
           .enum(["AUTO", "REQUIRE_APPROVAL"])
@@ -581,6 +590,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     if (
       body.data.orderSyncMode === undefined &&
+      body.data.catalogPriceDisplayMode === undefined &&
       body.data.sellerShowUnassignedCustomers === undefined &&
       body.data.customerRegistrationMode === undefined &&
       body.data.sellerCanEditQueuedSales === undefined &&
@@ -618,6 +628,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ...(body.data.orderSyncMode !== undefined
           ? { orderSyncMode: body.data.orderSyncMode }
           : {}),
+        ...(body.data.catalogPriceDisplayMode !== undefined
+          ? { catalogPriceDisplayMode: body.data.catalogPriceDisplayMode }
+          : {}),
         ...(body.data.sellerShowUnassignedCustomers !== undefined
           ? {
               sellerShowUnassignedCustomers:
@@ -644,6 +657,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
       select: {
         orderSyncMode: true,
+        catalogPriceDisplayMode: true,
         sellerShowUnassignedCustomers: true,
         customerRegistrationMode: true,
         sellerCanEditQueuedSales: true,
@@ -654,6 +668,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return {
       ok: true,
       orderSyncMode: updated.orderSyncMode,
+      catalogPriceDisplayMode: updated.catalogPriceDisplayMode,
       sellerShowUnassignedCustomers: updated.sellerShowUnassignedCustomers,
       customerRegistrationMode: updated.customerRegistrationMode,
       sellerCanEditQueuedSales: updated.sellerCanEditQueuedSales,
@@ -5584,7 +5599,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       ...orderScopeWhere(auth),
     };
     if (q.success) {
-      if (q.data.sellerId) where.sellerId = q.data.sellerId;
+      if (q.data.sellerId) applyOrderSellerFilter(where, q.data.sellerId);
       if (q.data.status) where.status = q.data.status as OrderStatus;
       if (q.data.establishmentId) where.establishmentId = q.data.establishmentId;
       if (q.data.situationId) where.situationId = q.data.situationId;
@@ -5646,6 +5661,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       orderBy: { createdAt: "desc" },
       include: {
         seller: { include: { user: { select: { name: true, email: true } } } },
+        createdByUser: { select: { id: true, name: true, email: true } },
         customer: true,
         establishment: {
           select: {
@@ -5749,18 +5765,21 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const auth = req.auth!;
     const q = z
       .object({
-        sellerId: z.string().min(1),
+        sellerId: z.string().min(1).optional(),
         customerId: z.string().min(1).optional(),
         priceTableId: z.string().min(1).optional(),
       })
       .safeParse(req.query);
     if (!q.success) return sendZodError(reply, q.error, req);
 
-    const seller = await prisma.seller.findFirst({
-      where: { id: q.data.sellerId, ...sellerScopeWhere(auth) },
-      select: { id: true },
-    });
-    if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    const sellerId = q.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth) },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
 
     let regionId: string | null = null;
     if (q.data.customerId) {
@@ -5783,10 +5802,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       ? decToNum(org.defaultMaxSellerDiscountPercent)
       : 50;
 
-    const catalogIds = await listSellerCatalogProductIds(
-      auth.organizationId,
-      q.data.sellerId,
-    );
+    const catalogIds = sellerId
+      ? await listSellerCatalogProductIds(auth.organizationId, sellerId)
+      : (
+          await prisma.product.findMany({
+            where: { organizationId: auth.organizationId },
+            select: { id: true },
+          })
+        ).map((p) => p.id);
     const rows = catalogIds.length
       ? await prisma.product.findMany({
           where: {
@@ -5811,7 +5834,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const products = [];
     for (const p of rows) {
       const priced = await resolveEffectiveUnitPrice(auth.organizationId, p.id, {
-        sellerId: q.data.sellerId,
+        sellerId,
         customerId: q.data.customerId ?? null,
         regionId,
         priceTableId: q.data.priceTableId ?? null,
@@ -5859,7 +5882,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     const body = z
       .object({
-        sellerId: z.string().min(1),
+        sellerId: z.string().min(1).nullable().optional(),
         customerId: z.string().min(1),
         priceTableId: z.string().min(1).optional(),
         items: z
@@ -5875,11 +5898,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .safeParse(req.body);
     if (!body.success) return sendZodError(reply, body.error, req);
 
-    const seller = await prisma.seller.findFirst({
-      where: { id: body.data.sellerId, ...sellerScopeWhere(auth) },
-      select: { id: true },
-    });
-    if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    const sellerId = body.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth) },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
 
     const customer = await prisma.customer.findFirst({
       where: {
@@ -5891,13 +5917,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (!customer) return reply.status(400).send({ error: "Cliente inválido" });
 
     try {
-      const allowedProductIds = await sellerAllowedProductIds(
-        body.data.sellerId,
-        auth.organizationId,
-      );
+      const allowedProductIds = sellerId
+        ? await sellerAllowedProductIds(sellerId, auth.organizationId)
+        : await orgAllowedProductIds(auth.organizationId);
       const sale = await computeSaleOrder({
         organizationId: auth.organizationId,
-        sellerId: body.data.sellerId,
+        sellerId,
         customerId: body.data.customerId,
         priceTableId: body.data.priceTableId ?? null,
         items: body.data.items,
@@ -5928,6 +5953,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       where: { id, ...orderScopeWhere(auth) },
       include: {
         seller: { include: { user: { select: { name: true, email: true } } } },
+        createdByUser: { select: { id: true, name: true, email: true } },
         customer: true,
         situation: {
           select: {
@@ -6098,7 +6124,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     const body = z
       .object({
-        sellerId: z.string().min(1),
+        /** Null/omitido = venda direta (sem comissão). */
+        sellerId: z.string().min(1).nullable().optional(),
         customerId: z.string().min(1),
         paymentConditionId: z.string().min(1),
         priceTableId: z.string().min(1).optional(),
@@ -6120,11 +6147,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return sendZodError(reply, body.error, req);
     }
 
-    const seller = await prisma.seller.findFirst({
-      where: { id: body.data.sellerId, ...sellerScopeWhere(auth) },
-      select: { id: true },
-    });
-    if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    const sellerId = body.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth) },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
 
     const customer = await prisma.customer.findFirst({
       where: {
@@ -6147,10 +6177,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
+      const allowedProductIds = sellerId
+        ? await sellerAllowedProductIds(sellerId, auth.organizationId)
+        : await orgAllowedProductIds(auth.organizationId);
       return await createSaleOrder({
         organizationId: auth.organizationId,
         actorUserId: auth.sub,
-        sellerId: body.data.sellerId,
+        sellerId,
         customerId: body.data.customerId,
         paymentConditionId: body.data.paymentConditionId,
         priceTableId: body.data.priceTableId ?? null,
@@ -6164,10 +6197,55 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         status: body.data.status,
         source: "admin",
         actorRole: auth.role,
-        allowedProductIds: await sellerAllowedProductIds(
-          body.data.sellerId,
-          auth.organizationId,
-        ),
+        allowedProductIds,
+      });
+    } catch (e) {
+      if (replySaleCreateError(reply, e)) return;
+      throw e;
+    }
+  });
+
+  app.patch("/orders/:id/seller", async (req, reply) => {
+    const auth = req.auth!;
+    if (
+      !(await canWriteEffectiveForUser(
+        auth.organizationId,
+        auth.sub,
+        auth.role,
+        "orders",
+      ))
+    ) {
+      return reply.status(403).send({ error: "Sem permissão para editar pedidos" });
+    }
+    const { id } = idParam.parse(req.params);
+    const body = z
+      .object({
+        sellerId: z.string().min(1).nullable(),
+      })
+      .safeParse(req.body);
+    if (!body.success) return sendZodError(reply, body.error, req);
+
+    const scoped = await prisma.order.findFirst({
+      where: { id, ...orderScopeWhere(auth) },
+      select: { id: true },
+    });
+    if (!scoped) return reply.status(404).send({ error: "Pedido não encontrado" });
+
+    const sellerId = body.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth), active: true },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
+
+    try {
+      return await reassignOrderSeller({
+        organizationId: auth.organizationId,
+        orderId: id,
+        actorUserId: auth.sub,
+        sellerId,
       });
     } catch (e) {
       if (replySaleCreateError(reply, e)) return;

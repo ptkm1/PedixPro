@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
 import { decToNum } from "../../util/money.js";
+import { sellerLabelOrDirect } from "../../util/order-seller-filter.js";
 import {
     drawEmptyState,
     drawHeader,
@@ -130,7 +131,7 @@ export async function buildSalesDetailedPdf(
             code: orderCode(o),
             date: shortDateTime(o.createdAt),
             customer: shortName(o.customer?.name ?? "—", 18),
-            seller: shortName(o.seller.user.name, 16),
+            seller: shortName(sellerLabelOrDirect(o.seller?.user.name), 16),
             items: String(o.items.length),
             total: money(amount),
           },
@@ -184,7 +185,7 @@ export async function buildSalesDetailedPdf(
 
       drawInfoBar(doc, [
         { label: "Cliente:", value: o.customer?.name ?? "—" },
-        { label: "Vendedor:", value: o.seller.user.name },
+        { label: "Vendedor:", value: sellerLabelOrDirect(o.seller?.user.name) },
         { label: "Emissão:", value: shortDateTime(o.createdAt) },
         { label: "Total do pedido:", value: money(orderTotal) },
       ]);

@@ -59,8 +59,19 @@ export function createQuickSaleStyles(c: AppColors) {
       backgroundColor: c.warningSurface,
       borderWidth: 1,
       borderColor: c.warning,
+      alignItems: "center",
+      minWidth: 72,
+    },
+    discBtnDis: {
+      opacity: 0.45,
     },
     discBtnTxt: { fontSize: 12, fontWeight: "700", color: c.warning },
+    discBtnHint: {
+      fontSize: 10,
+      fontWeight: "600",
+      color: c.textSecondary,
+      marginTop: 1,
+    },
     cartTotal: {
       marginTop: 4,
       fontSize: 17,
@@ -404,5 +415,29 @@ export function createQuickSaleStyles(c: AppColors) {
     },
     paymentRowTxt: { fontSize: 15, fontWeight: "600", color: c.text },
     paymentRowTxtActive: { color: c.primary, fontWeight: "800" },
+    priceTableProduct: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 4,
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.textSecondary,
+    },
+    priceTableLoading: {
+      padding: 24,
+      alignItems: "center",
+      gap: 12,
+    },
+    priceTablePromo: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.success,
+    },
+    priceTablePrice: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.success,
+      marginLeft: 12,
+    },
   });
 }

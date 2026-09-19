@@ -109,7 +109,7 @@ export const ROLE_PERMISSIONS: Record<
   },
   orders: {
     ADMIN: "write",
-    MANAGER: "read",
+    MANAGER: "write",
     SELLER: "write",
     SUPERVISOR: "none",
   },

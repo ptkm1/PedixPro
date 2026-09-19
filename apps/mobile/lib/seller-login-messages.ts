@@ -2,11 +2,16 @@ import type { Role } from "@pedidos/shared";
 
 /** Papéis que podem entrar no app mobile. */
 export function isMobileAppRole(role: Role): boolean {
-  return role === "SELLER" || role === "ADMIN";
+  return role === "SELLER" || role === "ADMIN" || role === "MANAGER";
+}
+
+/** Staff que pode escolher vendedor / venda direta na Nova Venda. */
+export function canAssignSaleSeller(role: Role): boolean {
+  return role === "ADMIN" || role === "MANAGER";
 }
 
 export function sellerMobileLoginRejectedMessage(_role: Role): string {
-  return "Este app é para vendedores e administradores. Supervisor e gerente terão app próprio em breve.";
+  return "Este app é para vendedores, administradores e gestores.";
 }
 
 export function sellerMobileBlockedScreenCopy(_role: Role): {
@@ -15,6 +20,6 @@ export function sellerMobileBlockedScreenCopy(_role: Role): {
 } {
   return {
     title: "Acesso em breve",
-    body: "Por enquanto, apenas contas de vendedor e administrador usam este app. Perfis de supervisor e gerente terão aplicativo dedicado numa próxima versão.",
+    body: "Por enquanto, apenas contas de vendedor, administrador e gestor usam este app.",
   };
 }

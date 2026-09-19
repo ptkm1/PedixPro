@@ -124,10 +124,12 @@ export async function applyOrderStageChange(params: {
         id: updated.id,
         totalAmount: updated.totalAmount,
         sellerId: updated.sellerId,
-        seller: {
-          user: updated.seller.user,
-          managerUserId: updated.seller.managerUserId,
-        },
+        seller: updated.seller
+          ? {
+              user: updated.seller.user,
+              managerUserId: updated.seller.managerUserId,
+            }
+          : { user: { name: "VENDA DIRETA" }, managerUserId: null },
         customer: updated.customer,
       },
     });

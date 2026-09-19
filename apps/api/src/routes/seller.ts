@@ -10,11 +10,12 @@ import {
     auditFromAuth,
 } from "../services/audit-log.js";
 import { buildAdminMobileRankingDashboard, buildSellerCommissionDashboard } from "../services/commission-dashboard.js";
-import { teamMemberSellerIds } from "../auth/org-roles.js";
+import { teamMemberSellerIds, sellerScopeWhere } from "../auth/org-roles.js";
 import { buildSellerCustomerCreditSnapshot } from "../services/credit.js";
 import {
     createSaleOrder,
     findIdempotentSale,
+    orgAllowedProductIds,
     replySaleCreateError,
     sellerAllowedProductIds,
 } from "../services/create-sale-order.js";
@@ -32,7 +33,8 @@ import {
     sendOrderPdf80mmReply,
     sendOrderPdfReply,
 } from "../services/order-pdf-load.js";
-import { resolveEffectiveUnitPrice } from "../services/price-resolve.js";
+import { resolveEffectiveUnitPrice, listProductPriceTableOptions } from "../services/price-resolve.js";
+import { loadCatalogDisplayPricesByProduct } from "../services/catalog-display-prices.js";
 import { getProductStockLevels } from "../services/product-stock.js";
 import { buildSalesByCustomerPdf } from "../services/reports/sales-by-customer-pdf.js";
 import { buildSalesBySupplierPdf } from "../services/reports/sales-by-supplier-pdf.js";
@@ -57,8 +59,10 @@ import { recordSellerLocation } from "../services/seller-location-write.js";
 import { decToNum } from "../util/money.js";
 import {
     canAccessSellerApi,
+    isStaffSaleActor,
     mobileOrderWhere,
     requireSellerActor,
+    resolveSaleSellerId,
 } from "../util/mobile-seller-access.js";
 import { resolveMobileReportSellerIds } from "../util/mobile-report-scope.js";
 import { sendZodError } from "../util/zod-reply.js";
@@ -73,7 +77,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(401).send({ error: "Não autorizado" });
       }
       if (!canAccessSellerApi(req.auth)) {
-        return reply.status(403).send({ error: "Apenas vendedores" });
+        return reply.status(403).send({ error: "Sem acesso ao app" });
       }
     },
   );
@@ -108,21 +112,27 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       where: { id: auth.organizationId },
       select: {
         orderSyncMode: true,
+        catalogPriceDisplayMode: true,
         sellerShowUnassignedCustomers: true,
         customerRegistrationMode: true,
         sellerCanEditQueuedSales: true,
         autoInactivateCustomersAfterMonths: true,
+        defaultMaxSellerDiscountPercent: true,
       },
     });
     if (!org)
       return reply.status(404).send({ error: "Organização não encontrada" });
     return {
       orderSyncMode: org.orderSyncMode,
+      catalogPriceDisplayMode: org.catalogPriceDisplayMode,
       sellerShowUnassignedCustomers: org.sellerShowUnassignedCustomers,
       customerRegistrationMode: org.customerRegistrationMode,
       sellerCanEditQueuedSales: org.sellerCanEditQueuedSales,
       autoInactivateCustomersAfterMonths:
         org.autoInactivateCustomersAfterMonths,
+      defaultMaxSellerDiscountPercent: decToNum(
+        org.defaultMaxSellerDiscountPercent,
+      ),
     };
   });
 
@@ -136,11 +146,27 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       id: user!.id,
       email: user!.email,
       name: user!.name,
+      role: auth.role,
       sellerId: auth.sellerId,
       commissionPercent: user!.seller
         ? decToNum(user!.seller.commissionPercent)
         : null,
+      canAssignSeller: isStaffSaleActor(auth),
     };
+  });
+
+  /** Lista vendedores ativos (staff) para picker de Nova Venda. */
+  app.get("/sale-sellers", async (req, reply) => {
+    const auth = req.auth!;
+    if (!isStaffSaleActor(auth)) {
+      return reply.status(403).send({ error: "Apenas administradores e gestores" });
+    }
+    const rows = await prisma.seller.findMany({
+      where: { ...sellerScopeWhere(auth), active: true },
+      select: { id: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return rows.map((s) => ({ id: s.id, name: s.user.name }));
   });
 
   app.patch("/me", async (req, reply) => {
@@ -422,10 +448,10 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/sales", async (req, reply) => {
     const auth = req.auth!;
-    const sellerId = requireSellerActor(auth, reply);
-    if (!sellerId) return;
     const body = z
       .object({
+        /** Staff (ADM/Gestor): vendedor responsável; omit/null = venda direta. Vendedor ignora. */
+        sellerId: z.string().min(1).nullable().optional(),
         customerId: z.string().min(1),
         paymentConditionId: z.string().min(1),
         establishmentId: z.string().min(1).optional(),
@@ -441,14 +467,48 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
               quantity: z.number().int().positive(),
               /** Desconto extra do vendedor sobre o preço já promocional (limitado por produto/org). */
               discountPercent: z.number().min(0).max(100).optional(),
+              /** Tabela escolhida no lançamento do item (escopo comercial validado no servidor). */
+              priceTableId: z.string().min(1).optional(),
             }),
           )
           .min(1),
       })
       .safeParse(req.body);
     if (!body.success) {
-        return sendZodError(reply, body.error, req);
+      return sendZodError(reply, body.error, req);
+    }
+
+    const resolved = resolveSaleSellerId(auth, body.data.sellerId, reply);
+    if (!resolved.ok) return;
+    const sellerId = resolved.sellerId;
+
+    if (isStaffSaleActor(auth)) {
+      const { canWriteEffectiveForUser } = await import(
+        "../services/role-permissions.js"
+      );
+      if (
+        !(await canWriteEffectiveForUser(
+          auth.organizationId,
+          auth.sub,
+          auth.role,
+          "orders",
+        ))
+      ) {
+        return reply
+          .status(403)
+          .send({ error: "Sem permissão para criar pedidos" });
       }
+    }
+
+    if (sellerId && isStaffSaleActor(auth)) {
+      const inScope = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth), active: true },
+        select: { id: true },
+      });
+      if (!inScope) {
+        return reply.status(400).send({ error: "Vendedor inválido" });
+      }
+    }
 
     const clientMutationId = body.data.clientMutationId?.trim();
     if (clientMutationId) {
@@ -465,43 +525,74 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const showUnassigned = await getSellerShowUnassignedCustomers(
-      auth.organizationId,
-    );
-    const c = await prisma.customer.findFirst({
-      where: {
-        id: body.data.customerId,
-        ...sellerCustomerSellableWhere(
-          auth.organizationId,
-          sellerId,
-          showUnassigned,
-        ),
-      },
-    });
-    if (!c) {
-      const pending = await prisma.customer.findFirst({
+    if (sellerId) {
+      const showUnassigned = await getSellerShowUnassignedCustomers(
+        auth.organizationId,
+      );
+      const c = await prisma.customer.findFirst({
+        where: {
+          id: body.data.customerId,
+          ...sellerCustomerSellableWhere(
+            auth.organizationId,
+            sellerId,
+            showUnassigned,
+          ),
+        },
+      });
+      if (!c) {
+        const pending = await prisma.customer.findFirst({
+          where: {
+            id: body.data.customerId,
+            organizationId: auth.organizationId,
+            sellerId,
+            approvalStatus: { in: ["PENDING", "REJECTED"] },
+          },
+          select: { approvalStatus: true },
+        });
+        if (pending?.approvalStatus === "PENDING") {
+          return reply.status(400).send({
+            error: "Cliente aguardando validação do escritório",
+          });
+        }
+        if (pending?.approvalStatus === "REJECTED") {
+          return reply
+            .status(400)
+            .send({ error: "Cadastro do cliente foi rejeitado" });
+        }
+        // Staff pode vender para qualquer cliente aprovado da org
+        if (!isStaffSaleActor(auth)) {
+          return reply.status(400).send({ error: "Cliente inválido" });
+        }
+        const staffCustomer = await prisma.customer.findFirst({
+          where: {
+            id: body.data.customerId,
+            organizationId: auth.organizationId,
+            approvalStatus: "APPROVED",
+          },
+          select: { id: true },
+        });
+        if (!staffCustomer) {
+          return reply.status(400).send({ error: "Cliente inválido" });
+        }
+      }
+    } else {
+      const staffCustomer = await prisma.customer.findFirst({
         where: {
           id: body.data.customerId,
           organizationId: auth.organizationId,
-          sellerId,
-          approvalStatus: { in: ["PENDING", "REJECTED"] },
+          approvalStatus: "APPROVED",
         },
-        select: { approvalStatus: true },
+        select: { id: true },
       });
-      if (pending?.approvalStatus === "PENDING") {
-        return reply.status(400).send({
-          error: "Cliente aguardando validação do escritório",
-        });
+      if (!staffCustomer) {
+        return reply.status(400).send({ error: "Cliente inválido" });
       }
-      if (pending?.approvalStatus === "REJECTED") {
-        return reply
-          .status(400)
-          .send({ error: "Cadastro do cliente foi rejeitado" });
-      }
-      return reply.status(400).send({ error: "Cliente inválido" });
     }
 
     try {
+      const allowedProductIds = sellerId
+        ? await sellerAllowedProductIds(sellerId, auth.organizationId)
+        : await orgAllowedProductIds(auth.organizationId);
       return await createSaleOrder({
         organizationId: auth.organizationId,
         actorUserId: auth.sub,
@@ -513,17 +604,15 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           productId: i.productId,
           quantity: i.quantity,
           discountPercent: i.discountPercent,
+          priceTableId: i.priceTableId,
         })),
         notes: body.data.notes,
         status: body.data.status,
         operation: body.data.operation,
         clientMutationId,
-        source: "seller",
+        source: isStaffSaleActor(auth) ? "admin" : "seller",
         actorRole: auth.role,
-        allowedProductIds: await sellerAllowedProductIds(
-          sellerId,
-          auth.organizationId,
-        ),
+        allowedProductIds,
       });
     } catch (e) {
       if (replySaleCreateError(reply, e)) return;
@@ -621,6 +710,11 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     );
 
     const at = new Date();
+    const displayPricesByProduct = await loadCatalogDisplayPricesByProduct(
+      auth.organizationId,
+      products.map((p) => p.id),
+      at,
+    );
     const out = [];
     for (const p of products) {
       const priced = await resolveEffectiveUnitPrice(
@@ -644,6 +738,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         highlighted:
           Boolean(p.featured) || Boolean(priced.promotionId),
         soldQty: soldQtyMap.get(p.id) ?? 0,
+        prices: displayPricesByProduct.get(p.id) ?? [],
         maxSellerDiscountPercent:
           p.maxSellerDiscountPercent != null
             ? decToNum(p.maxSellerDiscountPercent)
@@ -689,6 +784,142 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       body.data.productIds,
     );
     return { products };
+  });
+
+  /**
+   * Tabelas de preço válidas para o produto na operação (cliente/vendedor/região),
+   * com preço efetivo — usado no sheet de escolha ao lançar item.
+   */
+  app.get("/products/:id/price-options", async (req, reply) => {
+    const auth = req.auth!;
+    const { id: productId } = idParam.parse(req.params);
+    const q = z
+      .object({ customerId: z.string().min(1) })
+      .safeParse(req.query);
+    if (!q.success) {
+      return sendZodError(reply, q.error, req);
+    }
+
+    const sellerId =
+      auth.role === "ADMIN" ? (auth.sellerId ?? null) : auth.sellerId!;
+    if (auth.role !== "ADMIN" && !sellerId) {
+      return reply.status(403).send({ error: "Vendedor não vinculado" });
+    }
+
+    const catalogIds =
+      auth.role === "ADMIN"
+        ? (
+            await prisma.product.findMany({
+              where: { organizationId: auth.organizationId },
+              select: { id: true },
+            })
+          ).map((p) => p.id)
+        : await listSellerCatalogProductIds(
+            auth.organizationId,
+            auth.sellerId!,
+          );
+    if (!catalogIds.includes(productId)) {
+      return reply.status(404).send({ error: "Produto não encontrado" });
+    }
+
+    let regionId: string | null = null;
+    if (auth.role === "ADMIN") {
+      const cust = await prisma.customer.findFirst({
+        where: {
+          id: q.data.customerId,
+          organizationId: auth.organizationId,
+        },
+        select: { regionId: true },
+      });
+      if (!cust) return reply.status(400).send({ error: "Cliente inválido" });
+      regionId = cust.regionId ?? null;
+    } else {
+      const showUnassigned = await getSellerShowUnassignedCustomers(
+        auth.organizationId,
+      );
+      const cust = await prisma.customer.findFirst({
+        where: {
+          id: q.data.customerId,
+          ...sellerCustomerSellableWhere(
+            auth.organizationId,
+            auth.sellerId!,
+            showUnassigned,
+          ),
+        },
+        select: { regionId: true },
+      });
+      if (!cust) return reply.status(400).send({ error: "Cliente inválido" });
+      regionId = cust.regionId ?? null;
+    }
+
+    const options = await listProductPriceTableOptions(
+      auth.organizationId,
+      productId,
+      {
+        sellerId,
+        customerId: q.data.customerId,
+        regionId,
+        quantity: 1,
+      },
+    );
+    return { options };
+  });
+
+  /**
+   * Snapshot de tabelas + itens para sync offline (escopo do vendedor).
+   * O client filtra por cliente/região com a mesma regra comercial.
+   */
+  app.get("/price-tables", async (req) => {
+    const auth = req.auth!;
+    const sellerId =
+      auth.role === "ADMIN" ? (auth.sellerId ?? null) : auth.sellerId!;
+    const at = new Date();
+    const sellerOk =
+      sellerId != null
+        ? { OR: [{ sellerId: null }, { sellerId }] }
+        : { sellerId: null };
+
+    const tables = await prisma.priceTable.findMany({
+      where: {
+        organizationId: auth.organizationId,
+        AND: [
+          { OR: [{ validFrom: null }, { validFrom: { lte: at } }] },
+          { OR: [{ validTo: null }, { validTo: { gte: at } }] },
+          sellerOk,
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        priority: true,
+        customerId: true,
+        sellerId: true,
+        regionId: true,
+        validFrom: true,
+        validTo: true,
+        updatedAt: true,
+        items: {
+          select: { productId: true, price: true },
+        },
+      },
+      orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+    });
+
+    return tables.map((t) => ({
+      id: t.id,
+      name: t.name,
+      priority: t.priority,
+      customerId: t.customerId,
+      sellerId: t.sellerId,
+      regionId: t.regionId,
+      validFrom: t.validFrom?.toISOString() ?? null,
+      validTo: t.validTo?.toISOString() ?? null,
+      updatedAt: t.updatedAt.toISOString(),
+      items: t.items.map((i) => ({
+        productId: i.productId,
+        price: decToNum(i.price),
+      })),
+    }));
   });
 
   app.get("/customers", async (req) => {

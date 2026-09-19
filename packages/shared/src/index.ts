@@ -36,6 +36,14 @@ export type {
   SubscriptionPayMethod,
 } from "./billing.js";
 
+export {
+  DIRECT_SALE_LABEL,
+  DIRECT_SALE_OPTION_LABEL,
+  ORDER_SELLER_FILTER_DIRECT,
+  isDirectSaleSellerId,
+  orderSellerDisplayName,
+} from "./order-seller.js";
+
 export type Role = "ADMIN" | "SELLER" | "SUPERVISOR" | "MANAGER";
 
 export type OrderStatus =
@@ -428,6 +436,24 @@ export type {
   PlanId,
   PlanLimits,
 } from "./plans.js";
+export {
+  CATALOG_PRICE_DISPLAY_MODE_LABELS,
+  CATALOG_PRICE_DISPLAY_MODES,
+  CATALOG_PRICE_INLINE_MAX,
+  DEFAULT_CATALOG_PRICE_DISPLAY_MODE,
+  filterValidCatalogPrices,
+  isCatalogPriceDisplayMode,
+  isValidCatalogPrice,
+  parseCatalogPriceDisplayMode,
+  pickCatalogDisplayPrice,
+  resolveCatalogPriceDisplay,
+  shouldCollapseCatalogPrices,
+} from "./catalog-price-display.js";
+export type {
+  CatalogPriceDisplayKind,
+  CatalogPriceDisplayMode,
+  CatalogProductPrice,
+} from "./catalog-price-display.js";
 export {
   formatInsufficientStockMessage,
   formatOutOfStockMessage,

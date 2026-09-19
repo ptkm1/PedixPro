@@ -7,9 +7,11 @@ import { apiFetch } from "@/lib/api";
 
 export type OrderSyncMode = "AUTO" | "MANUAL";
 export type CustomerRegistrationMode = "AUTO" | "REQUIRE_APPROVAL";
+export type CatalogPriceDisplayMode = "ALL" | "LOWEST" | "HIGHEST";
 
 export type SystemSettings = {
   orderSyncMode: OrderSyncMode;
+  catalogPriceDisplayMode: CatalogPriceDisplayMode;
   sellerShowUnassignedCustomers: boolean;
   customerRegistrationMode: CustomerRegistrationMode;
   sellerCanEditQueuedSales: boolean;

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 import {
   COLORS,
   drawHeader,
@@ -407,7 +408,12 @@ function aggregateOrders(
         productCost: part.lineCost,
         commission: part.lineCommission,
       };
-      bump(bySeller, order.sellerId, order.seller.user.name, delta);
+      bump(
+        bySeller,
+        order.sellerId ?? "__direct__",
+        sellerLabelOrDirect(order.seller?.user.name),
+        delta,
+      );
       bump(byProduct, part.item.productId, part.item.productName, delta);
       const supplierId = part.item.product.supplierId ?? "_none";
       const supplierLabel =
@@ -434,7 +440,7 @@ function aggregateOrders(
         order.orderNumber != null ? String(order.orderNumber) : order.id.slice(-6),
       date: order.createdAt.toISOString(),
       customer: order.customer?.name ?? "—",
-      seller: order.seller.user.name,
+      seller: sellerLabelOrDirect(order.seller?.user.name),
       revenue: roundMoney(orderRevenue),
       productCost: roundMoney(orderCost),
       commission: roundMoney(orderCommission),

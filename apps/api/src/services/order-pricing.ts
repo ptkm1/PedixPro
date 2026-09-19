@@ -2,7 +2,10 @@ import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
 import { computeGreedyComboDiscount } from "./combo-discount.js";
 import { resolveCommissionPercent } from "./commission-resolve.js";
-import { resolveEffectiveUnitPrice } from "./price-resolve.js";
+import {
+  assertPriceTableApplicableForSale,
+  resolveEffectiveUnitPrice,
+} from "./price-resolve.js";
 import { calendarMonthBounds, sellerConfirmedRevenueInPeriod } from "./seller-metrics.js";
 
 export class OrderPricingError extends Error {
@@ -16,6 +19,8 @@ export type SaleLineInput = {
   productId: string;
   quantity: number;
   discountPercent?: number;
+  /** Tabela escolhida para esta linha (opcional; senão usa a do pedido). */
+  priceTableId?: string | null;
 };
 
 export type ComputedSaleLine = {
@@ -29,7 +34,8 @@ export type ComputedSaleLine = {
 
 export type ComputeSaleOrderParams = {
   organizationId: string;
-  sellerId: string;
+  /** Null = venda direta (comissão 0). */
+  sellerId: string | null;
   customerId?: string | null;
   priceTableId?: string | null;
   items: SaleLineInput[];
@@ -66,18 +72,33 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
   }
 
   const periodBounds = calendarMonthBounds(at);
-  const mtdBefore = await sellerConfirmedRevenueInPeriod(
-    params.organizationId,
-    params.sellerId,
-    periodBounds.start,
-    periodBounds.end,
-  );
+  const mtdBefore =
+    params.sellerId != null
+      ? await sellerConfirmedRevenueInPeriod(
+          params.organizationId,
+          params.sellerId,
+          periodBounds.start,
+          periodBounds.end,
+        )
+      : 0;
 
   const computedLines: ComputedSaleLine[] = [];
+  const priceCtxBase = {
+    sellerId: params.sellerId,
+    customerId: params.customerId ?? null,
+    regionId,
+    at,
+  };
+  /** Evita revalidar a mesma tabela N vezes no mesmo pedido. */
+  const validatedPriceTables = new Set<string>();
 
   for (const input of params.items) {
     if (params.allowedProductIds && !params.allowedProductIds.has(input.productId)) {
-      throw new OrderPricingError(`Produto não liberado para este vendedor: ${input.productId}`);
+      throw new OrderPricingError(
+        params.sellerId
+          ? `Produto não liberado para este vendedor: ${input.productId}`
+          : `Produto inválido: ${input.productId}`,
+      );
     }
 
     const prod = await prisma.product.findFirst({
@@ -85,19 +106,41 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
     });
     if (!prod) throw new OrderPricingError(`Produto inválido: ${input.productId}`);
 
+    const linePriceTableId = input.priceTableId ?? params.priceTableId ?? null;
+    if (linePriceTableId) {
+      const validateKey = `${linePriceTableId}:${input.productId}`;
+      if (!validatedPriceTables.has(validateKey)) {
+        try {
+          await assertPriceTableApplicableForSale({
+            organizationId: params.organizationId,
+            priceTableId: linePriceTableId,
+            productId: input.productId,
+            ctx: priceCtxBase,
+          });
+        } catch (e) {
+          throw new OrderPricingError(
+            e instanceof Error ? e.message : "Tabela de preço inválida.",
+          );
+        }
+        validatedPriceTables.add(validateKey);
+      }
+    }
+
     const priced = await resolveEffectiveUnitPrice(params.organizationId, input.productId, {
-      sellerId: params.sellerId,
-      customerId: params.customerId ?? null,
-      regionId,
-      priceTableId: params.priceTableId ?? null,
+      ...priceCtxBase,
+      priceTableId: linePriceTableId,
       quantity: input.quantity,
-      at,
     });
 
     const maxSellerDisc =
       prod.maxSellerDiscountPercent != null ? decToNum(prod.maxSellerDiscountPercent) : orgDefaultMaxDisc;
     const requestedDisc = Math.min(100, Math.max(0, input.discountPercent ?? 0));
-    const disc = Math.min(requestedDisc, maxSellerDisc);
+    if (requestedDisc > maxSellerDisc + 1e-9) {
+      throw new OrderPricingError(
+        `Desconto de ${requestedDisc}% acima do máximo permitido (${maxSellerDisc}%) para «${prod.name}».`,
+      );
+    }
+    const disc = requestedDisc;
 
     let unitPrice = priced.effectiveUnitPrice;
     if (disc > 0) unitPrice = roundMoney(unitPrice * (1 - disc / 100));
@@ -110,13 +153,16 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
       );
     }
 
-    const commissionPercent = await resolveCommissionPercent(
-      params.organizationId,
-      params.sellerId,
-      prod.id,
-      prod.categoryId,
-      { mtdConfirmedRevenue: mtdBefore },
-    );
+    const commissionPercent =
+      params.sellerId != null
+        ? await resolveCommissionPercent(
+            params.organizationId,
+            params.sellerId,
+            prod.id,
+            prod.categoryId,
+            { mtdConfirmedRevenue: mtdBefore },
+          )
+        : 0;
     const lineTotal = roundMoney(unitPrice * input.quantity);
     const commissionAmount = roundMoney((lineTotal * commissionPercent) / 100);
 

@@ -5,6 +5,7 @@ import {
   formatStructuredAddress,
 } from "@pedidos/shared";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 import type { OrderPdfLogo } from "./order-pdf-logo.js";
 import {
   COLORS,
@@ -63,7 +64,7 @@ export type OrderPdfInput = {
   organization: OrderPdfOrganization;
   paymentCondition?: OrderPdfPaymentCondition | null;
   logo?: OrderPdfLogo | null;
-  seller: { user: { name: string; email?: string | null } };
+  seller: { user: { name: string; email?: string | null } } | null;
   customer: OrderPdfCustomer | null;
   items: Array<{
     productName: string;
@@ -761,9 +762,11 @@ export function drawOrderPdfContents(
   const colCount = payLabel ? 2 : 1;
   const colW = (PAGE.width - colGap * (colCount - 1)) / colCount;
 
-  const sellerValue = order.seller.user.email?.trim()
-    ? `${order.seller.user.name}  ·  ${order.seller.user.email.trim()}`
-    : order.seller.user.name;
+  const sellerName = sellerLabelOrDirect(order.seller?.user.name);
+  const sellerEmail = order.seller?.user.email?.trim();
+  const sellerValue = sellerEmail
+    ? `${sellerName}  ·  ${sellerEmail}`
+    : sellerName;
   drawMetaPair(doc, "Vendedor", sellerValue, PAGE.left, metaY, colW);
 
   if (payLabel) {
