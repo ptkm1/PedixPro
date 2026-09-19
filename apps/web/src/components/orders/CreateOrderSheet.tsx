@@ -17,11 +17,18 @@ import { apiFetch } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { formatOrderMoney } from "@/lib/order-kanban";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/confirm";
+import { isPriceTableUsable, pickDefaultPriceTableId } from "@pedidos/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-type LookupSeller = { id: string; name: string };
+type LookupSeller = {
+  id: string;
+  name: string;
+  defaultPriceTableId?: string | null;
+  allowedPriceTableIds?: string[];
+};
 type LookupCustomer = {
   id: string;
   name: string;
@@ -30,6 +37,7 @@ type LookupCustomer = {
   city?: string | null;
   sellerId?: string | null;
   regionId?: string | null;
+  defaultPriceTableId?: string | null;
 };
 type LookupPayment = {
   id: string;
@@ -40,6 +48,7 @@ type LookupPayment = {
 type LookupPriceTable = {
   id: string;
   name: string;
+  status?: string | null;
   customerId?: string | null;
   sellerId?: string | null;
   regionId?: string | null;
@@ -66,6 +75,7 @@ type PreviewLine = {
   quantity: number;
   unitPrice: number;
   productName: string;
+  priceOriginLabel?: string | null;
 };
 
 type CreditPreview = {
@@ -139,6 +149,7 @@ type Props = Readonly<{
 
 export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
   const { user } = useAuth();
+  const { confirm } = useConfirm();
   const { activeEstablishmentId, activeEstablishment } =
     useActiveEstablishment();
   const [sellerId, setSellerId] = useState("");
@@ -169,10 +180,16 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
 
   const applicablePriceTables = useMemo(() => {
     const selectedCustomer = customers.find((c) => c.id === customerId);
-    const now = Date.now();
+    const selectedSeller = sellers.find((s) => s.id === sellerId);
+    const now = new Date();
+    const allowed =
+      selectedSeller?.allowedPriceTableIds &&
+      selectedSeller.allowedPriceTableIds.length > 0
+        ? new Set(selectedSeller.allowedPriceTableIds)
+        : null;
     return priceTables.filter((t) => {
-      if (t.validFrom && new Date(t.validFrom).getTime() > now) return false;
-      if (t.validTo && new Date(t.validTo).getTime() < now) return false;
+      if (!isPriceTableUsable(t, now)) return false;
+      if (allowed && !allowed.has(t.id)) return false;
       if (t.sellerId && sellerId && t.sellerId !== sellerId) return false;
       if (t.customerId && customerId && t.customerId !== customerId) return false;
       if (
@@ -184,7 +201,7 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
       }
       return true;
     });
-  }, [priceTables, sellerId, customerId, customers]);
+  }, [priceTables, sellerId, customerId, customers, sellers]);
 
   useEffect(() => {
     if (!open) return;
@@ -201,16 +218,32 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
     });
   }, [open, sellers, paymentConditions, user?.sellerId]);
 
+  const skipTableConfirm = useRef(false);
+
   useEffect(() => {
     if (!open) return;
     setPriceTableId((prev) => {
       if (!paymentConditionId) return "";
+      const selectedCustomer = customers.find((c) => c.id === customerId);
+      const selectedSeller = sellers.find((s) => s.id === sellerId);
+      const suggested = pickDefaultPriceTableId({
+        allowedTableIds: applicablePriceTables.map((t) => t.id),
+        customerDefaultId: selectedCustomer?.defaultPriceTableId,
+        sellerDefaultId: selectedSeller?.defaultPriceTableId,
+      });
       if (prev && applicablePriceTables.some((t) => t.id === prev)) return prev;
-      return applicablePriceTables.length === 1
-        ? applicablePriceTables[0].id
-        : "";
+      skipTableConfirm.current = true;
+      return suggested ?? "";
     });
-  }, [open, paymentConditionId, applicablePriceTables]);
+  }, [
+    open,
+    paymentConditionId,
+    applicablePriceTables,
+    customers,
+    sellers,
+    customerId,
+    sellerId,
+  ]);
 
   const catalogQ = useQuery({
     queryKey: [
@@ -539,7 +572,24 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
             <AppSelect
               id="new-order-price-table"
               value={priceTableId}
-              onValueChange={setPriceTableId}
+              onValueChange={(id) => {
+                const hasItems = lines.some((l) => l.productId);
+                if (!hasItems || skipTableConfirm.current || !priceTableId) {
+                  skipTableConfirm.current = false;
+                  setPriceTableId(id);
+                  return;
+                }
+                void confirm({
+                  title: "Alterar tabela de preço?",
+                  description:
+                    "Alterar a tabela de preço recalculará os preços dos produtos deste pedido.",
+                  confirmLabel: "Alterar tabela",
+                  cancelLabel: "Cancelar",
+                  tone: "default",
+                }).then((ok) => {
+                  if (ok) setPriceTableId(id);
+                });
+              }}
               placeholder={
                 applicablePriceTables.length
                   ? "Selecione a tabela"
@@ -665,7 +715,11 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
                   </span>
                   <p className="flex h-9 items-center text-sm text-muted-foreground">
                     {unit != null ? formatOrderMoney(unit) : "—"}
-                    {product?.promotionLabel ? (
+                    {previewLine?.priceOriginLabel ? (
+                      <span className="ml-1 truncate text-xs">
+                        {previewLine.priceOriginLabel}
+                      </span>
+                    ) : product?.promotionLabel ? (
                       <span className="ml-1 truncate text-xs">
                         {product.promotionLabel}
                       </span>

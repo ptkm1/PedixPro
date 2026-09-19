@@ -61,9 +61,11 @@ type CommissionByOrder = {
     createdAt: string;
     sellerName: string;
     customerName: string;
+    priceTableName?: string | null;
     revenue: number;
     commission: number;
     commissionPct: number;
+    commissionOrigin?: string | null;
   }>;
 };
 
@@ -335,6 +337,8 @@ export function ReportCommissionByOrderPage() {
                   <TableHead className="px-4">Data</TableHead>
                   <TableHead className="px-4">Cliente</TableHead>
                   <TableHead className="px-4">Vendedor</TableHead>
+                  <TableHead className="px-4">Tabela</TableHead>
+                  <TableHead className="px-4">Origem</TableHead>
                   <TableHead className="px-4">Total</TableHead>
                   <TableHead className="px-4">Comissão</TableHead>
                   <TableHead className="px-4">%</TableHead>
@@ -350,6 +354,22 @@ export function ReportCommissionByOrderPage() {
                     <TableCell className="px-4 py-2">{r.customerName}</TableCell>
                     <TableCell className="px-4 py-2 text-muted-foreground">
                       {r.sellerName}
+                    </TableCell>
+                    <TableCell className="px-4 py-2 text-muted-foreground">
+                      {r.priceTableName ?? "—"}
+                    </TableCell>
+                    <TableCell className="px-4 py-2 text-muted-foreground">
+                      {r.commissionOrigin === "VARIAS"
+                        ? "Várias"
+                        : r.commissionOrigin === "COMISSAO_TABELA_PRECO"
+                          ? "Tabela de preço"
+                          : r.commissionOrigin === "COMISSAO_PRODUTO_VENDEDOR"
+                            ? "Produto + vendedor"
+                            : r.commissionOrigin === "COMISSAO_PRODUTO"
+                              ? "Produto"
+                              : r.commissionOrigin === "COMISSAO_GRUPO"
+                                ? "Grupo"
+                                : r.commissionOrigin ?? "—"}
                     </TableCell>
                     <TableCell className="px-4 py-2 tabular-nums">
                       R$ {fmtMoney(r.revenue)}

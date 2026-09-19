@@ -186,10 +186,61 @@ export {
 } from "./cnpj.js";
 export type { CnpjCompanyData } from "./cnpj.js";
 export {
+  COMMISSION_ORIGIN,
+  COMMISSION_ORIGIN_LABELS,
   SELLER_COMMISSION_TYPES,
+  commissionAmountFromPercent,
+  commissionOriginLabel,
+  pickPriceTableCommissionPercent,
+  resolveCommissionFromFacts,
+  resolveSyncedProductCommission,
+  roundCommissionMoney,
   sellerCommissionTypeLabel,
 } from "./commission.js";
-export type { SellerCommissionType } from "./commission.js";
+export type {
+  CommissionFacts,
+  CommissionOrigin,
+  CommissionSyncPayload,
+  ProductCommissionSync,
+  ResolvedCommission,
+  SellerCommissionType,
+} from "./commission.js";
+export {
+  applySellerDiscountWithMinPrice,
+  applyTableAdjustment,
+  discountExceedsMinMessage,
+  filterUsableTables,
+  formatBrl,
+  formatPriceOriginLabel,
+  isPriceTableUsable,
+  isWithinDateWindow,
+  pickDefaultPriceTableId,
+  pickQtyTier,
+  PRICE_BELOW_MIN_MESSAGE,
+  PRICE_ORIGIN_KIND,
+  priceTableSpecificity,
+  resolveCatalogPrice,
+  resolveCatalogPriceFromSync,
+  roundMoney,
+  tableMatchesScope,
+  tableToRuleInput,
+} from "./price-resolve.js";
+export type {
+  CustomerSpecialInput,
+  CustomerSpecialPriceSnapshot,
+  MinPriceCheckResult,
+  PriceAdjustmentKind,
+  PriceAdjustmentMode,
+  PriceOriginKind,
+  PriceTableSnapshot,
+  PriceTableStatus,
+  PricingSyncPayload,
+  QtyTierInput,
+  ResolveCatalogPriceInput,
+  ResolvedCatalogPrice,
+  TableItemInput,
+  TableRuleInput,
+} from "./price-resolve.js";
 export {
   cpfDigitsOnly,
   formatCpfMask,
@@ -207,8 +258,15 @@ export {
   PRODUCT_CSV_REQUIRED,
   PRODUCT_CSV_SAMPLE_ROW,
   productCsvTemplate,
+  PRICE_TABLE_CSV_HEADERS,
+  PRICE_TABLE_CSV_SAMPLE_ROW,
+  priceTableCsvTemplate,
 } from "./csv-import.js";
-export type { CustomerCsvHeader, ProductCsvHeader } from "./csv-import.js";
+export type {
+  CustomerCsvHeader,
+  PriceTableCsvHeader,
+  ProductCsvHeader,
+} from "./csv-import.js";
 export {
   csvColumnMapIsEmpty,
   csvFieldLabel,
@@ -444,7 +502,7 @@ export {
   formatRomaneioNumber,
   groupOrdersByPaymentCondition,
   paymentConditionLabel,
-  roundMoney,
+  roundMoney as roundRomaneioMoney,
   sumOrderTotals,
   uniqueIdsPreserveOrder,
 } from "./route-romaneio.js";

@@ -37,6 +37,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { DynamicCategoryAttributes } from "../components/DynamicCategoryAttributes";
+import { ProductCommissionExceptions } from "../components/ProductCommissionExceptions";
 import { ProductPromotionsPanel } from "../components/ProductPromotionsPanel";
 import { apiFetch } from "../lib/api";
 
@@ -122,6 +123,17 @@ export function ProductFormPage() {
     applyCreatedPriceTable,
     purchaseUnits,
     applyCreatedPurchaseUnit,
+    sellerOptions,
+    sellerCommissionEnabled,
+    setSellerCommissionEnabled,
+    sellerCommissionPercents,
+    setSellerCommissionPercent,
+    priceTableCommissionRows,
+    addCommissionTableId,
+    setAddCommissionTableId,
+    addCommissionTable,
+    removeCommissionTable,
+    setCommissionTablePercent,
   } = useProductFormPage();
 
   useScrollToFirstError(
@@ -570,6 +582,7 @@ export function ProductFormPage() {
         ) : null}
 
         {activeTab === "comissoes" ? (
+          <>
           <FormSection
             title="Comissões"
             description="Percentuais quando o vendedor usa comissão por produto."
@@ -612,6 +625,21 @@ export function ProductFormPage() {
               </FormField>
             </FormGrid>
           </FormSection>
+          <ProductCommissionExceptions
+            sellers={sellerOptions}
+            sellerEnabled={sellerCommissionEnabled}
+            onSellerEnabledChange={setSellerCommissionEnabled}
+            sellerPercents={sellerCommissionPercents}
+            onSellerPercentChange={setSellerCommissionPercent}
+            priceTables={priceTables}
+            tableRows={priceTableCommissionRows}
+            addTableId={addCommissionTableId}
+            onAddTableIdChange={setAddCommissionTableId}
+            onAddTable={addCommissionTable}
+            onRemoveTable={removeCommissionTable}
+            onTablePercentChange={setCommissionTablePercent}
+          />
+          </>
         ) : null}
 
         {activeTab === "estoque" ? (

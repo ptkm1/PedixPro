@@ -22,7 +22,11 @@ import {
 } from "@/lib/order-kanban";
 import { isWebAdmin } from "@/lib/staff";
 import { cn } from "@/lib/utils";
-import { SYSTEM_SITUATION_CODES, canRead } from "@pedidos/shared";
+import {
+  SYSTEM_SITUATION_CODES,
+  canRead,
+  formatBrazilPhoneDigits,
+} from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, Printer } from "lucide-react";
 import { useState } from "react";
@@ -46,7 +50,7 @@ type Order = {
   notes: string | null;
   creditHoldReasons?: unknown;
   createdAt: string;
-  seller: { user: { name: string; email: string } };
+  seller: { user: { name: string; email: string; phone?: string | null } };
   customer: { name: string; email: string | null } | null;
   items: {
     id: string;
@@ -333,9 +337,16 @@ export function OrderDetailPage() {
             <dd className="mt-1.5 text-sm font-medium text-foreground">
               {order.seller.user.name}
             </dd>
-            <dd className="mt-0.5 text-xs text-muted-foreground">
-              {order.seller.user.email}
-            </dd>
+            {order.seller.user.email ? (
+              <dd className="mt-0.5 text-xs text-muted-foreground">
+                {order.seller.user.email}
+              </dd>
+            ) : null}
+            {order.seller.user.phone?.trim() ? (
+              <dd className="mt-0.5 text-xs text-muted-foreground">
+                {formatBrazilPhoneDigits(order.seller.user.phone)}
+              </dd>
+            ) : null}
           </div>
           <div className="sm:col-span-2">
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

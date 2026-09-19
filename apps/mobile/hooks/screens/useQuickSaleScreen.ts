@@ -1,3 +1,7 @@
+import {
+  applySellerDiscountWithMinPrice,
+  pickDefaultPriceTableId,
+} from "@pedidos/shared";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Crypto from "expo-crypto";
@@ -6,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmtMoney } from "../../components/atoms/formatMoney";
+import { useAuth } from "../../context/AuthContext";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useAppToast } from "../../context/ToastContext";
 import { apiFetch } from "../../lib/api";
@@ -18,11 +23,16 @@ import {
 import {
   bumpCartQty,
   cartLineTotal,
-  cycleCartLineDiscount,
+  discountStepsForMax,
   LAST_CUSTOMER_STORAGE_KEY,
   PRODUCT_DOUBLE_TAP_MS,
   syncCartLinesWithProducts,
 } from "../../lib/sale/cart";
+import {
+  repriceCartLines,
+  resolveProductForQty,
+  usablePriceTables,
+} from "../../lib/sale/pricing";
 import {
   getCartStockBlockMessage,
   getProductStockBlockMessage,
@@ -37,6 +47,8 @@ import type {
 } from "../../lib/sale/types";
 import {
   fetchSellerCustomers,
+  fetchSellerPricingSync,
+  SELLER_PRICING_KEY,
   sellerOfflineStaleTime,
 } from "../../lib/seller-offline-queries";
 import { findProductByBarcode } from "../../lib/utils/barcode";
@@ -74,7 +86,8 @@ function formatDoc(c: SaleCustomer): string {
 export function useQuickSaleScreen() {
   const router = useRouter();
   const { showToast } = useAppToast();
-  const { alert } = useConfirm();
+  const { alert, confirm } = useConfirm();
+  const { user } = useAuth();
   const { customerId: customerIdParam, repeatSaleId: repeatSaleIdParam } =
     useLocalSearchParams<{
       customerId?: string;
@@ -91,6 +104,8 @@ export function useQuickSaleScreen() {
   const [paymentConditionId, setPaymentConditionId] = useState<
     string | undefined
   >();
+  const [priceTableId, setPriceTableIdState] = useState<string | undefined>();
+  const [priceTablePickerOpen, setPriceTablePickerOpen] = useState(false);
   const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
@@ -120,12 +135,24 @@ export function useQuickSaleScreen() {
 
   const isOnline = useNetInfoOnline();
   const { orderSyncMode } = useOrderSyncMode();
-  const catalog = useSellerProductCatalog({ customerId });
+
+  const { data: pricing = null } = useQuery({
+    queryKey: SELLER_PRICING_KEY,
+    staleTime: sellerOfflineStaleTime,
+    queryFn: fetchSellerPricingSync,
+  });
+
+  const catalog = useSellerProductCatalog({
+    customerId,
+    priceTableId,
+    pricing,
+  });
   const { products } = catalog;
 
   const setCustomerId = useCallback((id: string | undefined) => {
     setCustomerIdState(id);
     setPaymentConditionId(undefined);
+    setPriceTableIdState(undefined);
     if (!id) setTab("clientes");
   }, []);
 
@@ -256,8 +283,14 @@ export function useQuickSaleScreen() {
   }, []);
 
   useEffect(() => {
-    setCart((prev) => syncCartLinesWithProducts(prev, products));
-  }, [products]);
+    setCart((prev) =>
+      repriceCartLines(syncCartLinesWithProducts(prev, products), products, {
+        pricing,
+        customerId,
+        priceTableId,
+      }),
+    );
+  }, [products, pricing, customerId, priceTableId]);
 
   useEffect(() => {
     if (!scanMsg) return;
@@ -278,6 +311,38 @@ export function useQuickSaleScreen() {
     if (!customerId) return null;
     return customers.find((c) => c.id === customerId) ?? null;
   }, [customers, customerId]);
+
+  const usableTables = useMemo(
+    () =>
+      usablePriceTables(pricing, {
+        customerId,
+        sellerId: user?.sellerId,
+        regionId: selectedCustomer?.regionId,
+      }),
+    [pricing, customerId, user?.sellerId, selectedCustomer?.regionId],
+  );
+
+  const selectedPriceTable = useMemo(
+    () => usableTables.find((t) => t.id === priceTableId) ?? null,
+    [usableTables, priceTableId],
+  );
+
+  useEffect(() => {
+    if (!customerId) return;
+    if (priceTableId && usableTables.some((t) => t.id === priceTableId)) return;
+    const picked = pickDefaultPriceTableId({
+      allowedTableIds: usableTables.map((t) => t.id),
+      customerDefaultId: selectedCustomer?.defaultPriceTableId,
+      sellerDefaultId: pricing?.sellerDefaultPriceTableId,
+    });
+    if (picked) setPriceTableIdState(picked);
+  }, [
+    customerId,
+    priceTableId,
+    usableTables,
+    selectedCustomer?.defaultPriceTableId,
+    pricing?.sellerDefaultPriceTableId,
+  ]);
 
   const selectedPaymentCondition = useMemo(() => {
     if (!paymentConditionId) return null;
@@ -323,12 +388,37 @@ export function useQuickSaleScreen() {
     !!customerId && creditInfo?.effectiveAction === "BLOCK";
 
   const canAccessProducts = !!customerId;
+  const needsPriceTable = usableTables.length > 0;
   const canFinalize =
     !!customerId &&
     !!paymentConditionId &&
+    (!needsPriceTable || !!priceTableId) &&
     cartLines.length > 0 &&
     !creditBlockedCheckout;
   const canAccessFinalize = !!customerId && cartLines.length > 0;
+
+  const requestPriceTableId = useCallback(
+    async (nextId: string) => {
+      if (nextId === priceTableId) {
+        setPriceTablePickerOpen(false);
+        return;
+      }
+      const hasItems = Object.keys(cart).length > 0;
+      if (hasItems && priceTableId) {
+        const ok = await confirm({
+          title: "Alterar tabela de preço?",
+          description:
+            "Alterar a tabela de preço recalculará os preços dos produtos deste pedido.",
+          confirmLabel: "Alterar tabela",
+          cancelLabel: "Cancelar",
+        });
+        if (!ok) return;
+      }
+      setPriceTableIdState(nextId);
+      setPriceTablePickerOpen(false);
+    },
+    [cart, confirm, priceTableId],
+  );
 
   const bumpQty = useCallback(
     (p: SaleProduct, delta: number): boolean => {
@@ -338,7 +428,13 @@ export function useQuickSaleScreen() {
         return false;
       }
       const currentQty = cart[p.id]?.qty ?? 0;
-      const blockMsg = getProductStockBlockMessage(p, currentQty, delta);
+      const nextQty = currentQty + delta;
+      const priced = resolveProductForQty(p, Math.max(nextQty, 1), {
+        pricing,
+        customerId,
+        priceTableId,
+      });
+      const blockMsg = getProductStockBlockMessage(priced, currentQty, delta);
       if (blockMsg) {
         setErr(blockMsg);
         void alert({
@@ -348,11 +444,39 @@ export function useQuickSaleScreen() {
         });
         return false;
       }
+      const minCheck = applySellerDiscountWithMinPrice({
+        catalogUnitPrice:
+          typeof priced.effectiveUnitPrice === "number"
+            ? priced.effectiveUnitPrice
+            : 0,
+        discountPercent: 0,
+        minPrice:
+          priced.tableMinPrice ??
+          (priced.minSaleUnitPrice != null
+            ? Number(priced.minSaleUnitPrice)
+            : null),
+      });
+      if (delta > 0 && !minCheck.ok) {
+        setErr(minCheck.message);
+        void alert({
+          title: "Preço mínimo",
+          description: minCheck.message,
+          tone: "danger",
+        });
+        return false;
+      }
       setErr(null);
-      setCart((prev) => bumpCartQty(prev, p, delta));
+      setCart((prev) => {
+        const bumped = bumpCartQty(prev, priced, delta);
+        return repriceCartLines(bumped, products, {
+          pricing,
+          customerId,
+          priceTableId,
+        });
+      });
       return true;
     },
-    [alert, cart, customerId],
+    [alert, cart, customerId, priceTableId, pricing, products],
   );
 
   const scheduleProductTap = useCallback(
@@ -380,9 +504,38 @@ export function useQuickSaleScreen() {
     [bumpQty, customerId],
   );
 
-  const cycleDiscount = useCallback((productId: string) => {
-    setCart((prev) => cycleCartLineDiscount(prev, productId));
-  }, []);
+  const cycleDiscount = useCallback(
+    (productId: string) => {
+      setCart((prev) => {
+        const line = prev[productId];
+        if (!line) return prev;
+        const steps = discountStepsForMax(line.maxSellerDiscountPercent);
+        const i = steps.indexOf(line.discountPercent);
+        const idx = i === -1 ? 0 : (i + 1) % steps.length;
+        const nextPct = steps[idx]!;
+        const check = applySellerDiscountWithMinPrice({
+          catalogUnitPrice: line.catalogUnitPrice ?? line.effectiveUnitPrice,
+          discountPercent: nextPct,
+          minPrice: line.minPrice,
+        });
+        if (!check.ok) {
+          setErr(check.message);
+          void alert({
+            title: "Preço mínimo",
+            description: check.message,
+            tone: "danger",
+          });
+          return prev;
+        }
+        setErr(null);
+        return {
+          ...prev,
+          [productId]: { ...line, discountPercent: nextPct },
+        };
+      });
+    },
+    [alert],
+  );
 
   const onBarcode = useCallback(
     (raw: string) => {
@@ -425,13 +578,19 @@ export function useQuickSaleScreen() {
         effectiveUnitPrice: line.effectiveUnitPrice,
         catalogUnitPrice: line.catalogUnitPrice,
         promotionLabel: line.promotionLabel,
-        basePrice: null,
+        basePrice: fromCatalog?.basePrice ?? null,
         maxSellerDiscountPercentEffective: line.maxSellerDiscountPercent,
         stockQty: fromCatalog?.stockQty,
         blockSaleWhenOutOfStock: fromCatalog?.blockSaleWhenOutOfStock,
+        minSaleUnitPrice: fromCatalog?.minSaleUnitPrice,
+        tableMinPrice: fromCatalog?.tableMinPrice ?? line.minPrice,
+        priceOriginLabel: line.priceOriginLabel,
+        resolvedPriceTableId:
+          fromCatalog?.resolvedPriceTableId ?? priceTableId ?? null,
+        commissionSync: fromCatalog?.commissionSync,
       };
     },
-    [products],
+    [products, priceTableId],
   );
 
   const create = useMutation({
@@ -442,10 +601,14 @@ export function useQuickSaleScreen() {
         throw new Error("Selecione a condição de pagamento.");
       }
       if (!lines.length) throw new Error("Adicione pelo menos um produto");
+      if (usableTables.length > 0 && !priceTableId) {
+        throw new Error("Selecione a tabela de preço.");
+      }
       const clientMutationId = Crypto.randomUUID();
       const payload = {
         customerId,
         paymentConditionId,
+        ...(priceTableId ? { priceTableId } : {}),
         operation: "SALE" as const,
         status: "CONFIRMED" as const,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -550,6 +713,11 @@ export function useQuickSaleScreen() {
       setTab("clientes");
       return;
     }
+    if (usableTables.length > 0 && !priceTableId) {
+      setErr("Selecione a tabela de preço.");
+      setTab("clientes");
+      return;
+    }
     if (cartLines.length === 0) {
       setErr("Adicione produtos ao pedido.");
       setTab("produtos");
@@ -583,6 +751,8 @@ export function useQuickSaleScreen() {
     create,
     customerId,
     paymentConditionId,
+    priceTableId,
+    usableTables.length,
     products,
     notes,
   ]);
@@ -638,10 +808,15 @@ export function useQuickSaleScreen() {
         setTab("clientes");
         return;
       }
+      if (next === "finalizar" && usableTables.length > 0 && !priceTableId) {
+        setErr("Selecione a tabela de preço.");
+        setTab("clientes");
+        return;
+      }
       setErr(null);
       setTab(next);
     },
-    [cartLines.length, customerId, paymentConditionId],
+    [cartLines.length, customerId, paymentConditionId, priceTableId, usableTables.length],
   );
 
   const emptyCatalogMessage =
@@ -677,6 +852,12 @@ export function useQuickSaleScreen() {
     selectedPaymentCondition,
     paymentPickerOpen,
     setPaymentPickerOpen,
+    usableTables,
+    priceTableId,
+    selectedPriceTable,
+    priceTablePickerOpen,
+    setPriceTablePickerOpen,
+    requestPriceTableId,
     notes,
     setNotes,
     catalog,

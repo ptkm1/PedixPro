@@ -665,7 +665,15 @@ export async function buildCommissionByOrderReport(params: {
       createdAt: true,
       seller: { select: { user: { select: { name: true } } } },
       customer: { select: { name: true } },
-      items: { select: { commissionAmount: true } },
+      priceTable: { select: { id: true, name: true } },
+      items: {
+        select: {
+          productName: true,
+          commissionAmount: true,
+          commissionPercent: true,
+          commissionOrigin: true,
+        },
+      },
     },
   });
 
@@ -674,16 +682,26 @@ export async function buildCommissionByOrderReport(params: {
       o.items.reduce((s, it) => s + decToNum(it.commissionAmount ?? 0), 0),
     );
     const revenue = roundMoney(decToNum(o.totalAmount));
+    const origins = [
+      ...new Set(
+        o.items
+          .map((it) => it.commissionOrigin)
+          .filter((v): v is NonNullable<typeof v> => Boolean(v)),
+      ),
+    ];
     return {
       orderId: o.id,
       orderCode: orderCode(o),
       createdAt: o.createdAt.toISOString(),
       sellerName: o.seller.user.name,
       customerName: o.customer?.name ?? "—",
+      priceTableName: o.priceTable?.name ?? null,
       revenue,
       commission,
       commissionPct:
         revenue > 0 ? roundMoney((commission / revenue) * 100) : 0,
+      commissionOrigin:
+        origins.length === 1 ? origins[0] : origins.length > 1 ? "VARIAS" : null,
     };
   });
 

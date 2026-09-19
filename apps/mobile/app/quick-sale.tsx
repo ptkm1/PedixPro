@@ -456,6 +456,25 @@ export default function QuickSaleScreen() {
               <ChevronDown size={18} color={colors.textSecondary} />
             </Pressable>
 
+            {s.usableTables.length > 0 ? (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 14 }]}>
+                  Tabela de preço
+                </Text>
+                <Pressable
+                  style={styles.selectBtn}
+                  onPress={() => s.setPriceTablePickerOpen(true)}
+                >
+                  <Text style={styles.selectBtnTxt} numberOfLines={1}>
+                    {s.selectedPriceTable
+                      ? s.selectedPriceTable.name
+                      : "Selecione…"}
+                  </Text>
+                  <ChevronDown size={18} color={colors.textSecondary} />
+                </Pressable>
+              </>
+            ) : null}
+
             <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
               Operação do pedido
             </Text>
@@ -493,6 +512,7 @@ export default function QuickSaleScreen() {
           {s.selectedPaymentCondition
             ? ` · ${s.selectedPaymentCondition.name}`
             : ""}
+          {s.selectedPriceTable ? ` · ${s.selectedPriceTable.name}` : ""}
         </Text>
       ) : null}
       <Text style={styles.sectionTitle}>Catálogo</Text>
@@ -585,6 +605,11 @@ export default function QuickSaleScreen() {
               ? `${s.selectedPaymentCondition.code} - ${s.selectedPaymentCondition.name}`
               : "—"}
           </Text>
+          {s.selectedPriceTable ? (
+            <Text style={styles.summaryLine}>
+              Tabela: {s.selectedPriceTable.name}
+            </Text>
+          ) : null}
           <Text style={styles.summaryLine}>Operação: 1 - VENDA</Text>
         </View>
       ) : null}
@@ -600,6 +625,9 @@ export default function QuickSaleScreen() {
                 {line.qty} × R$ {fmtMoney(line.effectiveUnitPrice)}
                 {line.discountPercent > 0 ? ` · −${line.discountPercent}%` : ""}
               </Text>
+              {line.priceOriginLabel ? (
+                <Text style={styles.cartMeta}>{line.priceOriginLabel}</Text>
+              ) : null}
             </View>
             <Text style={styles.cartSummaryMeta}>
               R$ {fmtMoney(s.cartLineTotal(line))}
@@ -750,6 +778,11 @@ export default function QuickSaleScreen() {
                               {" · "}Subtotal R${" "}
                               {fmtMoney(s.cartLineTotal(line))}
                             </Text>
+                            {line.priceOriginLabel ? (
+                              <Text style={styles.cartMeta}>
+                                {line.priceOriginLabel}
+                              </Text>
+                            ) : null}
                           </View>
                           <View style={styles.cartActions}>
                             <View style={styles.qtyRow}>
@@ -907,6 +940,54 @@ export default function QuickSaleScreen() {
                       ]}
                     >
                       {item.code} - {item.name}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+          </SafeScreen>
+        </Modal>
+
+        <Modal
+          visible={s.priceTablePickerOpen}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => s.setPriceTablePickerOpen(false)}
+        >
+          <SafeScreen>
+            <MobileHeader
+              title="Tabela de preço"
+              showBack
+              onBack={() => s.setPriceTablePickerOpen(false)}
+            />
+            <FlatList
+              data={s.usableTables}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 16, gap: 4 }}
+              ListEmptyComponent={
+                <Text style={styles.warn}>
+                  Nenhuma tabela de preço disponível para este pedido.
+                </Text>
+              }
+              renderItem={({ item }) => {
+                const active = item.id === s.priceTableId;
+                return (
+                  <Pressable
+                    style={[
+                      styles.paymentRow,
+                      active && styles.paymentRowActive,
+                    ]}
+                    onPress={() => {
+                      void s.requestPriceTableId(item.id);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.paymentRowTxt,
+                        active && styles.paymentRowTxtActive,
+                      ]}
+                    >
+                      {item.name}
                     </Text>
                   </Pressable>
                 );

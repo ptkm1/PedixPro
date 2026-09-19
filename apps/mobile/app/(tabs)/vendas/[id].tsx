@@ -6,6 +6,7 @@ import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
 import { MoneyLabel } from "@/components/molecules/MoneyLabel";
 import { useSaleDetailScreen } from "@/hooks/screens/useSaleDetailScreen";
 import { useTheme } from "@/lib/theme";
+import { formatBrazilPhoneDigits } from "@pedidos/shared";
 import {
   orderStatusBadgeLabel,
   orderStatusDetailLabel,
@@ -83,6 +84,25 @@ export default function SaleDetailScreen() {
             <ThemedText variant="titleSm" style={{ marginTop: 4 }}>
               {order.customer?.name ?? "Sem cliente"}
             </ThemedText>
+            {order.seller?.user.name ? (
+              <>
+                <ThemedText
+                  variant="caption"
+                  muted
+                  style={{ marginTop: 12 }}
+                >
+                  Vendedor
+                </ThemedText>
+                <ThemedText variant="titleSm" style={{ marginTop: 4 }}>
+                  {order.seller.user.name}
+                </ThemedText>
+                {order.seller.user.phone?.trim() ? (
+                  <ThemedText variant="bodySm" muted style={{ marginTop: 4 }}>
+                    {formatBrazilPhoneDigits(order.seller.user.phone)}
+                  </ThemedText>
+                ) : null}
+              </>
+            ) : null}
             {order.notes ? (
               <>
                 <ThemedText variant="caption" muted style={{ marginTop: 12 }}>

@@ -12,6 +12,7 @@ export type OfflineSaleQueuePayload = {
   clientMutationId: string;
   customerId: string;
   paymentConditionId: string;
+  priceTableId?: string;
   operation?: "SALE";
   status: "CONFIRMED";
   notes?: string;

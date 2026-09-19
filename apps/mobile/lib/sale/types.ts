@@ -11,13 +11,21 @@ export type SaleProduct = {
   featured?: boolean;
   hasActivePromotion?: boolean;
   highlighted?: boolean;
+  priceOriginLabel?: string | null;
   maxSellerDiscountPercent?: number | null;
   maxSellerDiscountPercentEffective?: number;
   minSaleUnitPrice?: number | null;
+  tableMinPrice?: number | null;
   stockQty?: number;
   blockSaleWhenOutOfStock?: boolean;
   attributes?: Record<string, unknown>;
-  category?: { id: string; code: string; name: string } | null;
+  category?: {
+    id: string;
+    code: string;
+    name: string;
+    commissionPercent?: unknown | null;
+  } | null;
+  commissionPercent?: unknown | null;
   supplier?: {
     id: string;
     code: string;
@@ -25,6 +33,14 @@ export type SaleProduct = {
     legalName?: string | null;
   } | null;
   imageUrl?: string | null;
+  resolvedPriceTableId?: string | null;
+  commissionSync?: {
+    productId: string;
+    productDefaultPercent: number | null;
+    groupPercent: number | null;
+    sellerProductPercent: number | null;
+    priceTablePercents: Array<{ priceTableId: string; percent: number }>;
+  };
 };
 
 export type SaleCustomer = {
@@ -40,6 +56,8 @@ export type SaleCustomer = {
   tradeName?: string | null;
   city?: string | null;
   state?: string | null;
+  regionId?: string | null;
+  defaultPriceTableId?: string | null;
   approvalStatus?: "APPROVED" | "PENDING" | "REJECTED";
 };
 
@@ -74,6 +92,8 @@ export type CartLine = {
   promotionLabel?: string | null;
   discountPercent: number;
   maxSellerDiscountPercent: number;
+  priceOriginLabel?: string | null;
+  minPrice?: number | null;
 };
 
 export type QuickSaleTab = "clientes" | "produtos" | "finalizar";

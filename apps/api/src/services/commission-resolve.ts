@@ -1,9 +1,16 @@
+import {
+  resolveCommissionFromFacts,
+  type CommissionOrigin,
+  type ResolvedCommission,
+} from "@pedidos/shared";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
 
 export type CommissionResolveContext = {
   /** Faturamento confirmado no mês antes do pedido atual (para faixa progressiva). */
   mtdConfirmedRevenue: number;
+  /** Tabela efetivamente usada na linha (exceção produto+tabela). */
+  priceTableId?: string | null;
 };
 
 async function loadApplicableProgressiveTiers(
@@ -110,8 +117,79 @@ export async function resolveCommissionBaselinePercent(
 
 /**
  * Comissão efetiva por linha:
- * regra por produto > por categoria > regra geral > tipo do vendedor > faixa progressiva (FIXED) > % cadastro.
+ * tabela do produto > vendedor no produto > regras atuais (produto/grupo/indústria).
  */
+export async function resolveCommission(
+  organizationId: string,
+  sellerId: string,
+  productId: string,
+  categoryId: string | null,
+  ctx?: CommissionResolveContext,
+): Promise<ResolvedCommission> {
+  const seller = await prisma.seller.findFirst({
+    where: { id: sellerId, organizationId },
+    select: { commissionType: true, commissionPercent: true },
+  });
+  if (!seller) throw new Error("Vendedor não encontrado");
+
+  const priceTableId = ctx?.priceTableId ?? null;
+  const [tableExc, sellerExc, product, category, rules] = await Promise.all([
+    priceTableId
+      ? prisma.productPriceTableCommission.findFirst({
+          where: { organizationId, productId, priceTableId },
+          select: { commissionPercent: true },
+        })
+      : Promise.resolve(null),
+    prisma.productSellerCommission.findFirst({
+      where: { organizationId, productId, sellerId },
+      select: { commissionPercent: true },
+    }),
+    prisma.product.findFirst({
+      where: { id: productId, organizationId },
+      select: { commissionPercent: true },
+    }),
+    categoryId
+      ? prisma.productCategory.findFirst({
+          where: { id: categoryId, organizationId },
+          select: { commissionPercent: true },
+        })
+      : Promise.resolve(null),
+    prisma.sellerCommissionRule.findMany({
+      where: { organizationId, sellerId, active: true },
+      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+    }),
+  ]);
+
+  const mtd = ctx?.mtdConfirmedRevenue;
+  let progressivePercent: number | null = null;
+  if (seller.commissionType === "FIXED" && mtd != null && mtd >= 0) {
+    progressivePercent = await resolveProgressiveCommissionPercent(
+      organizationId,
+      sellerId,
+      mtd,
+    );
+  }
+
+  return resolveCommissionFromFacts({
+    priceTablePercent:
+      tableExc != null ? decToNum(tableExc.commissionPercent) : null,
+    sellerProductPercent:
+      sellerExc != null ? decToNum(sellerExc.commissionPercent) : null,
+    productDefaultPercent:
+      product?.commissionPercent != null
+        ? decToNum(product.commissionPercent)
+        : null,
+    sellerRulePercent: percentFromRules(rules, productId, categoryId),
+    groupPercent:
+      category?.commissionPercent != null
+        ? decToNum(category.commissionPercent)
+        : null,
+    progressivePercent,
+    sellerType: seller.commissionType,
+    sellerDefaultPercent: decToNum(seller.commissionPercent),
+  });
+}
+
 export async function resolveCommissionPercent(
   organizationId: string,
   sellerId: string,
@@ -119,59 +197,17 @@ export async function resolveCommissionPercent(
   categoryId: string | null,
   ctx?: CommissionResolveContext,
 ): Promise<number> {
-  const seller = await prisma.seller.findFirst({
-    where: { id: sellerId, organizationId },
-    select: { commissionType: true, commissionPercent: true },
-  });
-  if (!seller) throw new Error("Vendedor não encontrado");
-
-  const rules = await prisma.sellerCommissionRule.findMany({
-    where: { organizationId, sellerId, active: true },
-    orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
-  });
-
-  const fromRules = percentFromRules(rules, productId, categoryId);
-  if (fromRules != null) return fromRules;
-
-  const mtd = ctx?.mtdConfirmedRevenue;
-
-  switch (seller.commissionType) {
-    case "BY_PRODUCT": {
-      const product = await prisma.product.findFirst({
-        where: { id: productId, organizationId },
-        select: { commissionPercent: true },
-      });
-      if (product?.commissionPercent != null)
-        return decToNum(product.commissionPercent);
-      return decToNum(seller.commissionPercent);
-    }
-    case "BY_CATEGORY": {
-      if (categoryId) {
-        const category = await prisma.productCategory.findFirst({
-          where: { id: categoryId, organizationId },
-          select: { commissionPercent: true },
-        });
-        if (category?.commissionPercent != null)
-          return decToNum(category.commissionPercent);
-      }
-      return decToNum(seller.commissionPercent);
-    }
-    case "BY_SUPPLIER":
-      return decToNum(seller.commissionPercent);
-    case "FIXED":
-    default: {
-      if (mtd != null && mtd >= 0) {
-        const prog = await resolveProgressiveCommissionPercent(
-          organizationId,
-          sellerId,
-          mtd,
-        );
-        if (prog != null) return prog;
-      }
-      return decToNum(seller.commissionPercent);
-    }
-  }
+  const resolved = await resolveCommission(
+    organizationId,
+    sellerId,
+    productId,
+    categoryId,
+    ctx,
+  );
+  return resolved.percent;
 }
+
+export type { CommissionOrigin, ResolvedCommission };
 
 export async function getProgressiveTierRowsForSeller(
   organizationId: string,

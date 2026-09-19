@@ -1,4 +1,12 @@
+import { FormSection } from "@/components/forms";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/auth/AuthContext";
+import { canRead } from "@pedidos/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Percent, Target, type LucideIcon } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 const CARDS: Array<{
@@ -27,7 +35,53 @@ const CARDS: Array<{
   },
 ];
 
+type Criterion = "EMITTED" | "INVOICED" | "SETTLED";
+
+type CommissionSettings = {
+  criterion: Criterion;
+  criterionLabel: string;
+  options: Array<{
+    value: Criterion;
+    title: string;
+    shortLabel: string;
+    description: string;
+  }>;
+};
+
 export function CommissionHubPage() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const canPayableReport = Boolean(
+    user &&
+      canRead(user.role, "reports_commissions_payable", user.permissions),
+  );
+
+  const settingsQ = useQuery({
+    queryKey: ["admin", "commission-settings"],
+    queryFn: () =>
+      apiFetch<CommissionSettings>("/admin/commission-settings"),
+  });
+
+  const save = useMutation({
+    mutationFn: (criterion: Criterion) =>
+      apiFetch<CommissionSettings>("/admin/commission-settings", {
+        method: "PATCH",
+        body: JSON.stringify({ criterion }),
+      }),
+    onSuccess: (data) => {
+      void qc.setQueryData(["admin", "commission-settings"], data);
+      setSaveMsg("Critério salvo para esta empresa.");
+    },
+    onError: (err) => {
+      setSaveMsg(
+        err instanceof Error ? err.message : "Não foi possível salvar.",
+      );
+    },
+  });
+
+  const current = settingsQ.data?.criterion;
+
   return (
     <div className="space-y-8">
       <div className="space-y-2">
@@ -36,16 +90,79 @@ export function CommissionHubPage() {
             Início
           </Link>
           <span className="mx-1.5">›</span>
-          <span className="text-foreground">Comissões e metas</span>
+          <Link to="/configuracoes" className="hover:text-foreground">
+            Configurações
+          </Link>
+          <span className="mx-1.5">›</span>
+          <span className="text-foreground">Comissões</span>
         </nav>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Comissões e metas
-        </h1>
+        <h1 className="text-2xl font-semibold text-foreground">Comissões</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Escolha o que deseja configurar: faixas de comissão progressiva ou
-          metas mensais dos vendedores.
+          Defina quando a comissão entra no relatório Comissões a Pagar, além
+          das faixas e metas dos vendedores.
         </p>
       </div>
+
+      <FormSection title="QUANDO CONSIDERAR A COMISSÃO A PAGAR?">
+        {settingsQ.isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando…</p>
+        ) : settingsQ.isError ? (
+          <p className="text-sm text-destructive">
+            {settingsQ.error instanceof Error
+              ? settingsQ.error.message
+              : "Não foi possível carregar o critério."}
+          </p>
+        ) : (
+          <div
+            className="grid gap-3"
+            role="radiogroup"
+            aria-label="Quando considerar a comissão a pagar"
+          >
+            {(settingsQ.data?.options ?? []).map((opt) => {
+              const selected = current === opt.value;
+              return (
+                <label
+                  key={opt.value}
+                  className={cn(
+                    "flex cursor-pointer gap-3 rounded-lg border px-4 py-3 text-sm transition-colors",
+                    selected
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="commissionPayableCriterion"
+                    className="mt-1"
+                    value={opt.value}
+                    checked={selected}
+                    onChange={() => {
+                      setSaveMsg(null);
+                      save.mutate(opt.value);
+                    }}
+                  />
+                  <span>
+                    <span className="block font-semibold tracking-wide text-foreground">
+                      {opt.title}
+                    </span>
+                    <span className="mt-1 block text-muted-foreground">
+                      {opt.description}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {save.isPending ? (
+          <p className="text-xs text-muted-foreground">Salvando…</p>
+        ) : saveMsg ? (
+          <p className="text-xs text-muted-foreground">{saveMsg}</p>
+        ) : null}
+        <p className="text-xs text-muted-foreground">
+          Pedidos já considerados não entram de novo se o critério mudar.
+        </p>
+      </FormSection>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {CARDS.map((c) => {
@@ -94,6 +211,16 @@ export function CommissionHubPage() {
           );
         })}
       </div>
+
+      {canPayableReport ? (
+        <div>
+          <Button asChild variant="outline">
+            <Link to="/relatorios/comissoes/a-pagar">
+              Abrir relatório Comissões a Pagar
+            </Link>
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

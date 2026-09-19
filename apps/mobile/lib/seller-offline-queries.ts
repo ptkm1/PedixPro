@@ -1,3 +1,4 @@
+import type { PricingSyncPayload } from "@pedidos/shared";
 import type { CustomerRecord } from "@pedidos/shared";
 import type { QueryClient } from "@tanstack/react-query";
 import type { CommissionDashboard } from "../hooks/screens/useCommissionScreen";
@@ -7,6 +8,7 @@ import { notifyOfflineOutboxChanged } from "./offline-outbox-events";
 import {
   CACHE_META_COMMISSION,
   CACHE_META_ORG_SETTINGS,
+  CACHE_META_PRICING,
   getCachedCustomerById,
   getCachedCustomers,
   getCachedProducts,
@@ -38,6 +40,7 @@ export const SELLER_COMMISSION_KEY = [
   "seller",
   "commission-dashboard",
 ] as const;
+export const SELLER_PRICING_KEY = ["seller", "pricing-sync"] as const;
 export const SELLER_ORG_SETTINGS_KEY = [
   "seller",
   "organization",
@@ -154,15 +157,24 @@ export async function fetchSellerCommissionDashboard(): Promise<CommissionDashbo
   });
 }
 
+export async function fetchSellerPricingSync(): Promise<PricingSyncPayload> {
+  return fetchWithOfflineCache({
+    url: "/seller/pricing-sync",
+    readCache: () => getCacheMeta<PricingSyncPayload>(CACHE_META_PRICING),
+    writeCache: (data) => setCacheMeta(CACHE_META_PRICING, data),
+  });
+}
+
 /** Prefetch + hydrate React Query + SQLite. Falhas não propagam. */
 export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
-  const [products, customers, sales, commission, orgSettings] =
+  const [products, customers, sales, commission, orgSettings, pricing] =
     await Promise.all([
       fetchSellerProductsBase().catch(() => null),
       fetchSellerCustomers().catch(() => null),
       fetchSellerSales().catch(() => null),
       fetchSellerCommissionDashboard().catch(() => null),
       fetchSellerOrgSettings().catch(() => null),
+      fetchSellerPricingSync().catch(() => null),
     ]);
 
   if (products) qc.setQueryData(SELLER_PRODUCTS_BASE_KEY, products);
@@ -175,14 +187,16 @@ export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
   if (sales) qc.setQueryData(SELLER_SALES_KEY, sales);
   if (commission) qc.setQueryData(SELLER_COMMISSION_KEY, commission);
   if (orgSettings) qc.setQueryData(SELLER_ORG_SETTINGS_KEY, orgSettings);
+  if (pricing) qc.setQueryData(SELLER_PRICING_KEY, pricing);
 
-  if (products || customers || sales || commission || orgSettings) {
+  if (products || customers || sales || commission || orgSettings || pricing) {
     const n =
       (products?.length ?? 0) +
       (customers?.length ?? 0) +
       (sales?.length ?? 0) +
       (commission ? 1 : 0) +
-      (orgSettings ? 1 : 0);
+      (orgSettings ? 1 : 0) +
+      (pricing ? 1 : 0);
     await markCacheSynced(n).catch(() => undefined);
     notifyOfflineOutboxChanged();
   }

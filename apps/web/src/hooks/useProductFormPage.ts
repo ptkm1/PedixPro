@@ -53,6 +53,18 @@ function normalizeAttrsJson(raw: unknown): Record<string, unknown> {
   return { ...(raw as Record<string, unknown>) };
 }
 
+type ProductSaveExtras = {
+  priceTablePrices?: Array<{ priceTableId: string; price: number }>;
+  sellerCommissions?: Array<{
+    sellerId: string;
+    commissionPercent: number | null;
+  }>;
+  priceTableCommissions?: Array<{
+    priceTableId: string;
+    commissionPercent: number;
+  }>;
+};
+
 export function useProductFormPage() {
   const { productId } = useParams<{ productId?: string }>();
   const navigate = useNavigate();
@@ -70,6 +82,14 @@ export function useProductFormPage() {
     Record<string, string>
   >({});
   const [addPriceTableId, setAddPriceTableId] = useState("");
+  const [sellerCommissionEnabled, setSellerCommissionEnabled] = useState(false);
+  const [sellerCommissionPercents, setSellerCommissionPercents] = useState<
+    Record<string, string>
+  >({});
+  const [priceTableCommissionRows, setPriceTableCommissionRows] = useState<
+    Array<{ priceTableId: string; percent: string }>
+  >([]);
+  const [addCommissionTableId, setAddCommissionTableId] = useState("");
 
   const setField = useCallback(
     <K extends keyof ProductFormValues>(
@@ -102,6 +122,21 @@ export function useProductFormPage() {
     queryFn: () =>
       apiFetch<Array<{ id: string; name: string }>>("/admin/price-tables"),
   });
+
+  const { data: sellers = [] } = useQuery({
+    queryKey: ["admin", "sellers"],
+    queryFn: () =>
+      apiFetch<
+        Array<{ id: string; user?: { name?: string | null } | null }>
+      >("/admin/sellers"),
+  });
+  const sellerOptions = useMemo(
+    () =>
+      sellers
+        .map((s) => ({ id: s.id, name: s.user?.name?.trim() || "Vendedor" }))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt")),
+    [sellers],
+  );
 
   const { data: purchaseUnits = [] } = useQuery({
     queryKey: ["admin", "purchase-units"],
@@ -150,6 +185,38 @@ export function useProductFormPage() {
         map[item.priceTableId] = String(Number(item.price));
       }
       setPriceTablePrices(map);
+
+      const sellerRows =
+        (
+          product as ProductRecord & {
+            sellerCommissions?: Array<{
+              sellerId: string;
+              commissionPercent: unknown;
+            }>;
+          }
+        ).sellerCommissions ?? [];
+      const sellerMap: Record<string, string> = {};
+      for (const row of sellerRows) {
+        sellerMap[row.sellerId] = String(Number(row.commissionPercent));
+      }
+      setSellerCommissionPercents(sellerMap);
+      setSellerCommissionEnabled(sellerRows.length > 0);
+
+      const tableRows =
+        (
+          product as ProductRecord & {
+            priceTableCommissions?: Array<{
+              priceTableId: string;
+              commissionPercent: unknown;
+            }>;
+          }
+        ).priceTableCommissions ?? [];
+      setPriceTableCommissionRows(
+        tableRows.map((row) => ({
+          priceTableId: row.priceTableId,
+          percent: String(Number(row.commissionPercent)),
+        })),
+      );
     }
   }, [product]);
 
@@ -168,9 +235,7 @@ export function useProductFormPage() {
 
   const create = useMutation({
     mutationFn: (
-      body: ReturnType<typeof formToProductPayload> & {
-        priceTablePrices?: Array<{ priceTableId: string; price: number }>;
-      },
+      body: ReturnType<typeof formToProductPayload> & ProductSaveExtras,
     ) =>
       apiFetch<ProductRecord>("/admin/products", {
         method: "POST",
@@ -186,9 +251,7 @@ export function useProductFormPage() {
 
   const update = useMutation({
     mutationFn: (
-      body: ReturnType<typeof formToProductPayload> & {
-        priceTablePrices?: Array<{ priceTableId: string; price: number }>;
-      },
+      body: ReturnType<typeof formToProductPayload> & ProductSaveExtras,
     ) =>
       apiFetch<ProductRecord>(`/admin/products/${productId}`, {
         method: "PATCH",
@@ -234,6 +297,27 @@ export function useProductFormPage() {
         return;
       }
 
+      const sellerCommissions = sellerOptions.map((s) => {
+        const raw = (sellerCommissionPercents[s.id] ?? "").trim();
+        if (!raw) return { sellerId: s.id, commissionPercent: null };
+        const n = Number(raw.replace(",", "."));
+        return {
+          sellerId: s.id,
+          commissionPercent: Number.isNaN(n) ? null : n,
+        };
+      });
+      const priceTableCommissions = priceTableCommissionRows
+        .map((row) => ({
+          priceTableId: row.priceTableId,
+          commissionPercent: Number(row.percent.replace(",", ".")),
+        }))
+        .filter(
+          (row) =>
+            !Number.isNaN(row.commissionPercent) &&
+            row.commissionPercent >= 0 &&
+            row.commissionPercent <= 100,
+        );
+
       setFieldErrors({});
       try {
         const payload = formToProductPayload(values, attrs);
@@ -242,18 +326,22 @@ export function useProductFormPage() {
           update.mutate({
             ...(rest as typeof payload),
             priceTablePrices: syncPrices,
+            sellerCommissions,
+            priceTableCommissions,
           });
         } else {
           create.mutate({
             ...payload,
             priceTablePrices: syncPrices,
+            sellerCommissions,
+            priceTableCommissions,
           });
         }
       } catch (err) {
         setFormError(err instanceof Error ? err.message : "Erro ao salvar.");
       }
     },
-    [attrs, create, isEdit, priceTablePrices, update, values],
+    [attrs, create, isEdit, priceTableCommissionRows, priceTablePrices, sellerCommissionEnabled, sellerCommissionPercents, sellerOptions, update, values],
   );
 
   const onCategoryChange = useCallback(
@@ -302,6 +390,41 @@ export function useProductFormPage() {
     [],
   );
 
+  const setSellerCommissionPercent = useCallback(
+    (sellerId: string, value: string) => {
+      setSellerCommissionPercents((prev) => ({ ...prev, [sellerId]: value }));
+    },
+    [],
+  );
+
+  const addCommissionTable = useCallback(() => {
+    if (!addCommissionTableId) return;
+    setPriceTableCommissionRows((prev) => {
+      if (prev.some((row) => row.priceTableId === addCommissionTableId)) {
+        return prev;
+      }
+      return [...prev, { priceTableId: addCommissionTableId, percent: "" }];
+    });
+    setAddCommissionTableId("");
+  }, [addCommissionTableId]);
+
+  const removeCommissionTable = useCallback((priceTableId: string) => {
+    setPriceTableCommissionRows((prev) =>
+      prev.filter((row) => row.priceTableId !== priceTableId),
+    );
+  }, []);
+
+  const setCommissionTablePercent = useCallback(
+    (priceTableId: string, percent: string) => {
+      setPriceTableCommissionRows((prev) =>
+        prev.map((row) =>
+          row.priceTableId === priceTableId ? { ...row, percent } : row,
+        ),
+      );
+    },
+    [],
+  );
+
   const applyCreatedPurchaseUnit = useCallback(
     (unit: CreatedPurchaseUnit) => {
       setField("purchaseUnit", unit.code);
@@ -342,5 +465,16 @@ export function useProductFormPage() {
     setAddPriceTableId,
     addProductToPriceTable,
     applyCreatedPriceTable,
+    sellerOptions,
+    sellerCommissionEnabled,
+    setSellerCommissionEnabled,
+    sellerCommissionPercents,
+    setSellerCommissionPercent,
+    priceTableCommissionRows,
+    addCommissionTableId,
+    setAddCommissionTableId,
+    addCommissionTable,
+    removeCommissionTable,
+    setCommissionTablePercent,
   };
 }

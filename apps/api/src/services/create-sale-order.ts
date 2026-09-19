@@ -20,6 +20,10 @@ import {
   type SaleLineInput,
 } from "./order-pricing.js";
 import {
+  assertPriceTableForNewOrder,
+  PriceTableServiceError,
+} from "./price-tables.js";
+import {
   applyStockOnStatusChange,
   assertSufficientStock,
   StockError,
@@ -54,7 +58,7 @@ const createdOrderInclude = {
   },
   seller: {
     include: {
-      user: { select: { name: true, email: true } },
+      user: { select: { name: true, email: true, phone: true } },
     },
   },
 } as const;
@@ -115,6 +119,10 @@ export function replySaleCreateError(reply: FastifyReply, err: unknown): boolean
     void reply.status(400).send(stockErrorPayload(err));
     return true;
   }
+  if (err instanceof PriceTableServiceError) {
+    void reply.status(err.httpStatus).send({ error: err.message });
+    return true;
+  }
   return false;
 }
 
@@ -156,7 +164,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
 
   const customer = await prisma.customer.findFirst({
     where: { id: params.customerId, organizationId: params.organizationId },
-    select: { id: true },
+    select: { id: true, regionId: true },
   });
   if (!customer) throw new SaleCreateError("Cliente inválido", 400);
 
@@ -173,14 +181,20 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
   }
 
   if (params.priceTableId) {
-    const table = await prisma.priceTable.findFirst({
-      where: {
-        id: params.priceTableId,
+    try {
+      await assertPriceTableForNewOrder({
         organizationId: params.organizationId,
-      },
-      select: { id: true },
-    });
-    if (!table) throw new SaleCreateError("Tabela de preço inválida", 400);
+        priceTableId: params.priceTableId,
+        sellerId: params.sellerId,
+        customerId: params.customerId,
+        regionId: customer.regionId,
+      });
+    } catch (e) {
+      if (e instanceof PriceTableServiceError) {
+        throw new SaleCreateError(e.message, e.httpStatus);
+      }
+      throw e;
+    }
   }
 
   const sale = await computeSaleOrder({
@@ -264,6 +278,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
         sellerId: params.sellerId,
         customerId: params.customerId,
         paymentConditionId: params.paymentConditionId,
+        priceTableId: params.priceTableId ?? null,
         operation: params.operation ?? "SALE",
         status: orderStatus,
         situationId,
@@ -283,6 +298,11 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
             productName: l.productName,
             commissionPercent: l.commissionPercent,
             commissionAmount: l.commissionAmount,
+            commissionOrigin: l.commissionOrigin,
+            priceTableId: l.priceTableId,
+            priceTableName: l.priceTableName,
+            priceOrigin: l.priceOrigin,
+            priceOriginLabel: l.priceOriginLabel,
           })),
         },
       },

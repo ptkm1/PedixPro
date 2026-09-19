@@ -1,7 +1,8 @@
+import { applySellerDiscountWithMinPrice, type CommissionOrigin } from "@pedidos/shared";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
 import { computeGreedyComboDiscount } from "./combo-discount.js";
-import { resolveCommissionPercent } from "./commission-resolve.js";
+import { resolveCommission } from "./commission-resolve.js";
 import { resolveEffectiveUnitPrice } from "./price-resolve.js";
 import { calendarMonthBounds, sellerConfirmedRevenueInPeriod } from "./seller-metrics.js";
 
@@ -25,6 +26,11 @@ export type ComputedSaleLine = {
   productName: string;
   commissionPercent: number;
   commissionAmount: number;
+  commissionOrigin: CommissionOrigin;
+  priceTableId: string | null;
+  priceTableName: string | null;
+  priceOrigin: string | null;
+  priceOriginLabel: string | null;
 };
 
 export type ComputeSaleOrderParams = {
@@ -99,34 +105,51 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
     const requestedDisc = Math.min(100, Math.max(0, input.discountPercent ?? 0));
     const disc = Math.min(requestedDisc, maxSellerDisc);
 
-    let unitPrice = priced.effectiveUnitPrice;
-    if (disc > 0) unitPrice = roundMoney(unitPrice * (1 - disc / 100));
-
-    const minSale =
+    const tableMin = priced.minPrice;
+    const productMin =
       prod.minSaleUnitPrice != null ? roundMoney(decToNum(prod.minSaleUnitPrice)) : null;
-    if (minSale != null && unitPrice + 1e-9 < minSale) {
-      throw new OrderPricingError(
-        `Preço unitário final inferior ao mínimo permitido (${minSale.toFixed(2)}) para «${prod.name}».`,
-      );
-    }
+    const minSale =
+      tableMin != null && productMin != null
+        ? Math.max(tableMin, productMin)
+        : (tableMin ?? productMin);
 
-    const commissionPercent = await resolveCommissionPercent(
+    const afterDisc = applySellerDiscountWithMinPrice({
+      catalogUnitPrice: priced.effectiveUnitPrice,
+      discountPercent: disc,
+      minPrice: minSale,
+    });
+    if (!afterDisc.ok) {
+      throw new OrderPricingError(afterDisc.message);
+    }
+    const unitPrice = afterDisc.unitPrice;
+
+    const resolvedCommission = await resolveCommission(
       params.organizationId,
       params.sellerId,
       prod.id,
       prod.categoryId,
-      { mtdConfirmedRevenue: mtdBefore },
+      {
+        mtdConfirmedRevenue: mtdBefore,
+        priceTableId: priced.priceTableId ?? params.priceTableId ?? null,
+      },
     );
     const lineTotal = roundMoney(unitPrice * input.quantity);
-    const commissionAmount = roundMoney((lineTotal * commissionPercent) / 100);
+    const commissionAmount = roundMoney(
+      (lineTotal * resolvedCommission.percent) / 100,
+    );
 
     computedLines.push({
       productId: prod.id,
       quantity: input.quantity,
       unitPrice,
       productName: prod.name,
-      commissionPercent,
+      commissionPercent: resolvedCommission.percent,
       commissionAmount,
+      commissionOrigin: resolvedCommission.origin,
+      priceTableId: priced.priceTableId ?? params.priceTableId ?? null,
+      priceTableName: priced.priceTableName,
+      priceOrigin: priced.origin,
+      priceOriginLabel: priced.originLabel,
     });
   }
 

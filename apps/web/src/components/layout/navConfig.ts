@@ -192,6 +192,9 @@ export function resourceForPath(pathname: string): PermissionResource | null {
   if (pathname.startsWith("/usuarios")) return "users";
   if (pathname.startsWith("/equipes")) return "teams";
   if (pathname.startsWith("/comissao")) return "commissions";
+  if (pathname.startsWith("/relatorios/comissoes/a-pagar")) {
+    return "reports_commissions_payable";
+  }
   if (pathname.startsWith("/clientes") || pathname.startsWith("/notificacoes"))
     return "customers";
   if (pathname.startsWith("/visitas")) return "visits";

@@ -33,6 +33,8 @@ import {
     sendOrderPdfReply,
 } from "../services/order-pdf-load.js";
 import { resolveEffectiveUnitPrice } from "../services/price-resolve.js";
+import { loadPricingSync } from "../services/price-tables.js";
+import { loadSellerCommissionSync } from "../services/product-commission-exceptions.js";
 import { getProductStockLevels } from "../services/product-stock.js";
 import { buildSalesByCustomerPdf } from "../services/reports/sales-by-customer-pdf.js";
 import { buildSalesBySupplierPdf } from "../services/reports/sales-by-supplier-pdf.js";
@@ -136,10 +138,13 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       id: user!.id,
       email: user!.email,
       name: user!.name,
+      phone: user!.phone,
       sellerId: auth.sellerId,
       commissionPercent: user!.seller
         ? decToNum(user!.seller.commissionPercent)
         : null,
+      defaultPriceTableId: user!.seller?.defaultPriceTableId ?? null,
+      commissionType: user!.seller?.commissionType ?? null,
     };
   });
 
@@ -332,6 +337,9 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         situation: {
           select: { id: true, code: true, name: true },
         },
+        seller: {
+          include: { user: { select: { name: true, phone: true } } },
+        },
       },
     });
   });
@@ -349,6 +357,9 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         items: { include: { product: true } },
         situation: {
           select: { id: true, code: true, name: true },
+        },
+        seller: {
+          include: { user: { select: { name: true, phone: true } } },
         },
       },
     });
@@ -429,6 +440,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         customerId: z.string().min(1),
         paymentConditionId: z.string().min(1),
         establishmentId: z.string().min(1).optional(),
+        priceTableId: z.string().min(1).optional(),
         operation: z.enum(["SALE"]).optional(),
         /** Idempotência — mesmo valor em replay devolve o mesmo pedido (offline queue). */
         clientMutationId: z.string().min(8).max(80).optional(),
@@ -508,6 +520,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         sellerId,
         customerId: body.data.customerId,
         paymentConditionId: body.data.paymentConditionId,
+        priceTableId: body.data.priceTableId ?? null,
         establishmentId: body.data.establishmentId,
         items: body.data.items.map((i) => ({
           productId: i.productId,
@@ -534,9 +547,15 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
   app.get("/products", async (req) => {
     const auth = req.auth!;
     const q = z
-      .object({ customerId: z.string().optional() })
+      .object({
+        customerId: z.string().optional(),
+        priceTableId: z.string().optional(),
+        quantity: z.coerce.number().int().positive().optional(),
+      })
       .safeParse(req.query);
     const customerId = q.success ? q.data.customerId : undefined;
+    const priceTableId = q.success ? q.data.priceTableId : undefined;
+    const quantity = q.success ? q.data.quantity ?? 1 : 1;
 
     const catalogIds =
       auth.role === "ADMIN"
@@ -557,7 +576,14 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
             id: { in: catalogIds },
           },
           include: {
-            category: { select: { id: true, code: true, name: true } },
+            category: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                commissionPercent: true,
+              },
+            },
             supplier: {
               select: {
                 id: true,
@@ -621,6 +647,16 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     );
 
     const at = new Date();
+    const commissionSync = auth.sellerId
+      ? await loadSellerCommissionSync(
+          auth.organizationId,
+          auth.sellerId,
+          products.map((p) => p.id),
+        )
+      : [];
+    const commissionByProduct = new Map(
+      commissionSync.map((row) => [row.productId, row]),
+    );
     const out = [];
     for (const p of products) {
       const priced = await resolveEffectiveUnitPrice(
@@ -630,10 +666,12 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           sellerId: auth.sellerId,
           customerId: customerId ?? null,
           regionId,
-          quantity: 1,
+          priceTableId: priceTableId ?? null,
+          quantity,
           at,
         },
       );
+      const commission = commissionByProduct.get(p.id);
       out.push({
         ...p,
         featured: Boolean(p.featured),
@@ -654,6 +692,22 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           p.maxSellerDiscountPercent != null
             ? decToNum(p.maxSellerDiscountPercent)
             : defaultMaxSellerDisc,
+        resolvedPriceTableId: priced.priceTableId,
+        priceOrigin: priced.origin,
+        priceOriginLabel: priced.originLabel,
+        tableMinPrice: priced.minPrice,
+        commissionSync: commission ?? {
+          productId: p.id,
+          productDefaultPercent:
+            p.commissionPercent != null ? decToNum(p.commissionPercent) : null,
+          groupPercent:
+            p.category && "commissionPercent" in p.category &&
+            p.category.commissionPercent != null
+              ? decToNum(p.category.commissionPercent)
+              : null,
+          sellerProductPercent: null,
+          priceTablePercents: [],
+        },
       });
     }
 
@@ -670,6 +724,16 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return out;
+  });
+
+  app.get("/pricing-sync", async (req, reply) => {
+    const auth = req.auth!;
+    const sellerId = requireSellerActor(auth, reply);
+    if (!sellerId) return;
+    return loadPricingSync({
+      organizationId: auth.organizationId,
+      sellerId,
+    });
   });
 
   /** Estoque atual em lote — usado na pré-checagem antes de sincronizar a fila offline. */
@@ -696,6 +760,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     if (auth.role === "ADMIN") {
       return prisma.customer.findMany({
         where: { organizationId: auth.organizationId },
+        include: { specialPrices: true },
         orderBy: { name: "asc" },
       });
     }
@@ -708,6 +773,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         auth.sellerId!,
         showUnassigned,
       ),
+      include: { specialPrices: true },
       orderBy: { name: "asc" },
     });
   });
@@ -718,6 +784,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     if (auth.role === "ADMIN") {
       const customer = await prisma.customer.findFirst({
         where: { id, organizationId: auth.organizationId },
+        include: { specialPrices: true },
       });
       if (!customer) return reply.status(404).send({ error: "Não encontrado" });
       return customer;
@@ -734,6 +801,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           showUnassigned,
         ),
       },
+      include: { specialPrices: true },
     });
     if (!customer) return reply.status(404).send({ error: "Não encontrado" });
     return customer;

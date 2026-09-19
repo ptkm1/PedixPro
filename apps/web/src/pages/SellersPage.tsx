@@ -22,6 +22,7 @@ import { useScrollToFirstError } from "@/hooks/useScrollToFirstError";
 import { cn } from "@/lib/utils";
 import {
   canRead,
+  formatBrazilPhoneDigits,
   planHasFeature,
   SELLER_COMMISSION_TYPES,
   sellerCommissionTypeLabel,
@@ -47,10 +48,13 @@ type Seller = {
     email: string;
     name: string;
     matricula?: string | null;
+    phone?: string | null;
     activatedAt?: string | null;
   };
   manager: Manager | null;
   team: { id: string; name: string } | null;
+  defaultPriceTableId?: string | null;
+  allowedPriceTables?: Array<{ priceTableId: string }>;
 };
 
 function selectAllState(
@@ -101,17 +105,27 @@ export function SellersPage() {
     enabled: admin,
   });
 
+  const { data: priceTables = [] } = useQuery({
+    queryKey: ["admin", "price-tables"],
+    queryFn: () =>
+      apiFetch<Array<{ id: string; name: string }>>("/admin/price-tables"),
+    enabled: admin,
+  });
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [sendInvite, setSendInvite] = useState(true);
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [commissionType, setCommissionType] =
     useState<SellerCommissionType>("FIXED");
   const [commission, setCommission] = useState("10");
   const [managerUserId, setManagerUserId] = useState("");
   const [active, setActive] = useState(true);
+  const [allowedTableIds, setAllowedTableIds] = useState<string[]>([]);
+  const [defaultPriceTableId, setDefaultPriceTableId] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -143,10 +157,13 @@ export function SellersPage() {
     setPassword("");
     setSendInvite(true);
     setName("");
+    setPhone("");
     setCommissionType("FIXED");
     setCommission("10");
     setManagerUserId("");
     setActive(true);
+    setAllowedTableIds([]);
+    setDefaultPriceTableId("");
     setFormError(null);
     setShowValidation(false);
   }
@@ -161,10 +178,15 @@ export function SellersPage() {
     setEmail(s.user.email);
     setPassword("");
     setName(s.user.name);
+    setPhone(s.user.phone ?? "");
     setCommissionType(s.commissionType ?? "FIXED");
     setCommission(String(Number(s.commissionPercent)));
     setManagerUserId(s.managerUserId ?? "");
     setActive(s.active);
+    setAllowedTableIds(
+      (s.allowedPriceTables ?? []).map((r) => r.priceTableId),
+    );
+    setDefaultPriceTableId(s.defaultPriceTableId ?? "");
     setFormError(null);
     setShowValidation(false);
     setSheetOpen(true);
@@ -198,9 +220,12 @@ export function SellersPage() {
         const payload: Record<string, unknown> = {
           name: name.trim(),
           email: email.trim(),
+          phone: phone.trim(),
           commissionType,
           active,
           managerUserId: managerUserId === "" ? null : managerUserId,
+          defaultPriceTableId: defaultPriceTableId || null,
+          allowedPriceTableIds: allowedTableIds,
         };
         if (commissionType === "FIXED") {
           payload.commissionPercent = Number(commission);
@@ -218,6 +243,7 @@ export function SellersPage() {
       const createBody: Record<string, unknown> = {
         email: email.trim(),
         name: name.trim(),
+        phone: phone.trim(),
         commissionType,
         ...(commissionType === "FIXED"
           ? { commissionPercent: Number(commission) }
@@ -363,13 +389,14 @@ export function SellersPage() {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = "Nome é obrigatório.";
     if (!email.trim()) e.email = "Email é obrigatório.";
+    if (!phone.trim()) e.phone = "Telefone é obrigatório.";
     if (!editingId && !sendInvite && password.length < 6) {
       e.password = "Senha deve ter no mínimo 6 caracteres.";
     } else if (editingId && password.length > 0 && password.length < 6) {
       e.password = "Senha deve ter no mínimo 6 caracteres.";
     }
     return e;
-  }, [showValidation, name, email, password, editingId, sendInvite]);
+  }, [showValidation, name, email, phone, password, editingId, sendInvite]);
 
   useScrollToFirstError(
     Object.keys(fieldErrors).length > 0 ? fieldErrors : formError,
@@ -379,7 +406,7 @@ export function SellersPage() {
   function trySubmit() {
     setShowValidation(true);
     setFormError(null);
-    if (!name.trim() || !email.trim()) return;
+    if (!name.trim() || !email.trim() || !phone.trim()) return;
     if (!editingId && !sendInvite && password.length < 6) return;
     if (editingId && password.length > 0 && password.length < 6) return;
     save.mutate();
@@ -517,6 +544,21 @@ export function SellersPage() {
               aria-invalid={fieldErrors.email ? true : undefined}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+            />
+          </FormField>
+          <FormField
+            label="Telefone"
+            htmlFor="seller-phone"
+            required
+            error={fieldErrors.phone}
+          >
+            <Input
+              id="seller-phone"
+              type="tel"
+              placeholder="Telefone"
+              aria-invalid={fieldErrors.phone ? true : undefined}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
             />
           </FormField>
           {!editingId ? (
@@ -683,6 +725,58 @@ export function SellersPage() {
             .
           </p>
         ) : null}
+        <FormField
+          label="Tabelas de preço permitidas"
+          className="mt-4"
+          hint="Nenhuma marcada = o vendedor usa todas as tabelas ativas."
+        >
+          <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border p-3">
+            {priceTables.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhuma tabela cadastrada.
+              </p>
+            ) : (
+              priceTables.map((t) => (
+                <label
+                  key={t.id}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <Checkbox
+                    checked={allowedTableIds.includes(t.id)}
+                    onCheckedChange={(v) => {
+                      setAllowedTableIds((prev) => {
+                        if (v === true) return [...prev, t.id];
+                        return prev.filter((id) => id !== t.id);
+                      });
+                    }}
+                  />
+                  {t.name}
+                </label>
+              ))
+            )}
+          </div>
+        </FormField>
+        <FormField
+          label="Tabela padrão do vendedor"
+          htmlFor="seller-default-pt"
+          className="mt-3"
+          hint="Usada se o cliente não tiver tabela padrão."
+        >
+          <AppSelect
+            id="seller-default-pt"
+            value={defaultPriceTableId}
+            emptyLabel="Nenhuma"
+            placeholder="Nenhuma"
+            options={priceTables
+              .filter(
+                (t) =>
+                  allowedTableIds.length === 0 ||
+                  allowedTableIds.includes(t.id),
+              )
+              .map((t) => ({ value: t.id, label: t.name }))}
+            onValueChange={setDefaultPriceTableId}
+          />
+        </FormField>
         <FormErrorBanner message={formError} className="mt-3" />
       </FormSheet>
 
@@ -761,6 +855,7 @@ export function SellersPage() {
                 <TableHead className="px-4">Nome</TableHead>
                 <TableHead className="px-4">Matrícula</TableHead>
                 <TableHead className="px-4">Email</TableHead>
+                <TableHead className="px-4">Telefone</TableHead>
                 <TableHead className="px-4">Gestor</TableHead>
                 <TableHead className="px-4">Equipe</TableHead>
                 <TableHead className="px-4">Tipo comissão</TableHead>
@@ -791,6 +886,11 @@ export function SellersPage() {
                       {s.user.matricula ?? "—"}
                     </TableCell>
                     <TableCell className="px-4 py-3">{s.user.email}</TableCell>
+                    <TableCell className="px-4 py-3 text-muted-foreground">
+                      {s.user.phone?.trim()
+                        ? formatBrazilPhoneDigits(s.user.phone)
+                        : "—"}
+                    </TableCell>
                     <TableCell className="px-4 py-3">
                       <AppSelect
                         value={s.managerUserId ?? ""}
