@@ -1,3 +1,5 @@
+import type { CatalogProductPrice } from "@pedidos/shared";
+
 export type CatalogTileProduct = {
   id: string;
   name: string;
@@ -6,6 +8,8 @@ export type CatalogTileProduct = {
   category?: { id: string; name: string } | null;
   effectiveUnitPrice?: number;
   catalogUnitPrice?: number;
+  /** Preços por tabela (só visualização no catálogo). */
+  prices?: CatalogProductPrice[];
   stockQty?: number;
   blockSaleWhenOutOfStock?: boolean;
   attributes?: Record<string, unknown>;

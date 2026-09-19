@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Shield,
   Table,
+  Tags,
   Target,
   UserRound,
   UserPlus,
@@ -159,6 +160,13 @@ export function SystemSettingsPage() {
           } satisfies SettingsShortcutItem,
         ]
       : []),
+    {
+      to: "/configuracoes/catalogo-precos",
+      title: "Exibição de preços no catálogo",
+      description:
+        "Todas as tabelas, menor ou maior preço no app do vendedor",
+      icon: Tags,
+    },
     ...(canPaymentConditions
       ? [
           {

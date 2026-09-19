@@ -49,6 +49,13 @@ enum OrderSyncMode {
   MANUAL
 }
 
+/// Como o catálogo do app do vendedor exibe preços das tabelas (só visualização).
+enum CatalogPriceDisplayMode {
+  ALL
+  LOWEST
+  HIGHEST
+}
+
 /// Cadastro de cliente pelo vendedor: imediato ou aguarda validação no escritório.
 enum CustomerRegistrationMode {
   AUTO
@@ -265,6 +272,8 @@ model Organization {
   defaultMaxSellerDiscountPercent Decimal @default(50) @db.Decimal(5, 2)
   /// AUTO = tenta enviar na hora + auto-flush da fila; MANUAL = sempre fila local até sync manual.
   orderSyncMode    OrderSyncMode      @default(AUTO)
+  /// Exibição de preços no catálogo do app (todas / menor / maior). Default LOWEST = 1 valor.
+  catalogPriceDisplayMode CatalogPriceDisplayMode @default(LOWEST)
   /// Se false, vendedores só veem clientes atribuídos a eles (sem “carteira” / sellerId null).
   sellerShowUnassignedCustomers Boolean @default(true)
   /// AUTO = cadastro do vendedor já aprovado; REQUIRE_APPROVAL = fica pendente até o escritório validar.

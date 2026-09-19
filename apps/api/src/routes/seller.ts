@@ -34,6 +34,7 @@ import {
     sendOrderPdfReply,
 } from "../services/order-pdf-load.js";
 import { resolveEffectiveUnitPrice } from "../services/price-resolve.js";
+import { loadCatalogDisplayPricesByProduct } from "../services/catalog-display-prices.js";
 import { getProductStockLevels } from "../services/product-stock.js";
 import { buildSalesByCustomerPdf } from "../services/reports/sales-by-customer-pdf.js";
 import { buildSalesBySupplierPdf } from "../services/reports/sales-by-supplier-pdf.js";
@@ -111,6 +112,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       where: { id: auth.organizationId },
       select: {
         orderSyncMode: true,
+        catalogPriceDisplayMode: true,
         sellerShowUnassignedCustomers: true,
         customerRegistrationMode: true,
         sellerCanEditQueuedSales: true,
@@ -121,6 +123,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: "Organização não encontrada" });
     return {
       orderSyncMode: org.orderSyncMode,
+      catalogPriceDisplayMode: org.catalogPriceDisplayMode,
       sellerShowUnassignedCustomers: org.sellerShowUnassignedCustomers,
       customerRegistrationMode: org.customerRegistrationMode,
       sellerCanEditQueuedSales: org.sellerCanEditQueuedSales,
@@ -700,6 +703,11 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     );
 
     const at = new Date();
+    const displayPricesByProduct = await loadCatalogDisplayPricesByProduct(
+      auth.organizationId,
+      products.map((p) => p.id),
+      at,
+    );
     const out = [];
     for (const p of products) {
       const priced = await resolveEffectiveUnitPrice(
@@ -723,6 +731,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         highlighted:
           Boolean(p.featured) || Boolean(priced.promotionId),
         soldQty: soldQtyMap.get(p.id) ?? 0,
+        prices: displayPricesByProduct.get(p.id) ?? [],
         maxSellerDiscountPercent:
           p.maxSellerDiscountPercent != null
             ? decToNum(p.maxSellerDiscountPercent)

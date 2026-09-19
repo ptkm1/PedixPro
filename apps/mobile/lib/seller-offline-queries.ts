@@ -1,4 +1,8 @@
 import type { CustomerRecord } from "@pedidos/shared";
+import {
+  parseCatalogPriceDisplayMode,
+  type CatalogPriceDisplayMode,
+} from "@pedidos/shared";
 import type { QueryClient } from "@tanstack/react-query";
 import type { CommissionDashboard } from "../hooks/screens/useCommissionScreen";
 import type { SellerOrderListItem } from "../hooks/screens/useSalesListScreen";
@@ -26,6 +30,7 @@ export type CustomerRegistrationMode = "AUTO" | "REQUIRE_APPROVAL";
 
 export type SellerOrgSettings = {
   orderSyncMode: OrderSyncMode;
+  catalogPriceDisplayMode?: CatalogPriceDisplayMode;
   sellerShowUnassignedCustomers?: boolean;
   customerRegistrationMode?: CustomerRegistrationMode;
   sellerCanEditQueuedSales?: boolean;
@@ -74,8 +79,15 @@ function normalizeOrgSettings(raw: unknown): SellerOrgSettings {
       (raw as { sellerCanEditQueuedSales?: unknown })
         .sellerCanEditQueuedSales === true,
   );
+  const catalogPriceDisplayMode = parseCatalogPriceDisplayMode(
+    raw &&
+      typeof raw === "object"
+      ? (raw as { catalogPriceDisplayMode?: unknown }).catalogPriceDisplayMode
+      : undefined,
+  );
   return {
     orderSyncMode: mode,
+    catalogPriceDisplayMode,
     sellerShowUnassignedCustomers: showUnassigned,
     customerRegistrationMode: registrationMode,
     sellerCanEditQueuedSales: canEditQueued,

@@ -1,3 +1,5 @@
+import type { CatalogProductPrice } from "@pedidos/shared";
+
 export type SaleProduct = {
   id: string;
   name: string;
@@ -7,6 +9,8 @@ export type SaleProduct = {
   basePrice: unknown;
   catalogUnitPrice?: number;
   effectiveUnitPrice?: number;
+  /** Preços por tabela para exibição no catálogo (só visualização). */
+  prices?: CatalogProductPrice[];
   promotionLabel?: string | null;
   featured?: boolean;
   hasActivePromotion?: boolean;
