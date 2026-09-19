@@ -319,62 +319,53 @@ async function main() {
   const adminPass = await bcrypt.hash(DEMO_ADMIN_PASSWORD, 10);
   const sellerPass = await bcrypt.hash(DEMO_SELLER_PASSWORD, 10);
   const managerPass = await bcrypt.hash(DEMO_MANAGER_PASSWORD, 10);
+  const activatedAt = new Date();
 
-  await prisma.user.upsert({
-    where: { email: DEMO_ADMIN_EMAIL },
-    update: {
-      passwordHash: adminPass,
-      name: "Admin Demo",
-      role: Role.ADMIN,
+  /** Demo local: senha conhecida + conta já ativa (sem e-mail/Resend). */
+  async function upsertActivatedDemoUser(params: {
+    email: string;
+    passwordHash: string;
+    name: string;
+    role: Role;
+    matricula: string;
+  }) {
+    const data = {
+      passwordHash: params.passwordHash,
+      name: params.name,
+      role: params.role,
       organizationId: org.id,
-      matricula: "ADM-001",
-    },
-    create: {
-      email: DEMO_ADMIN_EMAIL,
-      passwordHash: adminPass,
-      name: "Admin Demo",
-      role: Role.ADMIN,
-      organizationId: org.id,
-      matricula: "ADM-001",
-    },
+      matricula: params.matricula,
+      activatedAt,
+    };
+    return prisma.user.upsert({
+      where: { email: params.email },
+      update: data,
+      create: { email: params.email, ...data },
+    });
+  }
+
+  await upsertActivatedDemoUser({
+    email: DEMO_ADMIN_EMAIL,
+    passwordHash: adminPass,
+    name: "Admin Demo",
+    role: Role.ADMIN,
+    matricula: "ADM-001",
   });
 
-  const managerUser = await prisma.user.upsert({
-    where: { email: DEMO_MANAGER_EMAIL },
-    update: {
-      passwordHash: managerPass,
-      name: "Gestor Demo",
-      role: Role.MANAGER,
-      organizationId: org.id,
-      matricula: "GES-001",
-    },
-    create: {
-      email: DEMO_MANAGER_EMAIL,
-      passwordHash: managerPass,
-      name: "Gestor Demo",
-      role: Role.MANAGER,
-      organizationId: org.id,
-      matricula: "GES-001",
-    },
+  const managerUser = await upsertActivatedDemoUser({
+    email: DEMO_MANAGER_EMAIL,
+    passwordHash: managerPass,
+    name: "Gestor Demo",
+    role: Role.MANAGER,
+    matricula: "GES-001",
   });
 
-  const sellerUser = await prisma.user.upsert({
-    where: { email: DEMO_SELLER_EMAIL },
-    update: {
-      passwordHash: sellerPass,
-      name: "Vendedor Demo",
-      role: Role.SELLER,
-      organizationId: org.id,
-      matricula: "VEN-001",
-    },
-    create: {
-      email: DEMO_SELLER_EMAIL,
-      passwordHash: sellerPass,
-      name: "Vendedor Demo",
-      role: Role.SELLER,
-      organizationId: org.id,
-      matricula: "VEN-001",
-    },
+  const sellerUser = await upsertActivatedDemoUser({
+    email: DEMO_SELLER_EMAIL,
+    passwordHash: sellerPass,
+    name: "Vendedor Demo",
+    role: Role.SELLER,
+    matricula: "VEN-001",
   });
 
   const seller = await prisma.seller.upsert({
@@ -612,10 +603,22 @@ async function main() {
         priority: 1,
       },
     ],
+    skipDuplicates: true,
   });
 
-  const customer = await prisma.customer.create({
-    data: {
+  const customer = await prisma.customer.upsert({
+    where: {
+      organizationId_cnpj: {
+        organizationId: org.id,
+        cnpj: "11444777000161",
+      },
+    },
+    update: {
+      name: "Cliente Exemplo",
+      email: "cliente@exemplo.com",
+      sellerId: seller.id,
+    },
+    create: {
       name: "Cliente Exemplo",
       email: "cliente@exemplo.com",
       organizationId: org.id,
@@ -643,34 +646,51 @@ async function main() {
     throw new Error("Etapa OPEN não encontrada após o seed de situações");
   }
 
-  await prisma.order.create({
-    data: {
+  const existingDemoOrder = await prisma.order.findFirst({
+    where: {
       organizationId: org.id,
       sellerId: seller.id,
       customerId: customer.id,
-      status: "CONFIRMED",
-      situationId: openSituation.id,
       totalAmount: 180.5,
-      items: {
-        create: [
-          {
-            productId: p1.id,
-            quantity: 2,
-            unitPrice: 90.25,
-            productName: p1.name,
-          },
-        ],
+    },
+    select: { id: true },
+  });
+  if (!existingDemoOrder) {
+    await prisma.order.create({
+      data: {
+        organizationId: org.id,
+        sellerId: seller.id,
+        customerId: customer.id,
+        status: "CONFIRMED",
+        situationId: openSituation.id,
+        totalAmount: 180.5,
+        items: {
+          create: [
+            {
+              productId: p1.id,
+              quantity: 2,
+              unitPrice: 90.25,
+              productName: p1.name,
+            },
+          ],
+        },
       },
-    },
-  });
+    });
+  }
 
-  await prisma.notification.create({
-    data: {
-      userId: sellerUser.id,
-      title: "Bem-vindo",
-      body: "Seu acesso ao app PedixPro está ativo.",
-    },
+  const welcomeNote = await prisma.notification.findFirst({
+    where: { userId: sellerUser.id, title: "Bem-vindo" },
+    select: { id: true },
   });
+  if (!welcomeNote) {
+    await prisma.notification.create({
+      data: {
+        userId: sellerUser.id,
+        title: "Bem-vindo",
+        body: "Seu acesso ao app PedixPro está ativo.",
+      },
+    });
+  }
 
   await upsertFiscalDemoData(org.id);
 

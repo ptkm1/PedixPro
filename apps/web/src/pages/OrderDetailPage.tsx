@@ -29,6 +29,7 @@ import {
   SYSTEM_SITUATION_CODES,
   canRead,
   canWrite as canWritePermission,
+  formatBrazilPhoneDigits,
 } from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, Printer } from "lucide-react";
@@ -54,7 +55,10 @@ type Order = {
   creditHoldReasons?: unknown;
   createdAt: string;
   sellerId?: string | null;
-  seller: { id?: string; user: { name: string; email: string } } | null;
+  seller: {
+    id?: string;
+    user: { name: string; email: string; phone?: string | null };
+  } | null;
   createdByUser?: { id: string; name: string; email: string } | null;
   customer: { name: string; email: string | null } | null;
   items: {
@@ -414,6 +418,11 @@ export function OrderDetailPage() {
                 {order.seller?.user.email ? (
                   <dd className="mt-0.5 text-xs text-muted-foreground">
                     {order.seller.user.email}
+                  </dd>
+                ) : null}
+                {order.seller?.user.phone?.trim() ? (
+                  <dd className="mt-0.5 text-xs text-muted-foreground">
+                    {formatBrazilPhoneDigits(order.seller.user.phone)}
                   </dd>
                 ) : null}
               </>

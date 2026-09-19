@@ -1,3 +1,4 @@
+import { combinedMinPrice } from "./pricing";
 import type { CartLine, SaleProduct } from "./types";
 
 export const DISCOUNT_CHIP_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50] as const;
@@ -159,6 +160,12 @@ export function bumpCartQty(
       maxSellerDiscountPercent: maxDisc,
       priceTableId,
       priceTableName,
+      priceOriginLabel: p.priceOriginLabel ?? cur?.priceOriginLabel ?? null,
+      minPrice:
+        combinedMinPrice(
+          p.tableMinPrice,
+          p.minSaleUnitPrice != null ? Number(p.minSaleUnitPrice) : null,
+        ) ?? cur?.minPrice ?? null,
     },
   };
 }

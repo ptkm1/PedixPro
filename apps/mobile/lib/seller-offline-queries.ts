@@ -1,3 +1,4 @@
+import type { PricingSyncPayload } from "@pedidos/shared";
 import type { CustomerRecord } from "@pedidos/shared";
 import {
   parseCatalogPriceDisplayMode,
@@ -11,6 +12,7 @@ import { notifyOfflineOutboxChanged } from "./offline-outbox-events";
 import {
   CACHE_META_COMMISSION,
   CACHE_META_ORG_SETTINGS,
+  CACHE_META_PRICING,
   getCachedCustomerById,
   getCachedCustomers,
   getCachedPriceTables,
@@ -48,6 +50,7 @@ export const SELLER_COMMISSION_KEY = [
   "seller",
   "commission-dashboard",
 ] as const;
+export const SELLER_PRICING_KEY = ["seller", "pricing-sync"] as const;
 export const SELLER_ORG_SETTINGS_KEY = [
   "seller",
   "organization",
@@ -198,9 +201,17 @@ export async function fetchSellerCommissionDashboard(): Promise<CommissionDashbo
   });
 }
 
+export async function fetchSellerPricingSync(): Promise<PricingSyncPayload> {
+  return fetchWithOfflineCache({
+    url: "/seller/pricing-sync",
+    readCache: () => getCacheMeta<PricingSyncPayload>(CACHE_META_PRICING),
+    writeCache: (data) => setCacheMeta(CACHE_META_PRICING, data),
+  });
+}
+
 /** Prefetch + hydrate React Query + SQLite. Falhas não propagam. */
 export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
-  const [products, customers, sales, commission, orgSettings, priceTables] =
+  const [products, customers, sales, commission, orgSettings, priceTables, pricing] =
     await Promise.all([
       fetchSellerProductsBase().catch(() => null),
       fetchSellerCustomers().catch(() => null),
@@ -208,6 +219,7 @@ export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
       fetchSellerCommissionDashboard().catch(() => null),
       fetchSellerOrgSettings().catch(() => null),
       fetchSellerPriceTables().catch(() => null),
+      fetchSellerPricingSync().catch(() => null),
     ]);
 
   if (products) qc.setQueryData(SELLER_PRODUCTS_BASE_KEY, products);
@@ -221,6 +233,7 @@ export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
   if (commission) qc.setQueryData(SELLER_COMMISSION_KEY, commission);
   if (orgSettings) qc.setQueryData(SELLER_ORG_SETTINGS_KEY, orgSettings);
   if (priceTables) qc.setQueryData(SELLER_PRICE_TABLES_KEY, priceTables);
+  if (pricing) qc.setQueryData(SELLER_PRICING_KEY, pricing);
 
   if (
     products ||
@@ -228,7 +241,8 @@ export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
     sales ||
     commission ||
     orgSettings ||
-    priceTables
+    priceTables ||
+    pricing
   ) {
     const n =
       (products?.length ?? 0) +
@@ -236,7 +250,8 @@ export async function prefetchSellerReadCache(qc: QueryClient): Promise<void> {
       (sales?.length ?? 0) +
       (commission ? 1 : 0) +
       (orgSettings ? 1 : 0) +
-      (priceTables?.length ?? 0);
+      (priceTables?.length ?? 0) +
+      (pricing ? 1 : 0);
     await markCacheSynced(n).catch(() => undefined);
     notifyOfflineOutboxChanged();
   }

@@ -182,7 +182,7 @@ export function SystemSettingsPage() {
           {
             to: "/comissao",
             title: "Comissões e metas",
-            description: "Faixas progressivas ou metas mensais",
+            description: "Quando a comissão a pagar entra, faixas e metas",
             icon: Target,
           } satisfies SettingsShortcutItem,
         ]

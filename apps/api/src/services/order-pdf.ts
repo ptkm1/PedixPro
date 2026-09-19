@@ -2,6 +2,7 @@ import {
   APP_BRAND_PRIMARY,
   formatCnpjMask,
   formatCpfMask,
+  formatBrazilPhoneDigits,
   formatStructuredAddress,
 } from "@pedidos/shared";
 import { decToNum } from "../util/money.js";
@@ -64,7 +65,9 @@ export type OrderPdfInput = {
   organization: OrderPdfOrganization;
   paymentCondition?: OrderPdfPaymentCondition | null;
   logo?: OrderPdfLogo | null;
-  seller: { user: { name: string; email?: string | null } } | null;
+  seller: {
+    user: { name: string; email?: string | null; phone?: string | null };
+  } | null;
   customer: OrderPdfCustomer | null;
   items: Array<{
     productName: string;
@@ -762,12 +765,15 @@ export function drawOrderPdfContents(
   const colCount = payLabel ? 2 : 1;
   const colW = (PAGE.width - colGap * (colCount - 1)) / colCount;
 
-  const sellerName = sellerLabelOrDirect(order.seller?.user.name);
-  const sellerEmail = order.seller?.user.email?.trim();
-  const sellerValue = sellerEmail
-    ? `${sellerName}  ·  ${sellerEmail}`
-    : sellerName;
-  drawMetaPair(doc, "Vendedor", sellerValue, PAGE.left, metaY, colW);
+  const sellerParts = [sellerLabelOrDirect(order.seller?.user.name)];
+  if (order.seller?.user.email?.trim()) {
+    sellerParts.push(order.seller.user.email.trim());
+  }
+  const sellerPhone = order.seller?.user.phone?.trim()
+    ? formatBrazilPhoneDigits(order.seller.user.phone)
+    : null;
+  if (sellerPhone) sellerParts.push(sellerPhone);
+  drawMetaPair(doc, "Vendedor", sellerParts.join("  ·  "), PAGE.left, metaY, colW);
 
   if (payLabel) {
     drawMetaPair(

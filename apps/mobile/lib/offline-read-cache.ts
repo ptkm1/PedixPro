@@ -153,6 +153,7 @@ export async function getCacheMeta<T>(key: string): Promise<T | null> {
 export const CACHE_META_COMMISSION = "commission_dashboard";
 export const CACHE_META_ORG_SETTINGS = "org_settings";
 export const CACHE_META_PRICE_TABLES = "price_tables";
+export const CACHE_META_PRICING = "pricing_sync";
 export const CACHE_META_LAST_SYNC = "last_sync_at";
 export const CACHE_META_LAST_SYNC_COUNT = "last_sync_count";
 

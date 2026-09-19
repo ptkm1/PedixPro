@@ -183,6 +183,17 @@ export function CustomersPage() {
     queryKey: ["admin", "sellers"],
     queryFn: () => apiFetch<Seller[]>("/admin/sellers"),
   });
+  const { data: priceTables = [] } = useQuery({
+    queryKey: ["admin", "price-tables"],
+    queryFn: () =>
+      apiFetch<Array<{ id: string; name: string }>>("/admin/price-tables"),
+  });
+  const { data: catalogProducts = [] } = useQuery({
+    queryKey: ["admin", "products", "names"],
+    queryFn: () =>
+      apiFetch<Array<{ id: string; name: string }>>("/admin/products"),
+    enabled: sheetOpen && Boolean(editing),
+  });
 
   const { data: pricingSettings } = useQuery({
     queryKey: ["admin", "pricing-settings"],
@@ -245,6 +256,10 @@ export function CustomersPage() {
   const [showValidation, setShowValidation] = useState(false);
   const [editing, setEditing] = useState<CustomerRecord | null>(null);
   const [sellerId, setSellerId] = useState("");
+  const [defaultPriceTableId, setDefaultPriceTableId] = useState("");
+  const [specialPrices, setSpecialPrices] = useState<
+    Array<{ productId: string; price: string; validFrom: string; validTo: string }>
+  >([]);
   const [creditLimitStr, setCreditLimitStr] = useState("");
   const [creditBlockedEdit, setCreditBlockedEdit] = useState(false);
   const [statusEdit, setStatusEdit] = useState<CustomerStatus>("ACTIVE");
@@ -298,6 +313,8 @@ export function CustomersPage() {
     setForm(emptyCustomerForm());
     setShowValidation(false);
     setSellerId("");
+    setDefaultPriceTableId("");
+    setSpecialPrices([]);
     setCreditLimitStr("");
     setCreditBlockedEdit(false);
     setStatusEdit("ACTIVE");
@@ -314,6 +331,7 @@ export function CustomersPage() {
     setEditing(c);
     setForm(customerToForm(c));
     setSellerId(c.sellerId ?? "");
+    setDefaultPriceTableId(c.defaultPriceTableId ?? "");
     setCreditBlockedEdit(Boolean(c.creditBlocked));
     setStatusEdit(c.status === "INACTIVE" ? "INACTIVE" : "ACTIVE");
     setCreditLimitStr(
@@ -332,6 +350,23 @@ export function CustomersPage() {
         : "",
     );
     setSheetOpen(true);
+    void apiFetch<
+      Array<{
+        productId: string;
+        price: number;
+        validFrom: string | null;
+        validTo: string | null;
+      }>
+    >(`/admin/customers/${c.id}/special-prices`).then((rows) => {
+      setSpecialPrices(
+        rows.map((r) => ({
+          productId: r.productId,
+          price: String(r.price),
+          validFrom: r.validFrom ? r.validFrom.slice(0, 10) : "",
+          validTo: r.validTo ? r.validTo.slice(0, 10) : "",
+        })),
+      );
+    });
   }
 
   function closeSheet() {
@@ -362,6 +397,7 @@ export function CustomersPage() {
         body: JSON.stringify(
           formToCustomerPayload(form, {
             sellerId: sellerId || null,
+            defaultPriceTableId: defaultPriceTableId || null,
             ...geo,
           }),
         ),
@@ -381,13 +417,14 @@ export function CustomersPage() {
   });
 
   const update = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const geo = parseGeo();
-      return apiFetch(`/admin/customers/${editing!.id}`, {
+      const updated = await apiFetch(`/admin/customers/${editing!.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           ...formToCustomerPayload(form, {
             sellerId: sellerId || null,
+            defaultPriceTableId: defaultPriceTableId || null,
             creditLimit:
               creditLimitStr.trim() === ""
                 ? null
@@ -398,6 +435,20 @@ export function CustomersPage() {
           }),
         }),
       });
+      await apiFetch(`/admin/customers/${editing!.id}/special-prices`, {
+        method: "PUT",
+        body: JSON.stringify({
+          items: specialPrices
+            .filter((r) => r.productId && r.price.trim())
+            .map((r) => ({
+              productId: r.productId,
+              price: Number(r.price.replace(",", ".")),
+              validFrom: r.validFrom || null,
+              validTo: r.validTo || null,
+            })),
+        }),
+      });
+      return updated;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "customers"] });
@@ -720,6 +771,24 @@ export function CustomersPage() {
               onValueChange={setSellerId}
             />
           </FormField>
+          <FormField
+            label="Tabela de preço padrão"
+            htmlFor="cust-default-pt"
+            className="sm:col-span-2"
+            hint="Ao abrir um pedido, esta tabela é selecionada automaticamente."
+          >
+            <AppSelect
+              id="cust-default-pt"
+              value={defaultPriceTableId}
+              emptyLabel="Nenhuma"
+              placeholder="Nenhuma"
+              options={priceTables.map((t) => ({
+                value: t.id,
+                label: t.name,
+              }))}
+              onValueChange={setDefaultPriceTableId}
+            />
+          </FormField>
         </FormGrid>
 
         <div className="mt-4 rounded-lg border border-dashed border-border bg-background/90 p-4">
@@ -830,6 +899,98 @@ export function CustomersPage() {
                 />
               </FormField>
             </FormGrid>
+          </div>
+        ) : null}
+
+        {editing ? (
+          <div className="mt-4 rounded-lg border border-border bg-background/80 p-4">
+            <p className="text-sm font-medium">Preços especiais</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Preço por produto, com validade opcional. Depois do prazo, volta
+              automaticamente à tabela.
+            </p>
+            <div className="mt-3 space-y-2">
+              {specialPrices.map((row, idx) => (
+                <div
+                  key={`${row.productId}-${idx}`}
+                  className="grid gap-2 sm:grid-cols-[1fr_6rem_7rem_7rem_auto]"
+                >
+                  <AppSelect
+                    value={row.productId}
+                    placeholder="Produto"
+                    options={catalogProducts.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    }))}
+                    onValueChange={(productId) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, productId } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    placeholder="Preço"
+                    value={row.price}
+                    onChange={(e) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, price: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    type="date"
+                    value={row.validFrom}
+                    onChange={(e) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, validFrom: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    type="date"
+                    value={row.validTo}
+                    onChange={(e) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, validTo: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setSpecialPrices((prev) =>
+                        prev.filter((_, i) => i !== idx),
+                      )
+                    }
+                  >
+                    Remover
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setSpecialPrices((prev) => [
+                    ...prev,
+                    { productId: "", price: "", validFrom: "", validTo: "" },
+                  ])
+                }
+              >
+                Adicionar preço especial
+              </Button>
+            </div>
           </div>
         ) : null}
 

@@ -7,8 +7,10 @@ export type SellerMe = {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
   sellerId: string | null;
   commissionPercent: number | null;
+  commissionType?: "FIXED" | "BY_PRODUCT" | "BY_CATEGORY" | "BY_SUPPLIER" | null;
 };
 
 export function useProfileScreen() {

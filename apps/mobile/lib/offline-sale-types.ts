@@ -14,6 +14,7 @@ export type OfflineSaleQueuePayload = {
   paymentConditionId: string;
   /** Staff: vendedor atribuído; null/omit = venda direta. Vendedor ignora. */
   sellerId?: string | null;
+  priceTableId?: string;
   operation?: "SALE";
   status: "CONFIRMED";
   notes?: string;

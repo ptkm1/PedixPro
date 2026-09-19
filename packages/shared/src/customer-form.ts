@@ -46,6 +46,7 @@ export type CustomerRecord = CustomerFormValues & {
   rejectionReason?: string | null;
   /** Situação comercial (ativo / inativo). */
   status?: CustomerStatus;
+  defaultPriceTableId?: string | null;
 };
 
 /** Código do cliente; "—" se ainda não atribuído. */
@@ -118,6 +119,7 @@ export function formToCustomerPayload(
     status?: CustomerStatus;
     latitude?: number | null;
     longitude?: number | null;
+    defaultPriceTableId?: string | null;
   },
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
@@ -155,6 +157,9 @@ export function formToCustomerPayload(
   if (extras?.status !== undefined) base.status = extras.status;
   if (extras?.latitude !== undefined) base.latitude = extras.latitude;
   if (extras?.longitude !== undefined) base.longitude = extras.longitude;
+  if (extras?.defaultPriceTableId !== undefined) {
+    base.defaultPriceTableId = extras.defaultPriceTableId;
+  }
   return base;
 }
 

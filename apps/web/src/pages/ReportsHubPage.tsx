@@ -17,6 +17,7 @@ type ReportLink = {
   title: string;
   description: string;
   planFeature?: PlanFeature;
+  permission?: Parameters<typeof canRead>[1];
 };
 
 type ReportCategory = {
@@ -188,6 +189,14 @@ const CATEGORIES: ReportCategory[] = [
         description: "Comissão acumulada em cada pedido.",
         planFeature: "commissions",
       },
+      {
+        to: "/relatorios/comissoes/a-pagar",
+        title: "Comissões a Pagar",
+        description:
+          "Comissões consolidadas por vendedor conforme o critério da empresa.",
+        planFeature: "commissions",
+        permission: "reports_commissions_payable",
+      },
     ],
   },
 ];
@@ -223,9 +232,17 @@ export function ReportsHubPage() {
 
   const categories = CATEGORIES.map((cat) => ({
     ...cat,
-    items: cat.items.filter((item) =>
-      userHasPlanFeature(user, item.planFeature),
-    ),
+    items: cat.items.filter((item) => {
+      if (!userHasPlanFeature(user, item.planFeature)) return false;
+      if (
+        item.permission &&
+        user &&
+        !canRead(user.role, item.permission, user.permissions)
+      ) {
+        return false;
+      }
+      return true;
+    }),
   })).filter((cat) => cat.items.length > 0);
 
   return (

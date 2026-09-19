@@ -160,6 +160,35 @@ enum SellerCommissionType {
   BY_SUPPLIER
 }
 
+/// Origem do % gravado no item do pedido (snapshot; não recalcula histórico).
+enum CommissionOrigin {
+  COMISSAO_TABELA_PRECO
+  COMISSAO_PRODUTO_VENDEDOR
+  COMISSAO_PRODUTO
+  COMISSAO_GRUPO
+  COMISSAO_REGRA_VENDEDOR
+  COMISSAO_PROGRESSIVA
+  COMISSAO_VENDEDOR
+}
+
+/// Tabela ativa entra em pedidos novos; inativa só aparece em pedidos antigos.
+enum PriceTableStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// Sinal da regra geral da tabela sobre o preço base.
+enum PriceAdjustmentKind {
+  DISCOUNT
+  SURCHARGE
+}
+
+/// Unidade da regra geral da tabela (% ou R$).
+enum PriceAdjustmentMode {
+  PERCENT
+  AMOUNT
+}
+
 /// Escopo de aplicação da meta mensal de faturamento.
 enum SellerMonthlyGoalScope {
   SELLER
@@ -256,6 +285,13 @@ enum AccessLevel {
   write
 }
 
+/// Quando a comissão já gravada no pedido entra no relatório "Comissões a Pagar".
+enum CommissionPayableCriterion {
+  EMITTED
+  INVOICED
+  SETTLED
+}
+
 model Organization {
   id               String             @id @default(cuid())
   name             String
@@ -298,18 +334,23 @@ model Organization {
   accessStatus     OrganizationAccessStatus @default(ACTIVE)
   /// CPF/CNPJ normalizado (apenas dígitos), único quando preenchido.
   document         String?            @unique
+  /// Quando a comissão salva no pedido entra em "Comissões a Pagar" (por empresa).
+  commissionPayableCriterion CommissionPayableCriterion @default(EMITTED)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   users            User[]
   sellers          Seller[]
   regions          Region[]
   priceTables      PriceTable[]
+  customerSpecialPrices CustomerSpecialPrice[]
   products         Product[]
   productCategories ProductCategory[]
   productPromotions ProductPromotion[]
   productCombos    ProductCombo[]
   sellerCommissionRules SellerCommissionRule[]
   commissionProgressiveTiers CommissionProgressiveTier[]
+  productSellerCommissions ProductSellerCommission[]
+  productPriceTableCommissions ProductPriceTableCommission[]
   sellerMonthlyGoals SellerMonthlyGoal[]
   customers        Customer[]
   orders           Order[]
@@ -347,6 +388,8 @@ model Organization {
   checkoutIntents       CheckoutIntent[]
   orderExpeditions      OrderExpedition[]
   purchaseUnits         PurchaseUnit[]
+  orderReceipts         OrderReceipt[]
+  commissionPayableLedger OrderCommissionPayableLedger[]
 }
 
 /// Última análise de Indicadores IA por organização (1:1).
@@ -551,6 +594,8 @@ model User {
   name                  String
   /// Matrícula funcional (única por organização quando preenchida).
   matricula             String?
+  /// Telefone de contato (opcional; exibido no corpo do pedido).
+  phone                 String?
   role                  Role
   organizationId        String
   organization          Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -596,11 +641,16 @@ model Seller {
   commissionType    SellerCommissionType @default(FIXED)
   commissionPercent Decimal            @db.Decimal(5, 2)
   active            Boolean            @default(true)
+  /// Tabela padrão do vendedor (cliente default ganha se os dois existirem).
+  defaultPriceTableId String?
+  defaultPriceTable   PriceTable?      @relation("SellerDefaultPriceTable", fields: [defaultPriceTableId], references: [id], onDelete: SetNull)
   sellerProducts    SellerProduct[]
   productPromotions ProductPromotion[]
   priceTables       PriceTable[]
+  allowedPriceTables SellerPriceTableAccess[]
   commissionRules   SellerCommissionRule[]
   commissionProgressiveTiers CommissionProgressiveTier[]
+  productCommissions ProductSellerCommission[]
   monthlyGoals      SellerMonthlyGoal[]
   orders            Order[]
   customers         Customer[]
@@ -615,6 +665,7 @@ model Seller {
 
   @@index([organizationId, managerUserId])
   @@index([organizationId, teamId])
+  @@index([defaultPriceTableId])
 }
 
 model SalesTeam {
@@ -684,6 +735,11 @@ model PriceTable {
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   validFrom      DateTime?
   validTo        DateTime?
+  status         PriceTableStatus @default(ACTIVE)
+  /// Regra geral sobre o preço base (0 = sem fórmula; itens customizados continuam valendo).
+  adjustmentKind  PriceAdjustmentKind @default(DISCOUNT)
+  adjustmentMode  PriceAdjustmentMode @default(PERCENT)
+  adjustmentValue Decimal             @default(0) @db.Decimal(12, 2)
   /// Maior prioridade escolhe entre tabelas igualmente aplicáveis (mesma especificidade).
   priority       Int              @default(0)
   /// Escopo opcional: todos os filtros não-nulos devem coincidir com o contexto da venda.
@@ -694,8 +750,17 @@ model PriceTable {
   regionId       String?
   region         Region?          @relation(fields: [regionId], references: [id], onDelete: SetNull)
   items          PriceTableItem[]
+  qtyTiers       PriceTableQtyTier[]
+  sellerAccess   SellerPriceTableAccess[]
+  productCommissions ProductPriceTableCommission[]
+  defaultForCustomers Customer[] @relation("CustomerDefaultPriceTable")
+  defaultForSellers   Seller[]   @relation("SellerDefaultPriceTable")
+  orders         Order[]
+  orderItems     OrderItem[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId, status])
 }
 
 /// Unidade de compra por organização (UN, CX, FD… + códigos personalizados).
@@ -833,10 +898,14 @@ model Product {
   supplierId       String?
   supplier         Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   priceTableItems  PriceTableItem[]
+  priceTableQtyTiers PriceTableQtyTier[]
+  customerSpecialPrices CustomerSpecialPrice[]
   sellerProducts   SellerProduct[]
   promotions       ProductPromotion[]
   comboLines       ProductComboLine[]
   commissionRules  SellerCommissionRule[]
+  sellerCommissions ProductSellerCommission[]
+  priceTableCommissions ProductPriceTableCommission[]
   orderItems       OrderItem[]
   lots             ProductLot[]
   productStock     ProductStock?
@@ -1043,6 +1112,42 @@ model SellerCommissionRule {
   @@index([organizationId, sellerId])
 }
 
+/// Comissão específica de um vendedor neste produto (não altera outros produtos).
+model ProductSellerCommission {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productId          String
+  product            Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sellerId           String
+  seller             Seller       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  commissionPercent  Decimal      @db.Decimal(5, 2)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([organizationId, productId, sellerId])
+  @@index([organizationId, productId])
+  @@map("product_seller_commissions")
+}
+
+/// Exceção de comissão quando o pedido usa esta tabela neste produto (vale para todos os vendedores).
+model ProductPriceTableCommission {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productId          String
+  product            Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceTableId       String
+  priceTable         PriceTable   @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
+  commissionPercent  Decimal      @db.Decimal(5, 2)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([organizationId, productId, priceTableId])
+  @@index([organizationId, productId])
+  @@map("product_price_table_commissions")
+}
+
 /// Faixa de comissão progressiva pelo faturamento confirmado no mês (MTD).
 model CommissionProgressiveTier {
   id                 String       @id @default(cuid())
@@ -1091,14 +1196,61 @@ model SellerMonthlyGoal {
 }
 
 model PriceTableItem {
+  id             String     @id @default(cuid())
+  priceTableId   String
+  priceTable     PriceTable @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Preço personalizado quando `useCustomPrice` é true.
+  price          Decimal    @db.Decimal(12, 2)
+  useCustomPrice Boolean    @default(true)
+  minPrice       Decimal?   @db.Decimal(12, 2)
+
+  @@unique([priceTableId, productId])
+}
+
+/// Faixa de quantidade (10+, 50+, 100+). A maior minQuantity que couber vence.
+model PriceTableQtyTier {
   id           String     @id @default(cuid())
   priceTableId String
   priceTable   PriceTable @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
   productId    String
   product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQuantity  Int
   price        Decimal    @db.Decimal(12, 2)
 
-  @@unique([priceTableId, productId])
+  @@unique([priceTableId, productId, minQuantity])
+  @@index([priceTableId, productId])
+}
+
+/// Tabelas que o vendedor pode usar. Sem linhas = todas as tabelas ativas (compatível).
+model SellerPriceTableAccess {
+  id           String     @id @default(cuid())
+  sellerId     String
+  seller       Seller     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  priceTableId String
+  priceTable   PriceTable @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
+
+  @@unique([sellerId, priceTableId])
+  @@index([priceTableId])
+}
+
+/// Preço especial cliente+produto (janela opcional). Não exige tabela exclusiva.
+model CustomerSpecialPrice {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price          Decimal      @db.Decimal(12, 2)
+  validFrom      DateTime?
+  validTo        DateTime?
+
+  @@unique([customerId, productId])
+  @@index([organizationId, customerId])
+  @@index([productId])
 }
 
 model SellerProduct {
@@ -1125,12 +1277,16 @@ model Customer {
   seller         Seller?            @relation(fields: [sellerId], references: [id], onDelete: SetNull)
   regionId       String?
   region         Region?            @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  /// Tabela padrão ao abrir pedido (vence a default do vendedor).
+  defaultPriceTableId String?
+  defaultPriceTable   PriceTable?   @relation("CustomerDefaultPriceTable", fields: [defaultPriceTableId], references: [id], onDelete: SetNull)
   /// Limite de crédito (saldo em aberto máximo). Null = sem limite configurado.
   creditLimit    Decimal?           @db.Decimal(14, 2)
   /// Bloqueio manual — não permite novo pedido confirmado (conforme política da organização).
   creditBlocked  Boolean            @default(false)
   promotions     ProductPromotion[]
   priceTables    PriceTable[]
+  specialPrices  CustomerSpecialPrice[]
   orders         Order[]
   creditTitles   CustomerCreditTitle[]
   receivables    Receivable[]
@@ -1174,6 +1330,7 @@ model Customer {
   @@unique([organizationId, cpf])
   @@unique([organizationId, code])
   @@index([organizationId, state, city])
+  @@index([defaultPriceTableId])
 }
 
 model CustomerCreditTitle {
@@ -1397,6 +1554,9 @@ model Order {
   customer       Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   paymentConditionId String?
   paymentCondition   PaymentCondition? @relation(fields: [paymentConditionId], references: [id], onDelete: SetNull)
+  /// Tabela efetivamente usada no pedido (identidade permanece mesmo com preço especial).
+  priceTableId   String?
+  priceTable     PriceTable?  @relation(fields: [priceTableId], references: [id], onDelete: SetNull)
   /// Etapa única do pedido (sistema + org). Obrigatória.
   situationId    String
   situation      OrderSituation @relation(fields: [situationId], references: [id], onDelete: Restrict)
@@ -1420,6 +1580,8 @@ model Order {
   fiscalInvoices FiscalInvoice[]
   expedition     OrderExpedition?
   receivables    Receivable[]
+  receipts       OrderReceipt[]
+  commissionPayableLedger OrderCommissionPayableLedger?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -1431,6 +1593,7 @@ model Order {
   @@index([organizationId, situationId])
   @@index([organizationId, establishmentId])
   @@index([establishmentId])
+  @@index([priceTableId])
 }
 
 model OrderItem {
@@ -1444,8 +1607,50 @@ model OrderItem {
   productName String
   commissionPercent Decimal? @db.Decimal(5, 2)
   commissionAmount  Decimal? @db.Decimal(14, 2)
+  /// Origem do % no momento da venda (histórico não muda se a config mudar).
+  commissionOrigin  CommissionOrigin?
+  /// Snapshot da tabela usada (comissões por tabela mesmo com preço especial/faixa).
+  priceTableId      String?
+  priceTable        PriceTable? @relation(fields: [priceTableId], references: [id], onDelete: SetNull)
+  priceTableName    String?
+  priceOrigin       String?
+  priceOriginLabel  String?
   expeditionItems OrderExpeditionItem[]
   createdAt   DateTime @default(now())
+}
+
+/// Recebimento avulso do pedido (liquidação sem boleto). Não rateia comissão.
+model OrderReceipt {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderId        String
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount         Decimal      @db.Decimal(14, 2)
+  receivedAt     DateTime
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, orderId])
+  @@index([organizationId, receivedAt])
+}
+
+/// Primeira vez que a comissão do pedido entrou em "Comissões a Pagar".
+/// Impede duplicar ao trocar o critério (um pedido nunca aparece duas vezes).
+model OrderCommissionPayableLedger {
+  id                String                      @id @default(cuid())
+  organizationId    String
+  organization      Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderId           String                      @unique
+  order             Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  criterion         CommissionPayableCriterion
+  referenceDate     DateTime
+  commissionAmount  Decimal                     @db.Decimal(14, 2)
+  saleAmount        Decimal                     @db.Decimal(14, 2)
+  recordedAt        DateTime                    @default(now())
+
+  @@index([organizationId, referenceDate])
+  @@index([organizationId, criterion])
 }
 
 /// Conferência física de um pedido (expedição). Estoque já foi baixado na confirmação.

@@ -1,4 +1,5 @@
 import {
+  formatBrazilPhoneDigits,
   formatCnpjMask,
   formatCpfMask,
   formatStructuredAddress,
@@ -251,6 +252,14 @@ export async function buildOrderPdf80mm(order: OrderPdfInput): Promise<Buffer> {
       width: CONTENT_W,
     },
   );
+  const sellerPhone = order.seller?.user.phone?.trim()
+    ? formatBrazilPhoneDigits(order.seller.user.phone)
+    : null;
+  if (sellerPhone) {
+    doc.text(`Tel. vendedor: ${sellerPhone}`, MARGIN, doc.y, {
+      width: CONTENT_W,
+    });
+  }
   if (payLabel) {
     doc.text(`Pagamento: ${payLabel}`, MARGIN, doc.y, {
       width: CONTENT_W,

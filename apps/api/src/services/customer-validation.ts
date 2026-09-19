@@ -38,6 +38,7 @@ const customerFieldsSchema = z.object({
   creditLimit: z.number().positive().nullable().optional(),
   creditBlocked: z.boolean().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  defaultPriceTableId: z.string().min(1).nullable().optional(),
 });
 
 type CustomerRefineInput = {
@@ -266,6 +267,9 @@ export function toCustomerPrismaData(
       out.creditBlocked = data.creditBlocked;
   }
   if (data.status !== undefined) out.status = data.status;
+  if (data.defaultPriceTableId !== undefined) {
+    out.defaultPriceTableId = data.defaultPriceTableId;
+  }
 
   return out;
 }
