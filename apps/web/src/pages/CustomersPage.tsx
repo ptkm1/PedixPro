@@ -37,6 +37,7 @@ import {
     validateCustomerForm,
 } from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { CustomerFormFields } from "../components/CustomerFormFields";
@@ -1114,7 +1115,9 @@ export function CustomersPage() {
                 <TableHead className="px-4">Status</TableHead>
                 <TableHead className="px-4">Validação</TableHead>
                 <TableHead className="px-4">Crédito</TableHead>
-                <TableHead className="px-4" />
+                <TableHead className="sticky right-0 z-10 min-w-[11rem] bg-card px-4 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)]">
+                  Ações
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1135,7 +1138,19 @@ export function CustomersPage() {
                         />
                       </TableCell>
                     ) : null}
-                    <TableCell className="px-4 py-3">{c.name}</TableCell>
+                    <TableCell className="px-4 py-3">
+                      {canEditCustomers ? (
+                        <button
+                          type="button"
+                          className="text-left font-medium text-foreground hover:text-primary hover:underline"
+                          onClick={() => openEdit(c)}
+                        >
+                          {c.name}
+                        </button>
+                      ) : (
+                        c.name
+                      )}
+                    </TableCell>
                     <TableCell className="px-4 py-3 font-mono text-xs">
                       {formatDocument(c)}
                     </TableCell>
@@ -1218,31 +1233,39 @@ export function CustomersPage() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        className="text-primary"
-                        onClick={() => openEdit(c)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="ml-3 text-destructive"
-                        onClick={() => {
-                          void confirm({
-                            title: "Excluir cliente?",
-                            description:
-                              "O cliente será removido permanentemente do sistema.",
-                            confirmLabel: "Excluir",
-                            tone: "destructive",
-                          }).then((ok) => {
-                            if (ok) remove.mutate(c.id);
-                          });
-                        }}
-                      >
-                        Excluir
-                      </button>
+                    <TableCell className="sticky right-0 z-10 bg-card px-4 py-3 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)]">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEdit(c)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Editar cadastro
+                        </Button>
+                        {canEditCustomers ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => {
+                              void confirm({
+                                title: "Excluir cliente?",
+                                description:
+                                  "O cliente será removido permanentemente do sistema.",
+                                confirmLabel: "Excluir",
+                                tone: "destructive",
+                              }).then((ok) => {
+                                if (ok) remove.mutate(c.id);
+                              });
+                            }}
+                          >
+                            Excluir
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

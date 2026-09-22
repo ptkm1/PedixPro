@@ -316,7 +316,26 @@ export function useProductFormPage() {
     onError: (e: Error) => setFormError(e.message),
   });
 
-  const pending = create.isPending || update.isPending || imageBusy;
+  const duplicateProduct = useMutation({
+    mutationFn: () => {
+      if (!productId) throw new Error("Produto inválido");
+      return apiFetch<ProductRecord>(`/admin/products/${productId}/duplicate`, {
+        method: "POST",
+      });
+    },
+    onSuccess: async (copy) => {
+      await qc.invalidateQueries({ queryKey: ["admin", "products"] });
+      await qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
+      navigate(`/produtos/${copy.id}/editar`);
+    },
+    onError: (e: Error) => setFormError(e.message),
+  });
+
+  const pending =
+    create.isPending ||
+    update.isPending ||
+    imageBusy ||
+    duplicateProduct.isPending;
 
   const onImageFileChange = useCallback(
     async (file: File | null) => {
@@ -607,8 +626,9 @@ export function useProductFormPage() {
     selectedSupplier,
     markupPercent,
     handleSubmit,
+    duplicateProduct,
     onCategoryChange,
-    pending,
+    pending;
     priceTablePrices,
     setPriceForTable,
     addPriceTableId,

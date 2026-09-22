@@ -201,6 +201,10 @@ import {
     syncProductAttributesNcm,
 } from "../services/product-cadastro-schema.js";
 import {
+    DuplicateProductError,
+    duplicateProduct,
+} from "../services/duplicate-product.js";
+import {
     productCommissionInclude,
     ProductCommissionError,
     syncProductCommissionExceptions,
@@ -2780,6 +2784,32 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       include: productRelationsInclude,
     });
     return updated;
+  });
+
+  app.post("/products/:id/duplicate", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    try {
+      const created = await duplicateProduct(auth.organizationId, id);
+      await auditFromAuth(auth, {
+        action: AUDIT_ACTION.CREATE,
+        entityType: AUDIT_ENTITY.Product,
+        entityId: created.id,
+        metadata: {
+          name: created.name,
+          duplicatedFrom: id,
+        },
+      });
+      return prisma.product.findFirstOrThrow({
+        where: { id: created.id, organizationId: auth.organizationId },
+        include: productRelationsInclude,
+      });
+    } catch (e) {
+      if (e instanceof DuplicateProductError) {
+        return reply.status(e.httpStatus).send({ error: e.message });
+      }
+      throw e;
+    }
   });
 
   app.delete("/products/:id", async (req, reply) => {

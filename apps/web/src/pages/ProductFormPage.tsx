@@ -17,6 +17,7 @@ import {
     FormSection,
 } from "@/components/forms";
 import { AppSelect } from "@/components/ui/app-select";
+import { useConfirm } from "@/components/confirm";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -113,8 +114,9 @@ export function ProductFormPage() {
     selectedSupplier,
     markupPercent,
     handleSubmit,
+    duplicateProduct,
     onCategoryChange,
-    pending,
+    pending;
     priceTablePrices,
     setPriceForTable,
     addPriceTableId,
@@ -140,6 +142,7 @@ export function ProductFormPage() {
     removeCommissionTable,
     setCommissionTablePercent,
   } = useProductFormPage();
+  const { confirm } = useConfirm();
 
   useScrollToFirstError(
     Object.keys(fieldErrors).length > 0 ? fieldErrors : formError,
@@ -212,15 +215,36 @@ export function ProductFormPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
-      <div>
-        <Link to="/produtos" className="text-sm text-primary hover:underline">
-          ← Voltar para produtos
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-foreground">
-          {isEdit ? "Editar produto" : "Novo produto"}
-        </h1>
-        {isEdit && product ? (
-          <p className="mt-1 text-sm text-muted-foreground">{product.name}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Link to="/produtos" className="text-sm text-primary hover:underline">
+            ← Voltar para produtos
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold text-foreground">
+            {isEdit ? "Editar produto" : "Novo produto"}
+          </h1>
+          {isEdit && product ? (
+            <p className="mt-1 text-sm text-muted-foreground">{product.name}</p>
+          ) : null}
+        </div>
+        {isEdit ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              void confirm({
+                title: "Duplicar produto?",
+                description:
+                  "Cria uma cópia com os dados já salvos, incluindo tributários, tabelas de preço e comissões. SKU, código de barras e estoque ficam vazios para você ajustar.",
+                confirmLabel: "Duplicar produto",
+              }).then((ok) => {
+                if (ok) duplicateProduct.mutate();
+              });
+            }}
+          >
+            {duplicateProduct.isPending ? "Duplicando…" : "Duplicar produto"}
+          </Button>
         ) : null}
       </div>
 
@@ -1267,11 +1291,32 @@ export function ProductFormPage() {
         <FormActions className="mt-6">
           <Button type="submit" disabled={pending}>
             {pending
-              ? "Salvando…"
+              ? duplicateProduct.isPending
+                ? "Duplicando…"
+                : "Salvando…"
               : isEdit
                 ? "Salvar alterações"
                 : "Criar produto"}
           </Button>
+          {isEdit ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                void confirm({
+                  title: "Duplicar produto?",
+                  description:
+                    "Cria uma cópia com os dados já salvos, incluindo tributários, tabelas de preço e comissões. SKU, código de barras e estoque ficam vazios para você ajustar.",
+                  confirmLabel: "Duplicar produto",
+                }).then((ok) => {
+                  if (ok) duplicateProduct.mutate();
+                });
+              }}
+            >
+              Duplicar produto
+            </Button>
+          ) : null}
           <Button variant="outline" asChild>
             <Link to="/produtos">Cancelar</Link>
           </Button>

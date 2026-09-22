@@ -6,7 +6,7 @@ import {
     formatProductUnitLabel,
     isProductSaleBlockedByStock,
 } from "@pedidos/shared";
-import { Package, Pencil, Trash2 } from "lucide-react";
+import { Copy, Package, Pencil, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export type ProductCardItem = {
@@ -27,10 +27,16 @@ export type ProductCardItem = {
 type Props = {
   product: ProductCardItem;
   onDelete: () => void;
+  onDuplicate: () => void;
   className?: string;
 };
 
-export function ProductCard({ product, onDelete, className }: Props) {
+export function ProductCard({
+  product,
+  onDelete,
+  onDuplicate,
+  className,
+}: Props) {
   const price = Number(product.basePrice);
   const imageUrl = product.imageUrl?.trim();
   const stockQty = product.stockQty ?? 0;
@@ -116,6 +122,17 @@ export function ProductCard({ product, onDelete, className }: Props) {
               <Pencil className="h-3 w-3" />
               Editar
             </Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="h-7 w-8 shrink-0 px-0"
+            onClick={onDuplicate}
+            aria-label="Duplicar produto"
+            title="Duplicar produto"
+          >
+            <Copy className="h-3 w-3" />
           </Button>
           <Button
             variant="outline"

@@ -158,6 +158,28 @@ export function applicablePriceTablesWhere(
   };
 }
 
+/**
+ * Tabela cobre o produto se tem item, faixa de quantidade ou fórmula (% / R$).
+ */
+async function priceTableCoversProduct(params: {
+  priceTableId: string;
+  productId: string;
+  adjustmentValue: unknown;
+}): Promise<boolean> {
+  if (decToNum(params.adjustmentValue) > 0) return true;
+  const [item, tier] = await Promise.all([
+    prisma.priceTableItem.findFirst({
+      where: { priceTableId: params.priceTableId, productId: params.productId },
+      select: { id: true },
+    }),
+    prisma.priceTableQtyTier.findFirst({
+      where: { priceTableId: params.priceTableId, productId: params.productId },
+      select: { id: true },
+    }),
+  ]);
+  return Boolean(item || tier);
+}
+
 export type ApplicablePriceTableRow = {
   id: string;
   name: string;
@@ -207,7 +229,7 @@ export async function assertPriceTableApplicableForSale(params: {
       id: params.priceTableId,
       ...applicablePriceTablesWhere(params.organizationId, params.ctx),
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, adjustmentValue: true },
   });
   if (!table) {
     throw new Error(
@@ -215,11 +237,12 @@ export async function assertPriceTableApplicableForSale(params: {
     );
   }
   if (params.productId) {
-    const item = await prisma.priceTableItem.findFirst({
-      where: { priceTableId: table.id, productId: params.productId },
-      select: { id: true },
+    const covered = await priceTableCoversProduct({
+      priceTableId: table.id,
+      productId: params.productId,
+      adjustmentValue: table.adjustmentValue,
     });
-    if (!item) {
+    if (!covered) {
       throw new Error(
         `Tabela «${table.name}» não possui preço para o produto selecionado.`,
       );
@@ -244,23 +267,48 @@ export async function listProductPriceTableOptions(
   productId: string,
   ctx: PriceResolutionContext = {},
 ): Promise<ProductPriceTableOption[]> {
-  const tables = await listApplicablePriceTables(organizationId, ctx);
-  if (!tables.length) return [];
-
-  const items = await prisma.priceTableItem.findMany({
-    where: {
-      productId,
-      priceTableId: { in: tables.map((t) => t.id) },
+  const tables = await prisma.priceTable.findMany({
+    where: applicablePriceTablesWhere(organizationId, ctx),
+    select: {
+      id: true,
+      name: true,
+      priority: true,
+      customerId: true,
+      sellerId: true,
+      regionId: true,
+      validFrom: true,
+      validTo: true,
+      updatedAt: true,
+      adjustmentValue: true,
     },
-    select: { priceTableId: true, price: true },
   });
-  if (!items.length) return [];
+  const ranked = sortPriceTablesByCommercialRank(tables);
+  if (!ranked.length) return [];
 
-  const itemByTable = new Map(items.map((i) => [i.priceTableId, i]));
+  const tableIds = ranked.map((t) => t.id);
+  const [items, tiers] = await Promise.all([
+    prisma.priceTableItem.findMany({
+      where: { productId, priceTableId: { in: tableIds } },
+      select: { priceTableId: true },
+    }),
+    prisma.priceTableQtyTier.findMany({
+      where: { productId, priceTableId: { in: tableIds } },
+      select: { priceTableId: true },
+    }),
+  ]);
+  const covered = new Set<string>([
+    ...items.map((i) => i.priceTableId),
+    ...tiers.map((t) => t.priceTableId),
+    ...ranked
+      .filter((t) => decToNum(t.adjustmentValue) > 0)
+      .map((t) => t.id),
+  ]);
+  if (!covered.size) return [];
+
   const out: ProductPriceTableOption[] = [];
 
-  for (const t of tables) {
-    if (!itemByTable.has(t.id)) continue;
+  for (const t of ranked) {
+    if (!covered.has(t.id)) continue;
     const priced = await resolveEffectiveUnitPrice(organizationId, productId, {
       ...ctx,
       priceTableId: t.id,
