@@ -3,30 +3,31 @@ import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { notifyError, notifySuccess } from "@/lib/app-notifications";
 import { apiFetch, downloadPdf } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import {
-    CUSTOMER_CSV_ADDRESS_FALLBACK,
-    CUSTOMER_CSV_BULK_FIELDS,
-    CUSTOMER_CSV_HEADERS,
-    PRODUCT_CSV_HEADERS,
-    csvFieldLabel,
-    peekCsvHeaders,
-    suggestCsvColumnMap,
-    type CsvColumnMap,
-    type CsvHeaderPeek,
-    type CsvImportKind,
-    type CsvImportRecipe,
+  CUSTOMER_CSV_ADDRESS_FALLBACK,
+  CUSTOMER_CSV_BULK_FIELDS,
+  CUSTOMER_CSV_HEADERS,
+  PRODUCT_CSV_HEADERS,
+  csvFieldLabel,
+  peekCsvHeaders,
+  suggestCsvColumnMap,
+  type CsvColumnMap,
+  type CsvHeaderPeek,
+  type CsvImportKind,
+  type CsvImportRecipe,
 } from "@pedidos/shared";
 import { useMutation } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 export type CsvImportResult = {
@@ -38,6 +39,7 @@ export type CsvImportResult = {
     line: number;
     status: "ok" | "error";
     errors: Array<{ field: string; message: string }>;
+    warnings?: string[];
     preview?: Record<string, string>;
   }>;
 };
@@ -249,6 +251,7 @@ export function CsvImportSheet({
   };
 
   const errorRows = result?.rows.filter((r) => r.status === "error") ?? [];
+  const okRows = result?.rows.filter((r) => r.status === "ok") ?? [];
   const validCount = result?.validCount ?? 0;
   const busy = preview.isPending || commit.isPending;
   const mappedCount = Object.values(columnMap).filter((v) => v?.trim()).length;
@@ -328,9 +331,14 @@ export function CsvImportSheet({
             }}
             disabled={!csvText || validCount === 0 || busy || committed}
           >
-            {commit.isPending
-              ? "Importando…"
-              : `Importar ${validCount} válido(s)`}
+            {commit.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Importando…
+              </>
+            ) : (
+              `Importar ${validCount} válido(s)`
+            )}
           </Button>
         </div>
       }
@@ -362,7 +370,14 @@ export function CsvImportSheet({
             disabled={!csvText || busy || mappedCount === 0}
             onClick={runPreview}
           >
-            {preview.isPending ? "Validando…" : "Validar"}
+            {preview.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Validando…
+              </>
+            ) : (
+              "Validar"
+            )}
           </Button>
           <input
             ref={inputRef}
@@ -422,6 +437,13 @@ export function CsvImportSheet({
               errar. E-mail/telefone vazios e IBGE (cidade+UF) são preenchidos
               automaticamente no servidor quando possível.
             </p>
+            {kind === "customers" ? (
+              <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Caso o <strong>código IBGE</strong> não seja informado, o Pedix
+                Pro tentará identificá-lo automaticamente através do CEP, CNPJ
+                ou município/UF. O mapeamento desse campo é opcional.
+              </p>
+            ) : null}
 
             <div className="max-h-72 overflow-auto rounded-md border border-border">
               <Table>
@@ -509,9 +531,14 @@ export function CsvImportSheet({
                       disabled={busy || !csvText}
                       onClick={runPreview}
                     >
-                      {preview.isPending
-                        ? "Revalidando…"
-                        : "Revalidar com correções"}
+                      {preview.isPending ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Revalidando…
+                        </>
+                      ) : (
+                        "Revalidar com correções"
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -580,6 +607,51 @@ export function CsvImportSheet({
                   <p className="text-xs text-muted-foreground">
                     Dica: preencha <strong>cidade</strong> e <strong>UF</strong>{" "}
                     juntas (ex.: Salvador + BA) para o IBGE resolver sozinho.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {kind === "customers" && okRows.length > 0 ? (
+              <div className="max-h-48 overflow-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">Linha</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Cidade/UF</TableHead>
+                      <TableHead>IBGE</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {okRows.slice(0, 50).map((row) => (
+                      <TableRow key={`ok-${row.line}`}>
+                        <TableCell>{row.line}</TableCell>
+                        <TableCell className="max-w-[10rem] truncate">
+                          {row.preview?.nome || "—"}
+                          {row.preview?.documento
+                            ? ` · ${row.preview.documento}`
+                            : ""}
+                        </TableCell>
+                        <TableCell>
+                          {[row.preview?.cidade, row.preview?.uf]
+                            .filter(Boolean)
+                            .join("/")}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {row.preview?.codigo_ibge || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {row.preview?.ibge_status || "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {okRows.length > 50 ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">
+                    Mostrando 50 de {okRows.length} linhas válidas.
                   </p>
                 ) : null}
               </div>

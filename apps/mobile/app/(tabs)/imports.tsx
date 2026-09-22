@@ -2,19 +2,25 @@ import { ThemedButton } from "@/components/atoms/ThemedButton";
 import { ThemedCard } from "@/components/atoms/ThemedCard";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
+import { GlassChip } from "@/components/atoms/GlassChip";
 import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
+import { FilterChipRow } from "@/components/molecules/FilterChipRow";
 import {
     useImportsScreen,
     type ImportKind,
 } from "@/hooks/screens/useImportsScreen";
 import { useTheme } from "@/lib/theme";
-import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
 import { csvFieldLabel } from "@pedidos/shared";
 import { Redirect } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
-const KINDS: ImportKind[] = ["customers", "products"];
+const KIND_OPTIONS: Array<{ id: ImportKind; label: string }> = [
+  { id: "customers", label: "Clientes" },
+  { id: "products", label: "Produtos" },
+];
+
+const NONE_COL = "__none__";
 
 export default function ImportsScreen() {
   const { colors } = useTheme();
@@ -37,37 +43,12 @@ export default function ImportsScreen() {
           <ThemedText variant="titleSm" style={{ marginBottom: 10 }}>
             Tipo
           </ThemedText>
-          <View style={styles.chips}>
-            {KINDS.map((k) => {
-              const active = s.kind === k;
-              const label = k === "products" ? "Produtos" : "Clientes";
-              return (
-                <Pressable
-                  key={k}
-                  onPress={() => s.selectKind(k)}
-                  style={[
-                    styles.chip,
-                    {
-                      borderColor: active ? colors.primary : colors.border,
-                      backgroundColor: active
-                        ? colorWithAlpha(colors.primary, 0.12)
-                        : colors.surfaceMuted,
-                    },
-                  ]}
-                >
-                  <ThemedText
-                    variant="caption"
-                    style={{
-                      fontWeight: "600",
-                      color: active ? colors.primary : colors.textSecondary,
-                    }}
-                  >
-                    {label}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <FilterChipRow
+            scroll={false}
+            options={KIND_OPTIONS}
+            value={s.kind}
+            onChange={(k) => s.selectKind(k)}
+          />
         </ThemedCard>
 
         <ThemedCard style={{ gap: 10 }}>
@@ -105,21 +86,11 @@ export default function ImportsScreen() {
                 </ThemedText>
                 <View style={styles.chips}>
                   {s.recipes.map((r) => (
-                    <Pressable
+                    <GlassChip
                       key={r.id}
+                      label={r.name}
                       onPress={() => s.applyRecipe(r)}
-                      style={[
-                        styles.chip,
-                        {
-                          borderColor: colors.border,
-                          backgroundColor: colors.surfaceMuted,
-                        },
-                      ]}
-                    >
-                      <ThemedText variant="caption" style={{ fontWeight: "600" }}>
-                        {r.name}
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ))}
                 </View>
               </View>
@@ -144,64 +115,37 @@ export default function ImportsScreen() {
                   <ThemedText variant="caption" style={{ fontWeight: "700" }}>
                     {csvFieldLabel(s.kind, field)}
                   </ThemedText>
-                  <View style={styles.chips}>
-                    <Pressable
-                      onPress={() => s.setFieldMap(field, "")}
-                      style={[
-                        styles.chip,
-                        {
-                          borderColor: !current
-                            ? colors.primary
-                            : colors.border,
-                          backgroundColor: !current
-                            ? colorWithAlpha(colors.primary, 0.12)
-                            : colors.surfaceMuted,
-                        },
-                      ]}
-                    >
-                      <ThemedText variant="caption">—</ThemedText>
-                    </Pressable>
-                    {s.headers.map((h) => {
-                      const active = current === h.key;
-                      const taken = Object.entries(s.columnMap).some(
-                        ([t, src]) => t !== field && src === h.key,
-                      );
-                      if (taken && !active) return null;
-                      return (
-                        <Pressable
-                          key={h.key}
-                          onPress={() => s.setFieldMap(field, h.key)}
-                          style={[
-                            styles.chip,
-                            {
-                              borderColor: active
-                                ? colors.primary
-                                : colors.border,
-                              backgroundColor: active
-                                ? colorWithAlpha(colors.primary, 0.12)
-                                : colors.surfaceMuted,
-                            },
-                          ]}
-                        >
-                          <ThemedText
-                            variant="caption"
-                            style={{
-                              fontWeight: active ? "700" : "500",
-                              color: active
-                                ? colors.primary
-                                : colors.textSecondary,
-                            }}
-                          >
-                            {h.raw || h.key}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <FilterChipRow
+                    scroll={false}
+                    options={[
+                      { id: NONE_COL, label: "—" },
+                      ...s.headers
+                        .filter((h) => {
+                          const active = current === h.key;
+                          const taken = Object.entries(s.columnMap).some(
+                            ([t, src]) => t !== field && src === h.key,
+                          );
+                          return active || !taken;
+                        })
+                        .map((h) => ({
+                          id: h.key,
+                          label: h.raw || h.key,
+                        })),
+                    ]}
+                    value={current || NONE_COL}
+                    onChange={(id) =>
+                      s.setFieldMap(field, id === NONE_COL ? "" : id)
+                    }
+                  />
                 </View>
               );
             })}
 
+            <ThemedText variant="caption" muted>
+              Mapeie as colunas do arquivo. Caso o código IBGE não seja
+              informado, o Pedix Pro tenta identificá-lo via CEP, CNPJ ou
+              município/UF.
+            </ThemedText>
             <ThemedButton
               onPress={() => void s.runPreview()}
               disabled={!s.csvText || s.busy || s.mappedCount === 0}
@@ -325,12 +269,6 @@ export default function ImportsScreen() {
 
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderRadius: radiiPx.md,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
   errorRow: {
     borderWidth: 1,
     borderRadius: radiiPx.md,

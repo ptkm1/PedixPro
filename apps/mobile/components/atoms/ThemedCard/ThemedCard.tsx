@@ -1,7 +1,6 @@
+import { GlassSurface } from "@/components/atoms/GlassSurface";
 import type { ReactNode } from "react";
-import { View, type StyleProp, type ViewStyle } from "react-native";
-import { useTheme } from "@/lib/theme";
-import { radiiPx } from "@pedidos/design-tokens";
+import type { StyleProp, ViewStyle } from "react-native";
 
 type Props = {
   children: ReactNode;
@@ -10,21 +9,9 @@ type Props = {
 };
 
 export function ThemedCard({ children, style, padded = true }: Props) {
-  const { colors } = useTheme();
   return (
-    <View
-      style={[
-        {
-          backgroundColor: colors.card,
-          borderRadius: radiiPx.lg,
-          borderWidth: 1,
-          borderColor: colors.border,
-          padding: padded ? 16 : 0,
-        },
-        style,
-      ]}
-    >
+    <GlassSurface style={style} padded={padded}>
       {children}
-    </View>
+    </GlassSurface>
   );
 }

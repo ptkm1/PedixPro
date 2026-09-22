@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 import { calendarMonthBounds } from "./seller-metrics.js";
 import { orderCode } from "./reports/pdf-common.js";
 
@@ -74,7 +75,7 @@ export async function buildCustomerAbcReport(params: {
     const row = byCustomer.get(o.customerId) ?? {
       customerId: o.customerId,
       name: o.customer?.name ?? "—",
-      sellerName: o.seller.user.name,
+      sellerName: sellerLabelOrDirect(o.seller?.user.name),
       orderCount: 0,
       totalAmount: 0,
     };
@@ -601,7 +602,7 @@ export async function buildProductPositivacaoByCustomerReport(params: {
     const row = map.get(key) ?? {
       customerId,
       customerName: it.order.customer?.name ?? "—",
-      sellerName: it.order.seller.user.name,
+      sellerName: sellerLabelOrDirect(it.order.seller?.user.name),
       productId: it.productId,
       productName: it.productName,
       sku: it.product.sku,
@@ -665,7 +666,15 @@ export async function buildCommissionByOrderReport(params: {
       createdAt: true,
       seller: { select: { user: { select: { name: true } } } },
       customer: { select: { name: true } },
-      items: { select: { commissionAmount: true } },
+      priceTable: { select: { id: true, name: true } },
+      items: {
+        select: {
+          productName: true,
+          commissionAmount: true,
+          commissionPercent: true,
+          commissionOrigin: true,
+        },
+      },
     },
   });
 
@@ -674,16 +683,26 @@ export async function buildCommissionByOrderReport(params: {
       o.items.reduce((s, it) => s + decToNum(it.commissionAmount ?? 0), 0),
     );
     const revenue = roundMoney(decToNum(o.totalAmount));
+    const origins = [
+      ...new Set(
+        o.items
+          .map((it) => it.commissionOrigin)
+          .filter((v): v is NonNullable<typeof v> => Boolean(v)),
+      ),
+    ];
     return {
       orderId: o.id,
       orderCode: orderCode(o),
       createdAt: o.createdAt.toISOString(),
-      sellerName: o.seller.user.name,
+      sellerName: sellerLabelOrDirect(o.seller?.user.name),
       customerName: o.customer?.name ?? "—",
+      priceTableName: o.priceTable?.name ?? null,
       revenue,
       commission,
       commissionPct:
         revenue > 0 ? roundMoney((commission / revenue) * 100) : 0,
+      commissionOrigin:
+        origins.length === 1 ? origins[0] : origins.length > 1 ? "VARIAS" : null,
     };
   });
 
@@ -751,7 +770,9 @@ export async function buildInvoicedOrdersReport(params: {
     orderAmount: inv.order
       ? roundMoney(decToNum(inv.order.totalAmount))
       : null,
-    sellerName: inv.order?.seller.user.name ?? "—",
+    sellerName: inv.order
+      ? sellerLabelOrDirect(inv.order.seller?.user.name)
+      : "—",
     customerName:
       inv.order?.customer?.tradeName ||
       inv.order?.customer?.name ||

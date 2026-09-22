@@ -2,6 +2,8 @@ import type { LucideIcon } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { ThemedText } from "@/components/atoms/ThemedText";
+import { GlassSurface } from "@/components/atoms/GlassSurface";
+import { GlowIcon } from "@/components/atoms/GlowIcon";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
@@ -26,87 +28,66 @@ export function QuickAction({
   variant = "default",
 }: QuickActionProps) {
   const { colors } = useTheme();
+  const accent =
+    variant === "primary"
+      ? colors.primary
+      : variant === "warning"
+        ? colors.warning
+        : colors.primary;
   const borderColor =
-    variant === "primary"
-      ? colorWithAlpha(colors.primary, 0.3)
-      : variant === "warning"
-        ? colorWithAlpha(colors.warning, 0.3)
-        : colors.border;
-  const bg =
-    variant === "primary"
-      ? colorWithAlpha(colors.primary, 0.06)
-      : variant === "warning"
-        ? colorWithAlpha(colors.warning, 0.06)
-        : colors.card;
+    variant === "default" ? colors.glassBorder : colorWithAlpha(accent, 0.45);
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.wrap,
-        {
-          backgroundColor: bg,
-          borderColor,
-          opacity: pressed ? 0.9 : 1,
-        },
-      ]}
+      style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
     >
-      <View
-        style={[
-          styles.iconBox,
-          {
-            backgroundColor:
-              variant === "primary"
-                ? colorWithAlpha(colors.primary, 0.2)
-                : variant === "warning"
-                  ? colorWithAlpha(colors.warning, 0.2)
-                  : colors.surfaceMuted,
-          },
-        ]}
-      >
-        <Icon
-          color={
-            variant === "primary"
-              ? colors.primary
-              : variant === "warning"
-                ? colors.warning
-                : colors.text
-          }
-          size={24}
-        />
-      </View>
-      <View style={styles.text}>
-        <ThemedText variant="body" style={{ fontWeight: "600" }} numberOfLines={1}>
-          {label}
-        </ThemedText>
-        {description ? (
-          <ThemedText variant="bodySm" muted numberOfLines={1}>
-            {description}
-          </ThemedText>
-        ) : null}
-      </View>
-      {badge !== undefined ? (
-        <View
-          style={[
-            styles.badge,
-            {
-              backgroundColor:
-                variant === "primary" ? colors.primary : colors.surfaceMuted,
-            },
-          ]}
-        >
-          <ThemedText
-            variant="caption"
-            style={{
-              fontWeight: "700",
-              color: variant === "primary" ? colors.primaryForeground : colors.text,
-            }}
-          >
-            {badge}
-          </ThemedText>
+      <GlassSurface style={{ borderColor }} padded={false}>
+        <View style={styles.wrap}>
+          <GlowIcon Icon={Icon} size={22} glowSize={68} color={accent} />
+          <View style={styles.text}>
+            <ThemedText
+              variant="body"
+              style={{ fontWeight: "600" }}
+              numberOfLines={1}
+            >
+              {label}
+            </ThemedText>
+            {description ? (
+              <ThemedText variant="bodySm" muted numberOfLines={1}>
+                {description}
+              </ThemedText>
+            ) : null}
+          </View>
+          {badge !== undefined ? (
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor:
+                    variant === "primary"
+                      ? colors.primary
+                      : colors.surfaceMuted,
+                },
+              ]}
+            >
+              <ThemedText
+                variant="caption"
+                style={{
+                  fontWeight: "700",
+                  color:
+                    variant === "primary"
+                      ? colors.primaryForeground
+                      : colors.text,
+                }}
+              >
+                {badge}
+              </ThemedText>
+            </View>
+          ) : null}
+          <ChevronRight color={colors.iconMuted} size={20} />
         </View>
-      ) : null}
-      <ChevronRight color={colors.iconMuted} size={20} />
+      </GlassSurface>
     </Pressable>
   );
 }
@@ -152,51 +133,65 @@ export function ClienteCard({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.wrap,
-        {
-          backgroundColor: colors.card,
-          borderColor: inadimplente ? colorWithAlpha(colors.danger, 0.35) : colors.border,
-          opacity: pressed ? 0.9 : 1,
-        },
-      ]}
+      style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
     >
-      <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-        <ThemedText variant="titleSm" style={{ color: colors.primary, fontWeight: "700" }}>
-          {initial}
-        </ThemedText>
-      </View>
-      <View style={styles.text}>
-        <ThemedText variant="body" style={{ fontWeight: "600" }} numberOfLines={1}>
-          {nome}
-          {favorito ? " ★" : ""}
-          {inadimplente ? " ⚠" : ""}
-        </ThemedText>
-        <ThemedText variant="bodySm" muted numberOfLines={1}>
-          {endereco}
-        </ThemedText>
-        {statusLabel ? (
-          <ThemedText
-            variant="caption"
-            style={{ marginTop: 4, fontWeight: "600", color: statusColor }}
-          >
-            {statusLabel}
-          </ThemedText>
-        ) : null}
-        {ultimaCompra ? (
-          <ThemedText variant="caption" muted style={{ marginTop: 4 }}>
-            Última compra: {ultimaCompra}
-          </ThemedText>
-        ) : null}
-      </View>
-      {curvaABC ? (
-        <View style={[styles.abcBadge, { backgroundColor: avatarBg }]}>
-          <ThemedText variant="caption" style={{ fontWeight: "700", color: colors.primary }}>
-            {curvaABC}
-          </ThemedText>
+      <GlassSurface
+        style={{
+          borderColor: inadimplente
+            ? colorWithAlpha(colors.danger, 0.45)
+            : colors.glassBorder,
+        }}
+        padded={false}
+      >
+        <View style={styles.wrap}>
+          <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+            <ThemedText
+              variant="titleSm"
+              style={{ color: colors.primary, fontWeight: "700" }}
+            >
+              {initial}
+            </ThemedText>
+          </View>
+          <View style={styles.text}>
+            <ThemedText
+              variant="body"
+              style={{ fontWeight: "600" }}
+              numberOfLines={1}
+            >
+              {nome}
+              {favorito ? " ★" : ""}
+              {inadimplente ? " ⚠" : ""}
+            </ThemedText>
+            <ThemedText variant="bodySm" muted numberOfLines={1}>
+              {endereco}
+            </ThemedText>
+            {statusLabel ? (
+              <ThemedText
+                variant="caption"
+                style={{ marginTop: 4, fontWeight: "600", color: statusColor }}
+              >
+                {statusLabel}
+              </ThemedText>
+            ) : null}
+            {ultimaCompra ? (
+              <ThemedText variant="caption" muted style={{ marginTop: 4 }}>
+                Última compra: {ultimaCompra}
+              </ThemedText>
+            ) : null}
+          </View>
+          {curvaABC ? (
+            <View style={[styles.abcBadge, { backgroundColor: avatarBg }]}>
+              <ThemedText
+                variant="caption"
+                style={{ fontWeight: "700", color: colors.primary }}
+              >
+                {curvaABC}
+              </ThemedText>
+            </View>
+          ) : null}
+          <ChevronRight color={colors.iconMuted} size={20} />
         </View>
-      ) : null}
-      <ChevronRight color={colors.iconMuted} size={20} />
+      </GlassSurface>
     </Pressable>
   );
 }
@@ -206,16 +201,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    borderRadius: radiiPx.lg,
-    borderWidth: 1,
     padding: 14,
-  },
-  iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: radiiPx.md,
-    alignItems: "center",
-    justifyContent: "center",
   },
   text: { flex: 1, minWidth: 0 },
   badge: {

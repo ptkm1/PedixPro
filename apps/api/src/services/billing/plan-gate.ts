@@ -36,7 +36,11 @@ export function adminPathToPlanFeature(routePath: string): PlanFeature | null {
     p.startsWith("/seller-monthly-goals") ||
     p.startsWith("/commission-progressive") ||
     p === "/reports/commission-statement" ||
-    p === "/reports/commission-by-order"
+    p === "/reports/commission-by-order" ||
+    p === "/reports/commissions-payable" ||
+    p === "/reports/commissions-payable.pdf" ||
+    p === "/reports/commissions-payable.xlsx" ||
+    p === "/commission-settings"
   ) {
     return "commissions";
   }
@@ -73,6 +77,7 @@ export function adminPathToPlanFeature(routePath: string): PlanFeature | null {
   }
   if (p.startsWith("/audit")) return "audit";
   if (p === "/organization/branding") return "whitelabel";
+  if (p.startsWith("/ai")) return "reports_ai";
 
   return null;
 }

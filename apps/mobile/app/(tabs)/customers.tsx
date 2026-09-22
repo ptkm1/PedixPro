@@ -2,23 +2,24 @@ import { ThemedButton } from "@/components/atoms/ThemedButton";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
 import {
-  KeyboardAvoidingScreen,
-  MobileHeader,
-  SafeScreen,
+    KeyboardAvoidingScreen,
+    MobileHeader,
+    SafeScreen,
 } from "@/components/layout";
 import { MOBILE_TAB_SCROLL_BOTTOM } from "@/components/layout/MobileScreen";
 import { ClienteCard } from "@/components/molecules/QuickAction";
 import { useCustomersScreen } from "@/hooks/screens/useCustomersScreen";
 import { useTheme } from "@/lib/theme";
 import {
-  type CustomerRecord,
-  formatCnpjMask,
-  formatCpfMask,
-  formatStructuredAddress,
+    type CustomerRecord,
+    formatCnpjMask,
+    formatCpfMask,
+    formatStructuredAddress,
 } from "@pedidos/shared";
 import { Search, UserPlus } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, SectionList, StyleSheet, View } from "react-native";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 type CustomerSection = { title: string; data: CustomerRecord[] };
 
@@ -60,6 +61,7 @@ function customerSubtitle(item: {
 export default function CustomersScreen() {
   const { colors } = useTheme();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const {
     customers,
@@ -71,7 +73,7 @@ export default function CustomersScreen() {
   } = useCustomersScreen();
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return customers;
     return customers.filter(
       (c) =>
@@ -82,7 +84,7 @@ export default function CustomersScreen() {
         (c.cnpj?.includes(q) ?? false) ||
         (c.cpf?.includes(q) ?? false),
     );
-  }, [customers, search]);
+  }, [customers, debouncedSearch]);
 
   const sections = useMemo<CustomerSection[]>(() => {
     const collator = new Intl.Collator("pt-BR", { sensitivity: "base" });

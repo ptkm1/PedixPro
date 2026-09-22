@@ -4,7 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* PedixPro — tema claro (padrão) */
+/*
+ * Tema clássico (padrão sem .theme-glass).
+ * Com html.theme-glass: tokens + mesh + grain + vidro.
+ */
+
+/* PedixPro — clássico claro */
 :root {
   --background: color-mix(in srgb, #02445c 10%, white);
   --foreground: #111827;
@@ -45,9 +50,17 @@
   --sidebar-accent-foreground: #111827;
   --sidebar-border: #e2e8f0;
   --sidebar-ring: #02445c;
+  --brand-logo: #02445c;
+  /* Fallbacks se classes glass forem usadas sem o modo */
+  --glass-fill: #ffffff;
+  --glass-fill-solid: #ffffff;
+  --glass-border: #e2e8f0;
+  --glass-highlight: rgb(255 255 255 / 0.5);
+  --glass-blur: 0px;
+  --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 
-/* PedixPro — tema escuro (navy + teal) */
+/* PedixPro — clássico escuro */
 .dark {
   --background: #111827;
   --foreground: #f8fafc;
@@ -87,6 +100,69 @@
   --sidebar-accent-foreground: #f8fafc;
   --sidebar-border: #334155;
   --sidebar-ring: #2a7a8c;
+  --brand-logo: #2a7a8c;
+  --glass-fill: #1f2937;
+  --glass-fill-solid: #1f2937;
+  --glass-border: #334155;
+  --glass-highlight: rgb(255 255 255 / 0.08);
+  --glass-blur: 0px;
+  --glass-shadow: 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+/* —— Glassmorphism light —— */
+html.theme-glass {
+  --background: #f4f7f8;
+  --card: rgb(255 255 255 / 0.72);
+  --popover: rgb(255 255 255 / 0.85);
+  --muted: rgb(241 245 249 / 0.75);
+  --accent: rgb(241 245 249 / 0.8);
+  --border: rgb(255 255 255 / 0.7);
+  --input: rgb(226 232 240 / 0.9);
+  --sidebar: rgb(255 255 255 / 0.55);
+  --sidebar-accent: rgb(255 255 255 / 0.65);
+  --sidebar-border: rgb(255 255 255 / 0.75);
+  --glass-fill: rgb(255 255 255 / 0.55);
+  --glass-fill-solid: #f7f8fa;
+  --glass-border: rgb(255 255 255 / 0.85);
+  --glass-highlight: rgb(255 255 255 / 1);
+  --glass-blur: 22px;
+  --glass-shadow: 0 8px 28px rgb(30 100 180 / 0.12);
+  --brand-logo: #02445c;
+}
+
+/* —— Glassmorphism dark —— */
+html.theme-glass.dark {
+  --background: #050a0f;
+  --foreground: #f4fbff;
+  --card: rgb(255 255 255 / 0.06);
+  --card-foreground: #f4fbff;
+  --popover: rgb(255 255 255 / 0.08);
+  --popover-foreground: #f4fbff;
+  --secondary: rgb(255 255 255 / 0.08);
+  --secondary-foreground: #f4fbff;
+  --muted: rgb(255 255 255 / 0.06);
+  --muted-foreground: #9eb6c9;
+  --accent: rgb(255 255 255 / 0.1);
+  --accent-foreground: #f4fbff;
+  --border: rgb(255 255 255 / 0.12);
+  --input: rgb(255 255 255 / 0.1);
+  --ring: #33daff;
+  --chart-1: #33daff;
+  --sidebar: rgb(255 255 255 / 0.05);
+  --sidebar-foreground: #f4fbff;
+  --sidebar-primary: #33daff;
+  --sidebar-primary-foreground: #041018;
+  --sidebar-accent: rgb(255 255 255 / 0.1);
+  --sidebar-accent-foreground: #f4fbff;
+  --sidebar-border: rgb(255 255 255 / 0.12);
+  --sidebar-ring: #33daff;
+  --glass-fill: rgb(255 255 255 / 0.06);
+  --glass-fill-solid: rgb(15 23 42 / 0.85);
+  --glass-border: rgb(255 255 255 / 0.14);
+  --glass-highlight: rgb(255 255 255 / 0.35);
+  --glass-blur: 28px;
+  --glass-shadow: 0 8px 32px rgb(0 0 0 / 0.35);
+  --brand-logo: #33daff;
 }
 
 @theme inline {
@@ -135,15 +211,109 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-glass-fill: var(--glass-fill);
+  --color-glass-border: var(--glass-border);
+  --color-glass-highlight: var(--glass-highlight);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background font-sans text-foreground antialiased;
+  html {
+    min-height: 100%;
   }
+  body {
+    @apply min-h-full bg-background font-sans text-foreground antialiased;
+  }
+
+  /* Mesh + grain só com theme-glass */
+  html.theme-glass body {
+    /* Base off-white + aura suave do teal da marca (#02445c) */
+    background-color: #f4f7f8;
+    background-image:
+      radial-gradient(
+        ellipse 50% 65% at 0% 42%,
+        rgb(2 68 92 / 0.07) 0%,
+        transparent 58%
+      ),
+      radial-gradient(
+        ellipse 110% 52% at 48% 54%,
+        rgb(2 68 92 / 0.12) 0%,
+        rgb(30 107 122 / 0.08) 34%,
+        transparent 68%
+      ),
+      radial-gradient(
+        ellipse 70% 42% at 78% 62%,
+        rgb(2 68 92 / 0.09) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 75% 48% at 28% 48%,
+        rgb(2 68 92 / 0.06) 0%,
+        transparent 55%
+      ),
+      linear-gradient(
+        180deg,
+        #ffffff 0%,
+        #f5f8f9 42%,
+        color-mix(in srgb, #02445c 6%, white) 100%
+      );
+    background-attachment: fixed;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  html.theme-glass.dark body {
+    background-color: #050a0f;
+    background-image:
+      linear-gradient(
+        118deg,
+        transparent 0%,
+        transparent 38%,
+        rgb(52 152 219 / 0.14) 46%,
+        rgb(30 90 140 / 0.22) 52%,
+        transparent 62%,
+        transparent 100%
+      ),
+      linear-gradient(
+        128deg,
+        transparent 0%,
+        transparent 52%,
+        rgb(0 180 200 / 0.12) 58%,
+        transparent 68%
+      ),
+      radial-gradient(
+        ellipse 90% 70% at 20% 15%,
+        rgb(30 90 140 / 0.45) 0%,
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 80% 60% at 85% 80%,
+        rgb(10 40 70 / 0.5) 0%,
+        transparent 55%
+      ),
+      linear-gradient(160deg, #0d1b2a 0%, #050a0f 42%, #020508 100%);
+    background-attachment: fixed;
+    background-size: cover;
+  }
+  html.theme-glass body::after {
+    content: "";
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    opacity: 0.075;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 160px 160px;
+  }
+  html.theme-glass.dark body::after {
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+  }
+
   button:not(:disabled),
   [role="button"]:not(:disabled),
   [data-slot="button"]:not(:disabled) {
@@ -166,27 +336,137 @@
 }
 
 @layer utilities {
-  .surface-card {
+  /* Clássico: card sólido (também para surface-card-glass sem theme-glass) */
+  .surface-card,
+  .surface-card-glass {
     @apply rounded-xl border border-border bg-card shadow-sm;
   }
-  .dark .surface-card {
+  .dark .surface-card,
+  .dark .surface-card-glass {
     box-shadow: 0 1px 0 rgb(255 255 255 / 0.04);
   }
+
+  /* Glass: só com theme-glass */
+  html.theme-glass .surface-card,
+  html.theme-glass .surface-card-glass,
+  html.theme-glass .ui-glass {
+    border: 1px solid var(--glass-border);
+    background: var(--glass-fill);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  }
+  html.theme-glass .surface-card-glass,
+  html.theme-glass .ui-glass {
+    position: relative;
+    overflow: hidden;
+    border-radius: calc(var(--radius) + 8px);
+  }
+  html.theme-glass .surface-card-glass::before,
+  html.theme-glass .ui-glass::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--glass-highlight),
+      transparent
+    );
+    opacity: 0.85;
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    html.theme-glass .surface-card,
+    html.theme-glass .surface-card-glass,
+    html.theme-glass .ui-glass {
+      background: var(--glass-fill-solid);
+    }
+  }
+
+  /* Chrome (sidebar/header): classes bg-* no clássico; vidro só com theme-glass */
+  html.theme-glass .glass-chrome {
+    border-color: var(--glass-border) !important;
+    background: var(--glass-fill) !important;
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  }
+
+  html.theme-glass [data-slot="card"],
+  html.theme-glass [data-slot="popover-content"],
+  html.theme-glass [data-slot="dropdown-menu-content"],
+  html.theme-glass [data-slot="dropdown-menu-sub-content"],
+  html.theme-glass [data-slot="select-content"],
+  html.theme-glass [data-slot="dialog-content"],
+  html.theme-glass [data-slot="sheet-content"] {
+    border-color: var(--glass-border) !important;
+    background: var(--glass-fill) !important;
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  }
+
+  /* Auth / cards que usam classe .glass — no clássico vira card sólido */
+  .glass {
+    @apply rounded-xl border border-border bg-card shadow-sm;
+  }
+  html.theme-glass .glass {
+    position: relative;
+    overflow: hidden;
+    border-radius: calc(var(--radius) + 8px);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-fill);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  }
+
   .glow-primary {
     box-shadow: 0 0 20px rgb(15 76 92 / 0.18);
   }
   .dark .glow-primary {
     box-shadow: 0 0 24px rgb(42 122 140 / 0.2);
   }
-  .glass {
-    background: rgb(248 250 252 / 0.88);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgb(226 232 240 / 0.7);
+  html.theme-glass .glow-primary {
+    box-shadow:
+      var(--glass-shadow),
+      0 0 20px rgb(15 76 92 / 0.18);
   }
-  .dark .glass {
-    background: rgb(31 41 55 / 0.88);
-    border: 1px solid rgb(51 65 85 / 0.8);
+  html.theme-glass.dark .glow-primary {
+    box-shadow:
+      var(--glass-shadow),
+      0 0 28px rgb(52 152 219 / 0.18);
   }
+
+  .glass-chip {
+    @apply inline-flex items-center justify-center rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors;
+    background: rgb(100 116 139 / 0.14);
+    border-color: rgb(15 23 42 / 0.12);
+    color: var(--foreground);
+  }
+  .dark .glass-chip {
+    background: #1f2937;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+  html.theme-glass.dark .glass-chip {
+    background: rgb(255 255 255 / 0.08);
+    border-color: rgb(255 255 255 / 0.14);
+    color: #e8f4ff;
+  }
+  .glass-chip-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+  html.theme-glass.dark .glass-chip-active {
+    background: #33daff;
+    border-color: #33daff;
+    color: #071828;
+  }
+
   .gradient-text {
     background: linear-gradient(135deg, #02445c, #1e6b7a);
     -webkit-background-clip: text;
@@ -195,6 +475,12 @@
   }
   .dark .gradient-text {
     background: linear-gradient(135deg, #f8fafc, #2a7a8c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  html.theme-glass.dark .gradient-text {
+    background: linear-gradient(135deg, #f4fbff, #33daff);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

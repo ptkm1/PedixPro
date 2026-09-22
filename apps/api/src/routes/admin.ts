@@ -4,10 +4,12 @@ import {
     HOME_INDICATOR_KEYS,
     homeIndicatorLimitForPlan,
     isLifecycleSituationCode,
+    isProductImageMimeType,
     isReservedSituationCode,
     normalizePurchaseUnitCode,
     parseHomeIndicators,
     persistHomeIndicatorsError,
+    PRODUCT_IMAGE_MAX_BYTES,
     uniqueIdsPreserveOrder,
     type HomeChartIndicatorKey,
     type HomeIndicatorKey,
@@ -119,8 +121,21 @@ import {
     buildFinancialResultPdf,
     type FinancialPeriodGroup,
 } from "../services/financial-result-report.js";
+import {
+    buildCommissionPayableReport,
+    getCommissionPayableSettings,
+    setCommissionPayableCriterion,
+} from "../services/commission-payable-report.js";
+import { buildCommissionPayablePdf } from "../services/reports/commissions-payable-pdf.js";
+import { buildCommissionPayableExcelXml } from "../services/reports/commissions-payable-excel.js";
 import { getOrCreateMorningBrief } from "../services/morning-brief.js";
 import { getWebPushPublicKey, notifyUsers } from "../services/notify.js";
+import {
+    createProductImageUploadUrl,
+    deleteOwnedProductImage,
+    isObjectStorageConfigured,
+    ObjectStorageError,
+} from "../services/object-storage.js";
 import {
     loadOrderForPdf,
     sendOrderPdf80mmReply,
@@ -132,12 +147,21 @@ import {
 } from "../services/order-pricing.js";
 import {
     createSaleOrder,
+    orgAllowedProductIds,
     replySaleCreateError,
     sellerAllowedProductIds,
 } from "../services/create-sale-order.js";
+import { reassignOrderSeller } from "../services/reassign-order-seller.js";
+import { applyOrderSellerFilter } from "../util/order-seller-filter.js";
 import { checkCustomer, evaluateOrderCredit } from "../services/credit.js";
+import {
+    PriceTableServiceError,
+    replaceCustomerSpecialPrices,
+    replaceSellerPriceTableAccess,
+} from "../services/price-tables.js";
 import { bankingAdminRoutes } from "./banking-admin.js";
 import { boletosAdminRoutes } from "./boletos-admin.js";
+import { priceTablesAdminRoutes } from "./admin-price-tables.js";
 import { resolveEffectiveUnitPrice } from "../services/price-resolve.js";
 import {
     listAssignedProductsInOrg,
@@ -176,6 +200,15 @@ import {
     productCadastroFieldsSchema,
     syncProductAttributesNcm,
 } from "../services/product-cadastro-schema.js";
+import {
+    DuplicateProductError,
+    duplicateProduct,
+} from "../services/duplicate-product.js";
+import {
+    productCommissionInclude,
+    ProductCommissionError,
+    syncProductCommissionExceptions,
+} from "../services/product-commission-exceptions.js";
 import {
     applyStockOnStatusChange, StockError,
     stockErrorPayload
@@ -254,6 +287,16 @@ const optionalCommissionPercentSchema = z
   .max(100)
   .nullable()
   .optional();
+
+const sellerCommissionRowSchema = z.object({
+  sellerId: z.string().min(1),
+  commissionPercent: z.number().min(0).max(100).nullable(),
+});
+
+const priceTableCommissionRowSchema = z.object({
+  priceTableId: z.string().min(1),
+  commissionPercent: z.number().min(0).max(100),
+});
 
 /** Aceita `YYYY-MM-DD` (UTC) ou ISO completo; `start` = início do dia, `end` = fim do dia. */
 function parseVisitPeriodDate(
@@ -520,6 +563,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         where: { id: auth.organizationId },
         select: {
           orderSyncMode: true,
+          catalogPriceDisplayMode: true,
           sellerShowUnassignedCustomers: true,
           customerRegistrationMode: true,
           sellerCanEditQueuedSales: true,
@@ -532,6 +576,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const homeIndicatorLimit = homeIndicatorLimitForPlan(sub.planId);
     return {
       orderSyncMode: org?.orderSyncMode ?? ("AUTO" as const),
+      catalogPriceDisplayMode:
+        org?.catalogPriceDisplayMode ?? ("LOWEST" as const),
       sellerShowUnassignedCustomers: org?.sellerShowUnassignedCustomers ?? true,
       customerRegistrationMode:
         org?.customerRegistrationMode ?? ("AUTO" as const),
@@ -554,6 +600,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const body = z
       .object({
         orderSyncMode: z.enum(["AUTO", "MANUAL"]).optional(),
+        catalogPriceDisplayMode: z
+          .enum(["ALL", "LOWEST", "HIGHEST"])
+          .optional(),
         sellerShowUnassignedCustomers: z.boolean().optional(),
         customerRegistrationMode: z
           .enum(["AUTO", "REQUIRE_APPROVAL"])
@@ -573,6 +622,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     if (
       body.data.orderSyncMode === undefined &&
+      body.data.catalogPriceDisplayMode === undefined &&
       body.data.sellerShowUnassignedCustomers === undefined &&
       body.data.customerRegistrationMode === undefined &&
       body.data.sellerCanEditQueuedSales === undefined &&
@@ -610,6 +660,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ...(body.data.orderSyncMode !== undefined
           ? { orderSyncMode: body.data.orderSyncMode }
           : {}),
+        ...(body.data.catalogPriceDisplayMode !== undefined
+          ? { catalogPriceDisplayMode: body.data.catalogPriceDisplayMode }
+          : {}),
         ...(body.data.sellerShowUnassignedCustomers !== undefined
           ? {
               sellerShowUnassignedCustomers:
@@ -636,6 +689,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
       select: {
         orderSyncMode: true,
+        catalogPriceDisplayMode: true,
         sellerShowUnassignedCustomers: true,
         customerRegistrationMode: true,
         sellerCanEditQueuedSales: true,
@@ -646,6 +700,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return {
       ok: true,
       orderSyncMode: updated.orderSyncMode,
+      catalogPriceDisplayMode: updated.catalogPriceDisplayMode,
       sellerShowUnassignedCustomers: updated.sellerShowUnassignedCustomers,
       customerRegistrationMode: updated.customerRegistrationMode,
       sellerCanEditQueuedSales: updated.sellerCanEditQueuedSales,
@@ -812,240 +867,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(204).send();
   });
 
-  /* --- Tabelas de preço --- */
-  app.get("/price-tables", async (req) => {
-    const auth = req.auth!;
-    return prisma.priceTable.findMany({
-      where: { organizationId: auth.organizationId },
-      include: {
-        items: { include: { product: true } },
-        customer: { select: { id: true, name: true } },
-        seller: { include: { user: { select: { name: true } } } },
-        region: { select: { id: true, code: true, name: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-  });
-
-  app.post("/price-tables", async (req, reply) => {
-    const auth = req.auth!;
-    const body = z
-      .object({
-        name: z.string().min(1),
-        validFrom: z.string().datetime().optional(),
-        validTo: z.string().datetime().optional(),
-        priority: z.number().int().optional(),
-        customerId: z.string().nullable().optional(),
-        sellerId: z.string().nullable().optional(),
-        regionId: z.string().nullable().optional(),
-      })
-      .safeParse(req.body);
-    if (!body.success) {
-        return sendZodError(reply, body.error, req);
-      }
-
-    const d = body.data;
-    if (d.customerId) {
-      const c = await prisma.customer.findFirst({
-        where: { id: d.customerId, organizationId: auth.organizationId },
-      });
-      if (!c)
-        return reply
-          .status(400)
-          .send({ error: "Cliente inválido para escopo da tabela" });
-    }
-    if (d.sellerId) {
-      const s = await prisma.seller.findFirst({
-        where: { id: d.sellerId, organizationId: auth.organizationId },
-      });
-      if (!s)
-        return reply
-          .status(400)
-          .send({ error: "Vendedor inválido para escopo da tabela" });
-    }
-    if (d.regionId) {
-      const r = await prisma.region.findFirst({
-        where: { id: d.regionId, organizationId: auth.organizationId },
-      });
-      if (!r)
-        return reply
-          .status(400)
-          .send({ error: "Região inválida para escopo da tabela" });
-    }
-
-    const created = await prisma.priceTable.create({
-      data: {
-        name: d.name,
-        organizationId: auth.organizationId,
-        validFrom: d.validFrom ? new Date(d.validFrom) : null,
-        validTo: d.validTo ? new Date(d.validTo) : null,
-        priority: d.priority ?? 0,
-        customerId: d.customerId ?? null,
-        sellerId: d.sellerId ?? null,
-        regionId: d.regionId ?? null,
-      },
-    });
-    await auditFromAuth(auth, {
-      action: AUDIT_ACTION.CREATE,
-      entityType: AUDIT_ENTITY.PriceTable,
-      entityId: created.id,
-      metadata: { name: created.name },
-    });
-    return created;
-  });
-
-  app.patch("/price-tables/:id", async (req, reply) => {
-    const auth = req.auth!;
-    const { id } = idParam.parse(req.params);
-    const body = z
-      .object({
-        name: z.string().min(1).optional(),
-        validFrom: z.string().datetime().nullable().optional(),
-        validTo: z.string().datetime().nullable().optional(),
-        priority: z.number().int().optional(),
-        customerId: z.string().nullable().optional(),
-        sellerId: z.string().nullable().optional(),
-        regionId: z.string().nullable().optional(),
-      })
-      .safeParse(req.body);
-    if (!body.success) {
-        return sendZodError(reply, body.error, req);
-      }
-
-    const existing = await prisma.priceTable.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!existing) return reply.status(404).send({ error: "Não encontrado" });
-
-    const d = body.data;
-    if (d.customerId) {
-      const c = await prisma.customer.findFirst({
-        where: { id: d.customerId, organizationId: auth.organizationId },
-      });
-      if (!c)
-        return reply
-          .status(400)
-          .send({ error: "Cliente inválido para escopo da tabela" });
-    }
-    if (d.sellerId) {
-      const s = await prisma.seller.findFirst({
-        where: { id: d.sellerId, organizationId: auth.organizationId },
-      });
-      if (!s)
-        return reply
-          .status(400)
-          .send({ error: "Vendedor inválido para escopo da tabela" });
-    }
-    if (d.regionId) {
-      const r = await prisma.region.findFirst({
-        where: { id: d.regionId, organizationId: auth.organizationId },
-      });
-      if (!r)
-        return reply
-          .status(400)
-          .send({ error: "Região inválida para escopo da tabela" });
-    }
-
-    const updated = await prisma.priceTable.update({
-      where: { id },
-      data: {
-        name: d.name ?? undefined,
-        validFrom:
-          d.validFrom === undefined
-            ? undefined
-            : d.validFrom
-              ? new Date(d.validFrom)
-              : null,
-        validTo:
-          d.validTo === undefined
-            ? undefined
-            : d.validTo
-              ? new Date(d.validTo)
-              : null,
-        priority: d.priority ?? undefined,
-        customerId: d.customerId === undefined ? undefined : d.customerId,
-        sellerId: d.sellerId === undefined ? undefined : d.sellerId,
-        regionId: d.regionId === undefined ? undefined : d.regionId,
-      },
-    });
-    await auditFromAuth(auth, {
-      action: AUDIT_ACTION.UPDATE,
-      entityType: AUDIT_ENTITY.PriceTable,
-      entityId: id,
-      metadata: { fields: Object.keys(body.data) },
-    });
-    return updated;
-  });
-
-  app.delete("/price-tables/:id", async (req, reply) => {
-    const auth = req.auth!;
-    const { id } = idParam.parse(req.params);
-    const existing = await prisma.priceTable.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!existing) return reply.status(404).send({ error: "Não encontrado" });
-    await prisma.priceTable.delete({ where: { id } });
-    await auditFromAuth(auth, {
-      action: AUDIT_ACTION.DELETE,
-      entityType: AUDIT_ENTITY.PriceTable,
-      entityId: id,
-      metadata: { name: existing.name },
-    });
-    return reply.status(204).send();
-  });
-
-  app.post("/price-tables/:id/items", async (req, reply) => {
-    const auth = req.auth!;
-    const { id } = idParam.parse(req.params);
-    const body = z
-      .object({
-        productId: z.string(),
-        price: z.number().positive(),
-      })
-      .safeParse(req.body);
-    if (!body.success) {
-        return sendZodError(reply, body.error, req);
-      }
-
-    const pt = await prisma.priceTable.findFirst({
-      where: { id, organizationId: auth.organizationId },
-    });
-    if (!pt) return reply.status(404).send({ error: "Tabela não encontrada" });
-    const prod = await prisma.product.findFirst({
-      where: { id: body.data.productId, organizationId: auth.organizationId },
-    });
-    if (!prod) return reply.status(400).send({ error: "Produto inválido" });
-
-    return prisma.priceTableItem.upsert({
-      where: {
-        priceTableId_productId: {
-          priceTableId: id,
-          productId: body.data.productId,
-        },
-      },
-      create: {
-        priceTableId: id,
-        productId: body.data.productId,
-        price: body.data.price,
-      },
-      update: { price: body.data.price },
-    });
-  });
-
-  app.delete("/price-tables/:tableId/items/:productId", async (req, reply) => {
-    const auth = req.auth!;
-    const p = z
-      .object({ tableId: z.string(), productId: z.string() })
-      .parse(req.params);
-    const pt = await prisma.priceTable.findFirst({
-      where: { id: p.tableId, organizationId: auth.organizationId },
-    });
-    if (!pt) return reply.status(404).send({ error: "Tabela não encontrada" });
-    await prisma.priceTableItem.deleteMany({
-      where: { priceTableId: p.tableId, productId: p.productId },
-    });
-    return reply.status(204).send();
-  });
+  /* Tabelas de preço: ver admin-price-tables.ts */
 
   /* --- Categorias de produto (lookup / “enum” por organização) --- */
   app.get("/product-categories", async (req) => {
@@ -1556,6 +1378,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         priceTable: { select: { id: true, name: true } },
       },
     },
+    ...productCommissionInclude,
   } as const;
 
   /* --- Fornecedores --- */
@@ -2402,6 +2225,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             }),
           )
           .min(1),
+        sellerCommissions: z.array(sellerCommissionRowSchema).optional(),
+        priceTableCommissions: z.array(priceTableCommissionRowSchema).optional(),
         ...productCadastroFieldsSchema,
       })
       .safeParse(req.body);
@@ -2573,6 +2398,18 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
+      try {
+        await syncProductCommissionExceptions(auth.organizationId, created.id, {
+          sellerCommissions: body.data.sellerCommissions,
+          priceTableCommissions: body.data.priceTableCommissions,
+        });
+      } catch (err) {
+        if (err instanceof ProductCommissionError) {
+          return reply.status(400).send({ error: err.message });
+        }
+        throw err;
+      }
+
       return prisma.product.findFirstOrThrow({
         where: { id: created.id, organizationId: auth.organizationId },
         include: productRelationsInclude,
@@ -2634,6 +2471,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           )
           .min(1)
           .optional(),
+        sellerCommissions: z.array(sellerCommissionRowSchema).optional(),
+        priceTableCommissions: z.array(priceTableCommissionRowSchema).optional(),
         ...productCadastroFieldsSchema,
       })
       .safeParse(req.body);
@@ -2724,6 +2563,20 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           ))
         : body.data.basePrice;
 
+    const nextImageUrl =
+      body.data.imageUrl === undefined
+        ? undefined
+        : body.data.imageUrl === null || body.data.imageUrl === ""
+          ? null
+          : body.data.imageUrl.trim() || null;
+    if (
+      nextImageUrl !== undefined &&
+      nextImageUrl !== existing.imageUrl &&
+      existing.imageUrl
+    ) {
+      await deleteOwnedProductImage(existing.imageUrl);
+    }
+
     try {
       const updated = await prisma.product.update({
         where: { id },
@@ -2741,14 +2594,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           basePrice: patchBasePrice,
           featured:
             body.data.featured === undefined ? undefined : body.data.featured,
-          ...(body.data.imageUrl !== undefined
-            ? {
-                imageUrl:
-                  body.data.imageUrl === null || body.data.imageUrl === ""
-                    ? null
-                    : body.data.imageUrl.trim() || null,
-              }
-            : {}),
+          ...(nextImageUrl !== undefined ? { imageUrl: nextImageUrl } : {}),
           categoryId:
             body.data.categoryId === undefined
               ? undefined
@@ -2843,6 +2689,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         entityId: id,
         metadata: { name: updated.name, fields: Object.keys(body.data) },
       });
+      try {
+        await syncProductCommissionExceptions(auth.organizationId, id, {
+          sellerCommissions: body.data.sellerCommissions,
+          priceTableCommissions: body.data.priceTableCommissions,
+        });
+      } catch (err) {
+        if (err instanceof ProductCommissionError) {
+          return reply.status(400).send({ error: err.message });
+        }
+        throw err;
+      }
       return prisma.product.findFirstOrThrow({
         where: { id, organizationId: auth.organizationId },
         include: productRelationsInclude,
@@ -2860,6 +2717,101 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post("/products/:id/image/upload-url", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    if (!isObjectStorageConfigured()) {
+      return reply.status(503).send({
+        error:
+          "Upload de imagens não configurado. Defina as variáveis R2_* no servidor.",
+      });
+    }
+    const body = z
+      .object({
+        contentType: z.string().min(1),
+        contentLength: z.number().int().positive(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return sendZodError(reply, body.error, req);
+    }
+    if (!isProductImageMimeType(body.data.contentType)) {
+      return reply.status(400).send({
+        error: "Use JPEG, PNG ou WebP.",
+      });
+    }
+    if (body.data.contentLength > PRODUCT_IMAGE_MAX_BYTES) {
+      return reply.status(400).send({
+        error: `A imagem deve ter no máximo ${Math.floor(PRODUCT_IMAGE_MAX_BYTES / (1024 * 1024))} MB.`,
+      });
+    }
+
+    const product = await prisma.product.findFirst({
+      where: { id, organizationId: auth.organizationId },
+      select: { id: true },
+    });
+    if (!product) return reply.status(404).send({ error: "Não encontrado" });
+
+    try {
+      const result = await createProductImageUploadUrl({
+        organizationId: auth.organizationId,
+        productId: product.id,
+        contentType: body.data.contentType,
+        contentLength: body.data.contentLength,
+      });
+      return result;
+    } catch (e) {
+      if (e instanceof ObjectStorageError) {
+        return reply.status(503).send({ error: e.message });
+      }
+      throw e;
+    }
+  });
+
+  app.delete("/products/:id/image", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    const product = await prisma.product.findFirst({
+      where: { id, organizationId: auth.organizationId },
+      select: { id: true, imageUrl: true },
+    });
+    if (!product) return reply.status(404).send({ error: "Não encontrado" });
+
+    await deleteOwnedProductImage(product.imageUrl);
+    const updated = await prisma.product.update({
+      where: { id: product.id },
+      data: { imageUrl: null },
+      include: productRelationsInclude,
+    });
+    return updated;
+  });
+
+  app.post("/products/:id/duplicate", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    try {
+      const created = await duplicateProduct(auth.organizationId, id);
+      await auditFromAuth(auth, {
+        action: AUDIT_ACTION.CREATE,
+        entityType: AUDIT_ENTITY.Product,
+        entityId: created.id,
+        metadata: {
+          name: created.name,
+          duplicatedFrom: id,
+        },
+      });
+      return prisma.product.findFirstOrThrow({
+        where: { id: created.id, organizationId: auth.organizationId },
+        include: productRelationsInclude,
+      });
+    } catch (e) {
+      if (e instanceof DuplicateProductError) {
+        return reply.status(e.httpStatus).send({ error: e.message });
+      }
+      throw e;
+    }
+  });
+
   app.delete("/products/:id", async (req, reply) => {
     const auth = req.auth!;
     const { id } = idParam.parse(req.params);
@@ -2867,6 +2819,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       where: { id, organizationId: auth.organizationId },
     });
     if (!existing) return reply.status(404).send({ error: "Não encontrado" });
+    await deleteOwnedProductImage(existing.imageUrl);
     await prisma.product.delete({ where: { id } });
     await auditFromAuth(auth, {
       action: AUDIT_ACTION.DELETE,
@@ -3876,11 +3829,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             name: true,
             role: true,
             matricula: true,
+            phone: true,
             activatedAt: true,
           },
         },
         manager: { select: { id: true, name: true, email: true } },
         team: { select: { id: true, name: true } },
+        allowedPriceTables: { select: { priceTableId: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -3895,6 +3850,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         invite: z.boolean().optional(),
         name: z.string().min(1),
         matricula: z.string().min(1).max(40).optional(),
+        phone: z.string().trim().min(1, "Campo obrigatório."),
         commissionType: sellerCommissionTypeSchema.default("FIXED"),
         commissionPercent: z.number().min(0).max(100).optional(),
         teamId: z.string().min(1).nullable().optional(),
@@ -3948,6 +3904,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           passwordHash,
           name: body.data.name,
           matricula: body.data.matricula?.trim() || null,
+          phone: body.data.phone.trim(),
           role: "SELLER",
           organizationId: auth.organizationId,
           activatedAt: useInvite ? null : new Date(),
@@ -4004,6 +3961,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         email: user.email,
         name: user.name,
         matricula: user.matricula,
+        phone: user.phone,
         commissionType: user.seller!.commissionType,
         commissionPercent: decToNum(user.seller!.commissionPercent),
         active: user.seller!.active,
@@ -4033,11 +3991,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         name: true,
         role: true,
         matricula: true,
+        phone: true,
         activatedAt: true,
       },
     },
     manager: { select: { id: true, name: true, email: true } },
     team: { select: { id: true, name: true } },
+    allowedPriceTables: { select: { priceTableId: true } },
   } as const;
 
   async function findOrgSeller(organizationId: string, id: string) {
@@ -4196,7 +4156,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         email: z.string().email().optional(),
         password: z.string().min(6).optional(),
         matricula: z.string().min(1).max(40).nullable().optional(),
+        phone: z.string().trim().min(1, "Campo obrigatório.").optional(),
         managerUserId: z.string().min(1).nullable().optional(),
+        defaultPriceTableId: z.string().min(1).nullable().optional(),
+        allowedPriceTableIds: z.array(z.string().min(1)).optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -4243,7 +4206,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           body.data.name ||
           body.data.email ||
           body.data.password ||
-          body.data.matricula !== undefined
+          body.data.matricula !== undefined ||
+          body.data.phone !== undefined
         ) {
           await tx.user.updateMany({
             where: {
@@ -4264,6 +4228,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
                 ? {
                     matricula: body.data.matricula?.trim() || null,
                   }
+                : {}),
+              ...(body.data.phone !== undefined
+                ? { phone: body.data.phone.trim() }
                 : {}),
             },
           });
@@ -4293,6 +4260,31 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         fields: Object.keys(body.data),
       },
     });
+
+    if (
+      body.data.allowedPriceTableIds !== undefined ||
+      body.data.defaultPriceTableId !== undefined
+    ) {
+      try {
+        await replaceSellerPriceTableAccess(
+          auth.organizationId,
+          id,
+          body.data.allowedPriceTableIds ??
+            (
+              await prisma.sellerPriceTableAccess.findMany({
+                where: { sellerId: id },
+                select: { priceTableId: true },
+              })
+            ).map((r) => r.priceTableId),
+          body.data.defaultPriceTableId,
+        );
+      } catch (e) {
+        if (e instanceof PriceTableServiceError) {
+          return reply.status(e.httpStatus).send({ error: e.message });
+        }
+        throw e;
+      }
+    }
 
     return prisma.seller.findUnique({
       where: { id },
@@ -4401,6 +4393,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         sellerId: z.string().optional(),
         approvalStatus: z.enum(["APPROVED", "PENDING", "REJECTED"]).optional(),
         status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+        q: z.string().trim().max(200).optional(),
       })
       .safeParse(req.query);
     await maybeInactivateStaleCustomersForOrg(auth.organizationId);
@@ -4411,6 +4404,77 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (q.success && q.data.approvalStatus)
       where.approvalStatus = q.data.approvalStatus;
     if (q.success && q.data.status) where.status = q.data.status;
+    const search = q.success ? q.data.q?.trim() : undefined;
+    if (search) {
+      const digits = search.replace(/\D/g, "");
+      const text = { contains: search, mode: "insensitive" as const };
+      const or: Prisma.CustomerWhereInput[] = [
+        { name: text },
+        { email: text },
+        { phone: text },
+        { addressNote: text },
+        { legalName: text },
+        { tradeName: text },
+        { cep: text },
+        { street: text },
+        { number: text },
+        { neighborhood: text },
+        { state: text },
+        { city: text },
+        { cityIbgeCode: text },
+        { stateRegistration: text },
+        { buyerName: text },
+        { notes: text },
+        { approvalNote: text },
+        { rejectionReason: text },
+        { cnpj: text },
+        { cpf: text },
+        { seller: { user: { name: text } } },
+        { region: { name: text } },
+        { region: { code: text } },
+      ];
+      if (digits.length > 0) {
+        or.push(
+          { cnpj: { contains: digits } },
+          { cpf: { contains: digits } },
+          { cep: { contains: digits } },
+          { phone: { contains: digits } },
+          { stateRegistration: { contains: digits } },
+        );
+        const asCode = Number(digits);
+        if (
+          Number.isInteger(asCode) &&
+          String(asCode) === digits &&
+          digits.length <= 9
+        ) {
+          or.push({ code: asCode });
+        }
+      }
+      const upper = search.toUpperCase();
+      if (upper === "CNPJ" || upper === "CPF") {
+        or.push({ documentType: upper });
+      }
+      if (upper === "ACTIVE" || upper === "ATIVO") {
+        or.push({ status: "ACTIVE" });
+      }
+      if (upper === "INACTIVE" || upper === "INATIVO") {
+        or.push({ status: "INACTIVE" });
+      }
+      if (
+        upper === "PENDING" ||
+        upper === "PENDENTE" ||
+        upper.includes("AGUARD")
+      ) {
+        or.push({ approvalStatus: "PENDING" });
+      }
+      if (upper === "APPROVED" || upper === "APROVADO") {
+        or.push({ approvalStatus: "APPROVED" });
+      }
+      if (upper === "REJECTED" || upper === "REJEITADO") {
+        or.push({ approvalStatus: "REJECTED" });
+      }
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), { OR: or }];
+    }
     return prisma.customer.findMany({
       where,
       orderBy: { name: "asc" },
@@ -4521,6 +4585,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ids: z.array(z.string().min(1)).min(1).max(100),
         status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
         creditBlocked: z.boolean().optional(),
+        sellerId: z.string().min(1).nullable().optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -4528,8 +4593,19 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       }
 
     const { ids: rawIds, ...patch } = body.data;
-    if (patch.status === undefined && patch.creditBlocked === undefined) {
+    if (
+      patch.status === undefined &&
+      patch.creditBlocked === undefined &&
+      patch.sellerId === undefined
+    ) {
       return reply.status(400).send({ error: "Nenhuma alteração informada" });
+    }
+
+    if (patch.sellerId) {
+      const s = await prisma.seller.findFirst({
+        where: { id: patch.sellerId, organizationId: auth.organizationId },
+      });
+      if (!s) return reply.status(400).send({ error: "Vendedor inválido" });
     }
 
     const ids = [...new Set(rawIds)];
@@ -4550,6 +4626,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ...(patch.creditBlocked !== undefined
           ? { creditBlocked: patch.creditBlocked }
           : {}),
+        ...(patch.sellerId !== undefined ? { sellerId: patch.sellerId } : {}),
       },
     });
     await auditFromAuth(auth, {
@@ -4561,10 +4638,55 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         count: targets.length,
         status: patch.status ?? null,
         creditBlocked: patch.creditBlocked ?? null,
+        sellerId: patch.sellerId !== undefined ? patch.sellerId : null,
         names: targets.map((t) => t.name).slice(0, 20),
       },
     });
     return { updated: targets.length };
+  });
+
+  app.post("/customers/batch-delete", async (req, reply) => {
+    const auth = req.auth!;
+    if (
+      auth.role === "MANAGER" &&
+      !(await canWriteEffective(auth.organizationId, auth.role, "customers"))
+    ) {
+      return reply
+        .status(403)
+        .send({ error: "Sem permissão para excluir clientes" });
+    }
+    const body = z
+      .object({ ids: z.array(z.string().min(1)).min(1).max(100) })
+      .safeParse(req.body);
+    if (!body.success) {
+      return sendZodError(reply, body.error, req);
+    }
+
+    const ids = [...new Set(body.data.ids)];
+    const targets = await prisma.customer.findMany({
+      where: { organizationId: auth.organizationId, id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    if (targets.length !== ids.length) {
+      return reply
+        .status(400)
+        .send({ error: "Um ou mais clientes não foram encontrados" });
+    }
+
+    await prisma.customer.deleteMany({
+      where: { organizationId: auth.organizationId, id: { in: ids } },
+    });
+    await auditFromAuth(auth, {
+      action: AUDIT_ACTION.DELETE,
+      entityType: AUDIT_ENTITY.Customer,
+      entityId: auth.organizationId,
+      metadata: {
+        batch: true,
+        count: targets.length,
+        names: targets.map((t) => t.name).slice(0, 20),
+      },
+    });
+    return { deleted: targets.length };
   });
 
   app.get("/customers/pending-approval", async (req) => {
@@ -4709,6 +4831,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       if (!r) return reply.status(400).send({ error: "Região inválida" });
     }
 
+    if (body.data.defaultPriceTableId) {
+      const t = await prisma.priceTable.findFirst({
+        where: {
+          id: body.data.defaultPriceTableId,
+          organizationId: auth.organizationId,
+        },
+      });
+      if (!t)
+        return reply.status(400).send({ error: "Tabela de preço inválida" });
+    }
+
     try {
       const created = await prisma.$transaction(async (tx) => {
         const code = await nextCustomerCode(tx, auth.organizationId);
@@ -4760,6 +4893,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       if (!r) return reply.status(400).send({ error: "Região inválida" });
     }
 
+    if (body.data.defaultPriceTableId) {
+      const t = await prisma.priceTable.findFirst({
+        where: {
+          id: body.data.defaultPriceTableId,
+          organizationId: auth.organizationId,
+        },
+      });
+      if (!t)
+        return reply.status(400).send({ error: "Tabela de preço inválida" });
+    }
+
     const merged = {
       name: body.data.name ?? existing.name,
       email: body.data.email !== undefined ? body.data.email : existing.email,
@@ -4772,6 +4916,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         body.data.regionId !== undefined
           ? body.data.regionId
           : existing.regionId,
+      defaultPriceTableId:
+        body.data.defaultPriceTableId !== undefined
+          ? body.data.defaultPriceTableId
+          : existing.defaultPriceTableId,
       latitude:
         body.data.latitude !== undefined
           ? body.data.latitude
@@ -4850,6 +4998,30 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       );
     }
 
+    // Revalida IBGE quando CEP/cidade/UF mudam (ou código inválido).
+    {
+      const { resolveMunicipioIbge } = await import(
+        "../services/ibge/municipio-resolver.js"
+      );
+      const addrChanged =
+        body.data.cep !== undefined ||
+        body.data.city !== undefined ||
+        body.data.state !== undefined ||
+        body.data.cityIbgeCode !== undefined;
+      if (addrChanged) {
+        const resolved = await resolveMunicipioIbge({
+          codigoIbge: complete.data.cityIbgeCode,
+          cep: complete.data.cep,
+          cidade: complete.data.city,
+          uf: complete.data.state,
+          cnpj: complete.data.cnpj,
+        });
+        if (resolved.codigoIbge) {
+          complete.data.cityIbgeCode = resolved.codigoIbge;
+        }
+      }
+    }
+
     try {
       const updated = await prisma.customer.update({
         where: { id },
@@ -4883,6 +5055,66 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .status(409)
           .send({ error: "CNPJ ou CPF já cadastrado nesta organização." });
+      }
+      throw e;
+    }
+  });
+
+  app.get("/customers/:id/special-prices", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    const customer = await prisma.customer.findFirst({
+      where: { id, organizationId: auth.organizationId },
+      select: { id: true },
+    });
+    if (!customer) return reply.status(404).send({ error: "Não encontrado" });
+    const rows = await prisma.customerSpecialPrice.findMany({
+      where: { customerId: id, organizationId: auth.organizationId },
+      include: { product: { select: { id: true, name: true, sku: true } } },
+      orderBy: { productId: "asc" },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      productId: r.productId,
+      productName: r.product.name,
+      sku: r.product.sku,
+      price: decToNum(r.price),
+      validFrom: r.validFrom,
+      validTo: r.validTo,
+    }));
+  });
+
+  app.put("/customers/:id/special-prices", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    const body = z
+      .object({
+        items: z.array(
+          z.object({
+            productId: z.string().min(1),
+            price: z.number().nonnegative(),
+            validFrom: z.string().nullable().optional(),
+            validTo: z.string().nullable().optional(),
+          }),
+        ),
+      })
+      .safeParse(req.body);
+    if (!body.success) return sendZodError(reply, body.error, req);
+    try {
+      await replaceCustomerSpecialPrices(
+        auth.organizationId,
+        id,
+        body.data.items.map((i) => ({
+          productId: i.productId,
+          price: i.price,
+          validFrom: i.validFrom ? new Date(i.validFrom) : null,
+          validTo: i.validTo ? new Date(i.validTo) : null,
+        })),
+      );
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof PriceTableServiceError) {
+        return reply.status(e.httpStatus).send({ error: e.message });
       }
       throw e;
     }
@@ -5345,7 +5577,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       ...orderScopeWhere(auth),
     };
     if (q.success) {
-      if (q.data.sellerId) where.sellerId = q.data.sellerId;
+      if (q.data.sellerId) applyOrderSellerFilter(where, q.data.sellerId);
       if (q.data.status) where.status = q.data.status as OrderStatus;
       if (q.data.establishmentId) where.establishmentId = q.data.establishmentId;
       if (q.data.situationId) where.situationId = q.data.situationId;
@@ -5406,7 +5638,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       where,
       orderBy: { createdAt: "desc" },
       include: {
-        seller: { include: { user: { select: { name: true, email: true } } } },
+        seller: {
+          include: { user: { select: { name: true, email: true, phone: true } } },
+        },
+        createdByUser: { select: { id: true, name: true, email: true } },
         customer: true,
         establishment: {
           select: {
@@ -5458,7 +5693,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const [sellers, customers, paymentConditions, priceTables] = await Promise.all([
       prisma.seller.findMany({
         where: { ...sellerScopeWhere(auth), active: true },
-        select: { id: true, user: { select: { name: true } } },
+        select: {
+          id: true,
+          defaultPriceTableId: true,
+          user: { select: { name: true } },
+          allowedPriceTables: { select: { priceTableId: true } },
+        },
         orderBy: { createdAt: "desc" },
       }),
       prisma.customer.findMany({
@@ -5475,6 +5715,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           city: true,
           sellerId: true,
           regionId: true,
+          defaultPriceTableId: true,
         },
         orderBy: { name: "asc" },
       }),
@@ -5488,6 +5729,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         select: {
           id: true,
           name: true,
+          status: true,
           customerId: true,
           sellerId: true,
           regionId: true,
@@ -5499,7 +5741,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       }),
     ]);
     return {
-      sellers: sellers.map((s) => ({ id: s.id, name: s.user.name })),
+      sellers: sellers.map((s) => ({
+        id: s.id,
+        name: s.user.name,
+        defaultPriceTableId: s.defaultPriceTableId,
+        allowedPriceTableIds: s.allowedPriceTables.map((a) => a.priceTableId),
+      })),
       customers,
       paymentConditions,
       priceTables,
@@ -5510,18 +5757,21 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const auth = req.auth!;
     const q = z
       .object({
-        sellerId: z.string().min(1),
+        sellerId: z.string().min(1).optional(),
         customerId: z.string().min(1).optional(),
         priceTableId: z.string().min(1).optional(),
       })
       .safeParse(req.query);
     if (!q.success) return sendZodError(reply, q.error, req);
 
-    const seller = await prisma.seller.findFirst({
-      where: { id: q.data.sellerId, ...sellerScopeWhere(auth) },
-      select: { id: true },
-    });
-    if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    const sellerId = q.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth) },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
 
     let regionId: string | null = null;
     if (q.data.customerId) {
@@ -5544,10 +5794,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       ? decToNum(org.defaultMaxSellerDiscountPercent)
       : 50;
 
-    const catalogIds = await listSellerCatalogProductIds(
-      auth.organizationId,
-      q.data.sellerId,
-    );
+    const catalogIds = sellerId
+      ? await listSellerCatalogProductIds(auth.organizationId, sellerId)
+      : (
+          await prisma.product.findMany({
+            where: { organizationId: auth.organizationId },
+            select: { id: true },
+          })
+        ).map((p) => p.id);
     const rows = catalogIds.length
       ? await prisma.product.findMany({
           where: {
@@ -5572,7 +5826,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const products = [];
     for (const p of rows) {
       const priced = await resolveEffectiveUnitPrice(auth.organizationId, p.id, {
-        sellerId: q.data.sellerId,
+        sellerId,
         customerId: q.data.customerId ?? null,
         regionId,
         priceTableId: q.data.priceTableId ?? null,
@@ -5620,7 +5874,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     const body = z
       .object({
-        sellerId: z.string().min(1),
+        sellerId: z.string().min(1).nullable().optional(),
         customerId: z.string().min(1),
         priceTableId: z.string().min(1).optional(),
         items: z
@@ -5636,11 +5890,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .safeParse(req.body);
     if (!body.success) return sendZodError(reply, body.error, req);
 
-    const seller = await prisma.seller.findFirst({
-      where: { id: body.data.sellerId, ...sellerScopeWhere(auth) },
-      select: { id: true },
-    });
-    if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    const sellerId = body.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth) },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
 
     const customer = await prisma.customer.findFirst({
       where: {
@@ -5652,13 +5909,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (!customer) return reply.status(400).send({ error: "Cliente inválido" });
 
     try {
-      const allowedProductIds = await sellerAllowedProductIds(
-        body.data.sellerId,
-        auth.organizationId,
-      );
+      const allowedProductIds = sellerId
+        ? await sellerAllowedProductIds(sellerId, auth.organizationId)
+        : await orgAllowedProductIds(auth.organizationId);
       const sale = await computeSaleOrder({
         organizationId: auth.organizationId,
-        sellerId: body.data.sellerId,
+        sellerId,
         customerId: body.data.customerId,
         priceTableId: body.data.priceTableId ?? null,
         items: body.data.items,
@@ -5688,7 +5944,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const order = await prisma.order.findFirst({
       where: { id, ...orderScopeWhere(auth) },
       include: {
-        seller: { include: { user: { select: { name: true, email: true } } } },
+        seller: {
+          include: { user: { select: { name: true, email: true, phone: true } } },
+        },
+        createdByUser: { select: { id: true, name: true, email: true } },
         customer: true,
         situation: {
           select: {
@@ -5859,7 +6118,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     const body = z
       .object({
-        sellerId: z.string().min(1),
+        /** Null/omitido = venda direta (sem comissão). */
+        sellerId: z.string().min(1).nullable().optional(),
         customerId: z.string().min(1),
         paymentConditionId: z.string().min(1),
         priceTableId: z.string().min(1).optional(),
@@ -5881,11 +6141,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return sendZodError(reply, body.error, req);
     }
 
-    const seller = await prisma.seller.findFirst({
-      where: { id: body.data.sellerId, ...sellerScopeWhere(auth) },
-      select: { id: true },
-    });
-    if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    const sellerId = body.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth) },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
 
     const customer = await prisma.customer.findFirst({
       where: {
@@ -5908,10 +6171,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
+      const allowedProductIds = sellerId
+        ? await sellerAllowedProductIds(sellerId, auth.organizationId)
+        : await orgAllowedProductIds(auth.organizationId);
       return await createSaleOrder({
         organizationId: auth.organizationId,
         actorUserId: auth.sub,
-        sellerId: body.data.sellerId,
+        sellerId,
         customerId: body.data.customerId,
         paymentConditionId: body.data.paymentConditionId,
         priceTableId: body.data.priceTableId ?? null,
@@ -5925,10 +6191,55 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         status: body.data.status,
         source: "admin",
         actorRole: auth.role,
-        allowedProductIds: await sellerAllowedProductIds(
-          body.data.sellerId,
-          auth.organizationId,
-        ),
+        allowedProductIds,
+      });
+    } catch (e) {
+      if (replySaleCreateError(reply, e)) return;
+      throw e;
+    }
+  });
+
+  app.patch("/orders/:id/seller", async (req, reply) => {
+    const auth = req.auth!;
+    if (
+      !(await canWriteEffectiveForUser(
+        auth.organizationId,
+        auth.sub,
+        auth.role,
+        "orders",
+      ))
+    ) {
+      return reply.status(403).send({ error: "Sem permissão para editar pedidos" });
+    }
+    const { id } = idParam.parse(req.params);
+    const body = z
+      .object({
+        sellerId: z.string().min(1).nullable(),
+      })
+      .safeParse(req.body);
+    if (!body.success) return sendZodError(reply, body.error, req);
+
+    const scoped = await prisma.order.findFirst({
+      where: { id, ...orderScopeWhere(auth) },
+      select: { id: true },
+    });
+    if (!scoped) return reply.status(404).send({ error: "Pedido não encontrado" });
+
+    const sellerId = body.data.sellerId?.trim() || null;
+    if (sellerId) {
+      const seller = await prisma.seller.findFirst({
+        where: { id: sellerId, ...sellerScopeWhere(auth), active: true },
+        select: { id: true },
+      });
+      if (!seller) return reply.status(400).send({ error: "Vendedor inválido" });
+    }
+
+    try {
+      return await reassignOrderSeller({
+        organizationId: auth.organizationId,
+        orderId: id,
+        actorUserId: auth.sub,
+        sellerId,
       });
     } catch (e) {
       if (replySaleCreateError(reply, e)) return;
@@ -6252,6 +6563,26 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (!existing) return reply.status(404).send({ error: "Não encontrado" });
     await prisma.sellerCommissionRule.delete({ where: { id } });
     return reply.status(204).send();
+  });
+
+  /* --- Critério de comissão a pagar (quando entra no relatório) --- */
+  app.get("/commission-settings", async (req) => {
+    const auth = req.auth!;
+    return getCommissionPayableSettings(auth.organizationId);
+  });
+
+  app.patch("/commission-settings", async (req, reply) => {
+    const auth = req.auth!;
+    const body = z
+      .object({
+        criterion: z.enum(["EMITTED", "INVOICED", "SETTLED"]),
+      })
+      .safeParse(req.body);
+    if (!body.success) return sendZodError(reply, body.error, req);
+    return setCommissionPayableCriterion(
+      auth.organizationId,
+      body.data.criterion,
+    );
   });
 
   /* --- Faixas de comissão progressiva (por faturamento MTD) --- */
@@ -6975,6 +7306,95 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       to: q.success ? q.data.to : undefined,
       sellerId: q.success ? q.data.sellerId : undefined,
     });
+  });
+
+  async function requireCommissionsPayableRead(
+    auth: AccessPayload,
+    reply: FastifyReply,
+  ): Promise<boolean> {
+    const allowed = await canReadEffectiveForUser(
+      auth.organizationId,
+      auth.sub,
+      auth.role,
+      "reports_commissions_payable",
+    );
+    if (!allowed) {
+      void reply.status(403).send({
+        error:
+          "Sem permissão para visualizar o relatório de comissões a pagar",
+      });
+      return false;
+    }
+    return true;
+  }
+
+  const payableQuery = z.object({
+    from: z.string().optional(),
+    to: z.string().optional(),
+    sellerId: z.string().optional(),
+  });
+
+  app.get("/reports/commissions-payable", async (req, reply) => {
+    const auth = req.auth!;
+    if (!(await requireCommissionsPayableRead(auth, reply))) return;
+    const q = payableQuery.safeParse(req.query);
+    return buildCommissionPayableReport({
+      organizationId: auth.organizationId,
+      from: q.success ? q.data.from : undefined,
+      to: q.success ? q.data.to : undefined,
+      sellerId: q.success ? q.data.sellerId : undefined,
+    });
+  });
+
+  app.get("/reports/commissions-payable.pdf", async (req, reply) => {
+    const auth = req.auth!;
+    if (!(await requireCommissionsPayableRead(auth, reply))) return;
+    const q = payableQuery.safeParse(req.query);
+    const org = await prisma.organization.findUnique({
+      where: { id: auth.organizationId },
+      select: { displayName: true, name: true },
+    });
+    const pdf = await buildCommissionPayablePdf({
+      organizationId: auth.organizationId,
+      orgName: org?.displayName || org?.name,
+      from: q.success ? q.data.from : undefined,
+      to: q.success ? q.data.to : undefined,
+      sellerId: q.success ? q.data.sellerId : undefined,
+    });
+    return reply
+      .header("Content-Type", "application/pdf")
+      .header(
+        "Content-Disposition",
+        'attachment; filename="comissoes-a-pagar.pdf"',
+      )
+      .send(pdf);
+  });
+
+  app.get("/reports/commissions-payable.xlsx", async (req, reply) => {
+    const auth = req.auth!;
+    if (!(await requireCommissionsPayableRead(auth, reply))) return;
+    const q = payableQuery.safeParse(req.query);
+    const org = await prisma.organization.findUnique({
+      where: { id: auth.organizationId },
+      select: { displayName: true, name: true },
+    });
+    const report = await buildCommissionPayableReport({
+      organizationId: auth.organizationId,
+      from: q.success ? q.data.from : undefined,
+      to: q.success ? q.data.to : undefined,
+      sellerId: q.success ? q.data.sellerId : undefined,
+    });
+    const xml = buildCommissionPayableExcelXml(
+      report,
+      org?.displayName || org?.name || "",
+    );
+    return reply
+      .header("Content-Type", "application/vnd.ms-excel; charset=utf-8")
+      .header(
+        "Content-Disposition",
+        'attachment; filename="comissoes-a-pagar.xls"',
+      )
+      .send(xml);
   });
 
   app.get("/reports/invoiced-orders", async (req, reply) => {
@@ -7712,6 +8132,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   await app.register(expeditionRoutes);
   await app.register(bankingAdminRoutes);
   await app.register(boletosAdminRoutes);
+  await app.register(priceTablesAdminRoutes);
   const { establishmentRoutes } = await import("./establishments.js");
   await app.register(establishmentRoutes, { prefix: "/establishments" });
+  const { aiIndicatorsRoutes } = await import("./ai-indicators.js");
+  await app.register(aiIndicatorsRoutes, { prefix: "/ai" });
 };

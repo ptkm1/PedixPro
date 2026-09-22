@@ -148,6 +148,20 @@ export async function buildOutboundInvoiceFromOrder(
     )
   ).flat();
 
+  // Tenta preencher IBGE pendente antes de validar emissão.
+  if (order.customerId && order.customer) {
+    const { ensureCustomerCityIbge } = await import(
+      "./ibge/municipio-resolver.js"
+    );
+    const ensured = await ensureCustomerCityIbge({
+      organizationId,
+      customerId: order.customerId,
+    });
+    if (ensured.ok && ensured.cityIbgeCode) {
+      order.customer.cityIbgeCode = ensured.cityIbgeCode;
+    }
+  }
+
   const issues = [
     ...validateCustomerFiscal(order.customer),
     ...order.items.flatMap((i) => validateProductFiscal(i.product)),
@@ -1012,6 +1026,24 @@ export async function listEligibleOutboundOrders(organizationId: string) {
       },
     },
   });
+
+  const { ensureCustomerCityIbge } = await import(
+    "./ibge/municipio-resolver.js"
+  );
+
+  // Tenta preencher IBGE pendente (cache por UF/CEP evita N chamadas).
+  for (const o of orders) {
+    const ibge = o.customer?.cityIbgeCode?.replace(/\D/g, "") ?? "";
+    if (o.customer && (!ibge || ibge.length !== 7)) {
+      const ensured = await ensureCustomerCityIbge({
+        organizationId,
+        customerId: o.customer.id,
+      });
+      if (ensured.ok && ensured.cityIbgeCode) {
+        o.customer.cityIbgeCode = ensured.cityIbgeCode;
+      }
+    }
+  }
 
   return orders.map((o) => {
     const orgIssues = validateOrganizationFiscalConfigForEmit(o.establishment);

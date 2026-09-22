@@ -956,7 +956,9 @@ export function FaturamentoPage() {
                           <td className="px-4 py-3">
                             {o.customer?.name ?? "—"}
                           </td>
-                          <td className="px-4 py-3">{o.seller.user.name}</td>
+                          <td className="px-4 py-3">
+                            {o.seller?.user.name ?? "VENDA DIRETA"}
+                          </td>
                           <td className="px-4 py-3">
                             R$ {Number(o.totalAmount).toFixed(2)}
                           </td>
@@ -983,6 +985,20 @@ export function FaturamentoPage() {
                                           </li>
                                         ))}
                                       </ul>
+                                      {o.readinessIssues.some(
+                                        (i) => i.code === "NO_IBGE",
+                                      ) && o.customer?.id ? (
+                                        <Button
+                                          asChild
+                                          variant="outline"
+                                          size="sm"
+                                          className="mt-2"
+                                        >
+                                          <Link to="/clientes">
+                                            Corrigir cadastro
+                                          </Link>
+                                        </Button>
+                                      ) : null}
                                     </div>
                                   )}
                                 <Button

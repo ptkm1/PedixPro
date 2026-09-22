@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 
 export type TeamSalesSummary = {
   generatedAt: string;
@@ -86,14 +87,16 @@ export async function buildTeamSalesSummary(params: {
     const amount = decToNum(o.totalAmount);
     totalAmount += amount;
 
-    const sellerRow = bySellerMap.get(o.sellerId) ?? {
-      name: o.seller.user.name,
-      orderCount: 0,
-      totalAmount: 0,
-    };
-    sellerRow.orderCount += 1;
-    sellerRow.totalAmount += amount;
-    bySellerMap.set(o.sellerId, sellerRow);
+    if (o.sellerId) {
+      const sellerRow = bySellerMap.get(o.sellerId) ?? {
+        name: sellerLabelOrDirect(o.seller?.user.name),
+        orderCount: 0,
+        totalAmount: 0,
+      };
+      sellerRow.orderCount += 1;
+      sellerRow.totalAmount += amount;
+      bySellerMap.set(o.sellerId, sellerRow);
+    }
 
     for (const it of o.items) {
       const lineTotal = decToNum(it.unitPrice) * it.quantity;

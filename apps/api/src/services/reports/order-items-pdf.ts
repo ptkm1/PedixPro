@@ -1,6 +1,7 @@
 import type { OrderStatus } from "@prisma/client";
 import { prisma } from "../../db.js";
 import { decToNum } from "../../util/money.js";
+import { sellerLabelOrDirect } from "../../util/order-seller-filter.js";
 import { orderWhere, type OrdersPdfFilters } from "./orders-pdf.js";
 import {
   drawEmptyState,
@@ -216,7 +217,7 @@ export async function buildOrderItemsPdf(
       );
       drawInfoBar(doc, [
         { label: "Cliente:", value: o.customer?.name ?? "—" },
-        { label: "Vendedor:", value: o.seller.user.name },
+        { label: "Vendedor:", value: sellerLabelOrDirect(o.seller?.user.name) },
         {
           label: "Emissão:",
           value: o.createdAt.toLocaleString("pt-BR"),

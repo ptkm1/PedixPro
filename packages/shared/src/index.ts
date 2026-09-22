@@ -36,6 +36,14 @@ export type {
   SubscriptionPayMethod,
 } from "./billing.js";
 
+export {
+  DIRECT_SALE_LABEL,
+  DIRECT_SALE_OPTION_LABEL,
+  ORDER_SELLER_FILTER_DIRECT,
+  isDirectSaleSellerId,
+  orderSellerDisplayName,
+} from "./order-seller.js";
+
 export type Role = "ADMIN" | "SELLER" | "SUPERVISOR" | "MANAGER";
 
 export type OrderStatus =
@@ -148,6 +156,7 @@ export {
   formatCepMask,
   formatStructuredAddress,
   isCepComplete,
+  parseCepFlexible,
 } from "./address.js";
 export type {
   CepAddressData,
@@ -155,6 +164,28 @@ export type {
   IbgeMunicipio,
   IbgeUf,
 } from "./address.js";
+export {
+  ibgeDigitsOnly,
+  isValidIbgeMunicipioCode,
+  normalizeMunicipioName,
+  normalizeUf,
+} from "./municipio.js";
+export type {
+  MunicipioIbgeConfidence,
+  MunicipioIbgeResolution,
+  MunicipioIbgeSource,
+  ResolveMunicipioIbgeInput,
+} from "./municipio.js";
+export { AI_INDICATOR_SECTION_IDS } from "./ai-indicators.js";
+export type {
+  AiIndicatorItem,
+  AiIndicatorSection,
+  AiIndicatorSectionId,
+  AiIndicatorSeverity,
+  AiIndicatorsLatest,
+  AiIndicatorsPayload,
+  AiIndicatorsStatus,
+} from "./ai-indicators.js";
 export {
   APP_BRAND_BACKGROUND,
   APP_BRAND_BORDER,
@@ -186,10 +217,61 @@ export {
 } from "./cnpj.js";
 export type { CnpjCompanyData } from "./cnpj.js";
 export {
+  COMMISSION_ORIGIN,
+  COMMISSION_ORIGIN_LABELS,
   SELLER_COMMISSION_TYPES,
+  commissionAmountFromPercent,
+  commissionOriginLabel,
+  pickPriceTableCommissionPercent,
+  resolveCommissionFromFacts,
+  resolveSyncedProductCommission,
+  roundCommissionMoney,
   sellerCommissionTypeLabel,
 } from "./commission.js";
-export type { SellerCommissionType } from "./commission.js";
+export type {
+  CommissionFacts,
+  CommissionOrigin,
+  CommissionSyncPayload,
+  ProductCommissionSync,
+  ResolvedCommission,
+  SellerCommissionType,
+} from "./commission.js";
+export {
+  applySellerDiscountWithMinPrice,
+  applyTableAdjustment,
+  discountExceedsMinMessage,
+  filterUsableTables,
+  formatBrl,
+  formatPriceOriginLabel,
+  isPriceTableUsable,
+  isWithinDateWindow,
+  pickDefaultPriceTableId,
+  pickQtyTier,
+  PRICE_BELOW_MIN_MESSAGE,
+  PRICE_ORIGIN_KIND,
+  priceTableSpecificity,
+  resolveCatalogPrice,
+  resolveCatalogPriceFromSync,
+  roundMoney,
+  tableMatchesScope,
+  tableToRuleInput,
+} from "./price-resolve.js";
+export type {
+  CustomerSpecialInput,
+  CustomerSpecialPriceSnapshot,
+  MinPriceCheckResult,
+  PriceAdjustmentKind,
+  PriceAdjustmentMode,
+  PriceOriginKind,
+  PriceTableSnapshot,
+  PriceTableStatus,
+  PricingSyncPayload,
+  QtyTierInput,
+  ResolveCatalogPriceInput,
+  ResolvedCatalogPrice,
+  TableItemInput,
+  TableRuleInput,
+} from "./price-resolve.js";
 export {
   cpfDigitsOnly,
   formatCpfMask,
@@ -207,8 +289,15 @@ export {
   PRODUCT_CSV_REQUIRED,
   PRODUCT_CSV_SAMPLE_ROW,
   productCsvTemplate,
+  PRICE_TABLE_CSV_HEADERS,
+  PRICE_TABLE_CSV_SAMPLE_ROW,
+  priceTableCsvTemplate,
 } from "./csv-import.js";
-export type { CustomerCsvHeader, ProductCsvHeader } from "./csv-import.js";
+export type {
+  CustomerCsvHeader,
+  PriceTableCsvHeader,
+  ProductCsvHeader,
+} from "./csv-import.js";
 export {
   csvColumnMapIsEmpty,
   csvFieldLabel,
@@ -406,6 +495,24 @@ export type {
   PlanLimits,
 } from "./plans.js";
 export {
+  CATALOG_PRICE_DISPLAY_MODE_LABELS,
+  CATALOG_PRICE_DISPLAY_MODES,
+  CATALOG_PRICE_INLINE_MAX,
+  DEFAULT_CATALOG_PRICE_DISPLAY_MODE,
+  filterValidCatalogPrices,
+  isCatalogPriceDisplayMode,
+  isValidCatalogPrice,
+  parseCatalogPriceDisplayMode,
+  pickCatalogDisplayPrice,
+  resolveCatalogPriceDisplay,
+  shouldCollapseCatalogPrices,
+} from "./catalog-price-display.js";
+export type {
+  CatalogPriceDisplayKind,
+  CatalogPriceDisplayMode,
+  CatalogProductPrice,
+} from "./catalog-price-display.js";
+export {
   formatInsufficientStockMessage,
   formatOutOfStockMessage,
   formatProductPriceWithUnit,
@@ -441,10 +548,25 @@ export type {
   ProductRecord,
 } from "./product-form.js";
 export {
+  isProductImageMimeType,
+  PRODUCT_IMAGE_JPEG_QUALITY,
+  PRODUCT_IMAGE_MAX_BYTES,
+  PRODUCT_IMAGE_MAX_EDGE_PX,
+  PRODUCT_IMAGE_MIME_TYPES,
+  PRODUCT_IMAGE_SOURCE_MAX_BYTES,
+  PRODUCT_IMAGE_WEBP_QUALITY,
+  productImageExtension,
+} from "./product-image.js";
+export type {
+  ProductImageMimeType,
+  ProductImageUploadUrlRequest,
+  ProductImageUploadUrlResponse,
+} from "./product-image.js";
+export {
   formatRomaneioNumber,
   groupOrdersByPaymentCondition,
   paymentConditionLabel,
-  roundMoney,
+  roundMoney as roundRomaneioMoney,
   sumOrderTotals,
   uniqueIdsPreserveOrder,
 } from "./route-romaneio.js";

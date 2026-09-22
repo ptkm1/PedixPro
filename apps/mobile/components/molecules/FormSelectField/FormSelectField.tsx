@@ -1,15 +1,16 @@
 import { ThemedText } from "@/components/atoms/ThemedText";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useTheme } from "@/lib/theme";
 import { radiiPx } from "@pedidos/design-tokens";
 import { useMemo, useState } from "react";
 import {
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Pressable,
+    StyleSheet,
+    TextInput,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -39,13 +40,14 @@ export function FormSelectField({
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q, 300);
 
   const selected = options.find((o) => o.value === value);
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
+    const s = debouncedQ.trim().toLowerCase();
     if (!s) return options;
     return options.filter((o) => o.label.toLowerCase().includes(s));
-  }, [options, q]);
+  }, [options, debouncedQ]);
 
   return (
     <View style={{ gap: 6 }}>

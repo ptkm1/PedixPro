@@ -3,7 +3,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { useConfirm } from "../../context/ConfirmContext";
 import { apiFetch, sharePdf } from "../../lib/api";
+import { getCachedSales } from "../../lib/offline-read-cache";
 import { isRepeatableSale } from "../../lib/repeat-sale";
+import type { SellerOrderListItem } from "./useSalesListScreen";
 
 export type SellerOrderDetail = {
   id: string;
@@ -17,6 +19,7 @@ export type SellerOrderDetail = {
   customerId?: string | null;
   paymentConditionId?: string | null;
   customer: { name: string } | null;
+  seller?: { user: { name: string; phone?: string | null } } | null;
   items: {
     id: string;
     productId: string;
@@ -35,7 +38,33 @@ export function useSaleDetailScreen() {
 
   const query = useQuery({
     queryKey: ["seller", "sale", id],
-    queryFn: () => apiFetch<SellerOrderDetail>(`/seller/sales/${id}`),
+    queryFn: async () => {
+      try {
+        return await apiFetch<SellerOrderDetail>(`/seller/sales/${id}`);
+      } catch (err) {
+        const cached = await getCachedSales<SellerOrderListItem>();
+        const row = cached.find((r) => r.id === id);
+        if (!row) throw err;
+        return {
+          id: row.id,
+          status: row.status,
+          totalAmount: row.totalAmount,
+          notes: null,
+          createdAt: row.createdAt,
+          customerId: row.customerId,
+          paymentConditionId: row.paymentConditionId,
+          customer: row.customer ? { name: row.customer.name } : null,
+          seller: row.seller,
+          items: row.items.map((it, i) => ({
+            id: `${row.id}-${it.productId ?? i}`,
+            productId: it.productId ?? "",
+            productName: it.productName,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+          })),
+        } satisfies SellerOrderDetail;
+      }
+    },
     enabled: !!id,
   });
 

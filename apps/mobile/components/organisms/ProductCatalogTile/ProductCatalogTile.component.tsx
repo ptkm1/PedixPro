@@ -1,14 +1,14 @@
+import { ProductPriceDisplay } from "@/components/molecules/ProductPriceDisplay";
+import { useOrderSyncMode } from "@/hooks/useOrderSyncMode";
 import { useTheme } from "@/lib/theme";
 import {
-  formatProductPriceWithUnit,
   formatProductStockLabel,
   formatProductUnitLabel,
   isProductSaleBlockedByStock,
+  parseCatalogPriceDisplayMode,
 } from "@pedidos/shared";
 import { Heart, Package } from "lucide-react-native";
-import type { ReactNode } from "react";
 import { Image, Pressable, Text, View } from "react-native";
-import { fmtMoney } from "../../atoms/formatMoney";
 import type { CatalogTileProduct } from "./catalog-tile.types";
 import { useProductCatalogTileStyles } from "./ProductCatalogTile.styles";
 
@@ -57,36 +57,27 @@ export function ProductCatalogTile(props: {
     highlighted: isHighlighted,
   });
   const { colors } = useTheme();
+  const { settings } = useOrderSyncMode();
+  const priceMode = parseCatalogPriceDisplayMode(
+    settings?.catalogPriceDisplayMode,
+  );
   const uri = product.imageUrl?.trim();
   const unitLabel = formatProductUnitLabel(product.attributes);
   const stockLabel = formatProductStockLabel(stockQty);
 
-  let priceNode: ReactNode;
-  if (typeof product.effectiveUnitPrice === "number") {
-    const priceText =
-      unitLabel != null
-        ? formatProductPriceWithUnit(
-            product.effectiveUnitPrice,
-            product.attributes,
-          )
-        : `R$ ${fmtMoney(product.effectiveUnitPrice)}`;
-    const showCatalogStrike =
-      isPromo &&
-      typeof product.catalogUnitPrice === "number" &&
-      product.catalogUnitPrice > product.effectiveUnitPrice;
-    priceNode = (
-      <View>
-        {showCatalogStrike ? (
-          <Text style={styles.catalogStrike}>
-            R$ {fmtMoney(product.catalogUnitPrice!)}
-          </Text>
-        ) : null}
-        <Text style={styles.price}>{priceText}</Text>
-      </View>
-    );
-  } else {
-    priceNode = <Text style={styles.noPrice}>Sem preço</Text>;
-  }
+  const priceNode = (
+    <ProductPriceDisplay
+      productName={product.name}
+      mode={priceMode}
+      prices={product.prices}
+      fallbackPrice={product.effectiveUnitPrice}
+      catalogUnitPrice={product.catalogUnitPrice}
+      hasActivePromotion={isPromo}
+      attributes={variant === "list" ? undefined : product.attributes}
+      align={variant === "list" ? "end" : "start"}
+      compact={variant !== "list"}
+    />
+  );
 
   const highlightLabel = isPromo ? "Promo" : isFeatured ? "Destaque" : null;
 

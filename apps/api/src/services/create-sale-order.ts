@@ -20,6 +20,10 @@ import {
   type SaleLineInput,
 } from "./order-pricing.js";
 import {
+  assertPriceTableForNewOrder,
+  PriceTableServiceError,
+} from "./price-tables.js";
+import {
   applyStockOnStatusChange,
   assertSufficientStock,
   StockError,
@@ -27,11 +31,13 @@ import {
 } from "./product-stock.js";
 import { listSellerCatalogProductIds } from "./seller-product-catalog.js";
 import { resolveEstablishmentForOrder, EstablishmentError } from "./establishments.js";
+import { assertPriceTableApplicableForSale } from "./price-resolve.js";
 
 const createdOrderInclude = {
   items: true,
   customer: true,
   paymentCondition: true,
+  createdByUser: { select: { id: true, name: true, email: true } },
   establishment: {
     select: {
       id: true,
@@ -54,7 +60,7 @@ const createdOrderInclude = {
   },
   seller: {
     include: {
-      user: { select: { name: true, email: true } },
+      user: { select: { name: true, email: true, phone: true } },
     },
   },
 } as const;
@@ -78,10 +84,22 @@ export async function sellerAllowedProductIds(
   return new Set(ids);
 }
 
+/** Catálogo completo da org (venda direta / staff sem vendedor). */
+export async function orgAllowedProductIds(
+  organizationId: string,
+): Promise<Set<string>> {
+  const rows = await prisma.product.findMany({
+    where: { organizationId },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
 export type CreateSaleOrderParams = {
   organizationId: string;
   actorUserId: string;
-  sellerId: string;
+  /** Null = venda direta (sem comissão). */
+  sellerId: string | null;
   customerId: string;
   paymentConditionId: string;
   priceTableId?: string | null;
@@ -115,13 +133,17 @@ export function replySaleCreateError(reply: FastifyReply, err: unknown): boolean
     void reply.status(400).send(stockErrorPayload(err));
     return true;
   }
+  if (err instanceof PriceTableServiceError) {
+    void reply.status(err.httpStatus).send({ error: err.message });
+    return true;
+  }
   return false;
 }
 
 export async function findIdempotentSale(params: {
   clientMutationId: string;
   organizationId: string;
-  sellerId: string;
+  sellerId: string | null;
 }) {
   const dup = await prisma.order.findUnique({
     where: { clientMutationId: params.clientMutationId },
@@ -137,6 +159,30 @@ export async function findIdempotentSale(params: {
   return dup;
 }
 
+function notifySellerPayload(order: {
+  id: string;
+  totalAmount: unknown;
+  sellerId: string | null;
+  seller: {
+    user: { name: string };
+    managerUserId?: string | null;
+  } | null;
+  customer: { name: string } | null;
+}) {
+  return {
+    id: order.id,
+    totalAmount: order.totalAmount,
+    sellerId: order.sellerId ?? undefined,
+    seller: order.seller
+      ? {
+          user: order.seller.user,
+          managerUserId: order.seller.managerUserId,
+        }
+      : { user: { name: "VENDA DIRETA" }, managerUserId: null },
+    customer: order.customer,
+  };
+}
+
 export async function createSaleOrder(params: CreateSaleOrderParams) {
   const clientMutationId = params.clientMutationId?.trim();
   if (clientMutationId) {
@@ -148,15 +194,17 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
     if (dup) return dup;
   }
 
-  const seller = await prisma.seller.findFirst({
-    where: { id: params.sellerId, organizationId: params.organizationId },
-    select: { id: true },
-  });
-  if (!seller) throw new SaleCreateError("Vendedor inválido", 400);
+  if (params.sellerId) {
+    const seller = await prisma.seller.findFirst({
+      where: { id: params.sellerId, organizationId: params.organizationId },
+      select: { id: true },
+    });
+    if (!seller) throw new SaleCreateError("Vendedor inválido", 400);
+  }
 
   const customer = await prisma.customer.findFirst({
     where: { id: params.customerId, organizationId: params.organizationId },
-    select: { id: true },
+    select: { id: true, regionId: true },
   });
   if (!customer) throw new SaleCreateError("Cliente inválido", 400);
 
@@ -173,14 +221,34 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
   }
 
   if (params.priceTableId) {
-    const table = await prisma.priceTable.findFirst({
-      where: {
-        id: params.priceTableId,
+    try {
+      await assertPriceTableApplicableForSale({
         organizationId: params.organizationId,
-      },
-      select: { id: true },
-    });
-    if (!table) throw new SaleCreateError("Tabela de preço inválida", 400);
+        priceTableId: params.priceTableId,
+        ctx: {
+          sellerId: params.sellerId,
+          customerId: params.customerId,
+          regionId: customer.regionId,
+        },
+      });
+      if (params.sellerId) {
+        await assertPriceTableForNewOrder({
+          organizationId: params.organizationId,
+          priceTableId: params.priceTableId,
+          sellerId: params.sellerId,
+          customerId: params.customerId,
+          regionId: customer.regionId,
+        });
+      }
+    } catch (e) {
+      if (e instanceof PriceTableServiceError) {
+        throw new SaleCreateError(e.message, e.httpStatus);
+      }
+      throw new SaleCreateError(
+        e instanceof Error ? e.message : "Tabela de preço inválida",
+        400,
+      );
+    }
   }
 
   const sale = await computeSaleOrder({
@@ -262,8 +330,10 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
         organizationId: params.organizationId,
         establishmentId: establishment.id,
         sellerId: params.sellerId,
+        createdByUserId: params.actorUserId,
         customerId: params.customerId,
         paymentConditionId: params.paymentConditionId,
+        priceTableId: params.priceTableId ?? null,
         operation: params.operation ?? "SALE",
         status: orderStatus,
         situationId,
@@ -283,6 +353,11 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
             productName: l.productName,
             commissionPercent: l.commissionPercent,
             commissionAmount: l.commissionAmount,
+            commissionOrigin: l.commissionOrigin,
+            priceTableId: l.priceTableId,
+            priceTableName: l.priceTableName,
+            priceOrigin: l.priceOrigin,
+            priceOriginLabel: l.priceOriginLabel,
           })),
         },
       },
@@ -293,16 +368,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
   if (order.status === "PENDING_CREDIT_APPROVAL") {
     await notifyAdminsCreditPending({
       organizationId: params.organizationId,
-      order: {
-        id: order.id,
-        totalAmount: order.totalAmount,
-        sellerId: order.sellerId,
-        seller: {
-          user: order.seller.user,
-          managerUserId: order.seller.managerUserId,
-        },
-        customer: order.customer,
-      },
+      order: notifySellerPayload(order),
     });
   }
 
@@ -311,16 +377,7 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
     void reactivateCustomerOnSale(order.customerId);
     void notifySaleConfirmed({
       organizationId: params.organizationId,
-      order: {
-        id: order.id,
-        totalAmount: order.totalAmount,
-        sellerId: order.sellerId,
-        seller: {
-          user: order.seller.user,
-          managerUserId: order.seller.managerUserId,
-        },
-        customer: order.customer,
-      },
+      order: notifySellerPayload(order),
     });
   }
 
@@ -333,10 +390,12 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
       metadata: {
         status: order.status,
         sellerId: order.sellerId,
+        createdByUserId: order.createdByUserId,
         customerId: order.customerId,
         itemCount: order.items.length,
         totalAmount: Number(order.totalAmount),
         source: params.source,
+        directSale: order.sellerId == null,
       },
     },
   );

@@ -6,13 +6,17 @@ import { getMapUnavailableReason, isGoogleMapsConfigured } from "../../lib/maps/
 import { MapErrorBoundary } from "./MapErrorBoundary";
 import { RoutePlanMapUnavailable } from "./RoutePlanMapUnavailable";
 import type { RoutePlanMapCoord, RoutePlanMapProps, RoutePlanMapRef } from "./RoutePlanMap.types";
-import { useRoutePlanMapNativeStyles } from "./RoutePlanMap.native.styles";
+import {
+    PIN_WITHOUT_SELLER,
+    PIN_WITH_SELLER,
+    useRoutePlanMapNativeStyles,
+} from "./RoutePlanMap.native.styles";
 
 export const RoutePlanMap = forwardRef<RoutePlanMapRef, RoutePlanMapProps>(function RoutePlanMap(
   { style, region, followUser, customers, polyCoords, activeVisitCustomerId, onMarkerPress },
   ref,
 ) {
-  const { styles, routeStrokeColor, markerColor, activeMarkerColor } = useRoutePlanMapNativeStyles();
+  const { styles, routeStrokeColor } = useRoutePlanMapNativeStyles();
   const inner = useRef<MapView>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -47,6 +51,7 @@ export const RoutePlanMap = forwardRef<RoutePlanMapRef, RoutePlanMapProps>(funct
       >
         {customers.map((c) => {
           const isActive = c.id === activeVisitCustomerId;
+          const pinFill = c.hasSeller ? PIN_WITH_SELLER : PIN_WITHOUT_SELLER;
           return (
             <Marker
               key={c.id}
@@ -55,13 +60,17 @@ export const RoutePlanMap = forwardRef<RoutePlanMapRef, RoutePlanMapProps>(funct
               description={isActive ? "Visita em curso" : `≈ ${c.distanceKm} km`}
               onPress={() => onMarkerPress(c)}
               zIndex={isActive ? 10 : 1}
+              tracksViewChanges={false}
             >
               <View style={isActive ? styles.pinOuterActive : styles.pinOuter}>
-                <MapPin
-                  color={isActive ? activeMarkerColor : markerColor}
-                  size={isActive ? 32 : 28}
-                  strokeWidth={2.2}
-                />
+                <View style={styles.pinShadow}>
+                  <MapPin
+                    color="#ffffff"
+                    fill={pinFill}
+                    size={isActive ? 34 : 30}
+                    strokeWidth={1.5}
+                  />
+                </View>
               </View>
             </Marker>
           );

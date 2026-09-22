@@ -1,22 +1,23 @@
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import {
-  CreatePriceTableButton,
-  CreatePriceTableHint,
-  useCanCreatePriceTable,
+    CreatePriceTableButton,
+    CreatePriceTableHint,
+    useCanCreatePriceTable,
 } from "@/components/CreatePriceTableSheet";
 import {
-  CreatePurchaseUnitButton,
-  CreatePurchaseUnitHint,
+    CreatePurchaseUnitButton,
+    CreatePurchaseUnitHint,
 } from "@/components/CreatePurchaseUnitSheet";
 import { FiscalCodeCombobox } from "@/components/FiscalCodeCombobox";
 import {
-  FormActions,
-  FormErrorBanner,
-  FormField,
-  FormGrid,
-  FormSection,
+    FormActions,
+    FormErrorBanner,
+    FormField,
+    FormGrid,
+    FormSection,
 } from "@/components/forms";
 import { AppSelect } from "@/components/ui/app-select";
+import { useConfirm } from "@/components/confirm";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -24,19 +25,20 @@ import { useProductFormPage } from "@/hooks/useProductFormPage";
 import { useScrollToFirstError } from "@/hooks/useScrollToFirstError";
 import { cn } from "@/lib/utils";
 import {
-  formatCfopDisplay,
-  formatNcmDisplay,
-  formatPurchaseUnitLabel,
-  PRODUCT_CLASSIFICATIONS,
-  PURCHASE_UNITS,
-  productClassificationLabel,
-  type FiscalTaxRegime,
-  type ProductClassification,
-  type ProductFormTab,
+    formatCfopDisplay,
+    formatNcmDisplay,
+    formatPurchaseUnitLabel,
+    PRODUCT_CLASSIFICATIONS,
+    PURCHASE_UNITS,
+    productClassificationLabel,
+    type FiscalTaxRegime,
+    type ProductClassification,
+    type ProductFormTab,
 } from "@pedidos/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { DynamicCategoryAttributes } from "../components/DynamicCategoryAttributes";
+import { ProductCommissionExceptions } from "../components/ProductCommissionExceptions";
 import { ProductPromotionsPanel } from "../components/ProductPromotionsPanel";
 import { apiFetch } from "../lib/api";
 
@@ -112,8 +114,9 @@ export function ProductFormPage() {
     selectedSupplier,
     markupPercent,
     handleSubmit,
+    duplicateProduct,
     onCategoryChange,
-    pending,
+    pending;
     priceTablePrices,
     setPriceForTable,
     addPriceTableId,
@@ -122,7 +125,24 @@ export function ProductFormPage() {
     applyCreatedPriceTable,
     purchaseUnits,
     applyCreatedPurchaseUnit,
+    displayImageUrl,
+    imageBusy,
+    imageError,
+    onImageFileChange,
+    removeProductImage,
+    sellerOptions,
+    sellerCommissionEnabled,
+    setSellerCommissionEnabled,
+    sellerCommissionPercents,
+    setSellerCommissionPercent,
+    priceTableCommissionRows,
+    addCommissionTableId,
+    setAddCommissionTableId,
+    addCommissionTable,
+    removeCommissionTable,
+    setCommissionTablePercent,
   } = useProductFormPage();
+  const { confirm } = useConfirm();
 
   useScrollToFirstError(
     Object.keys(fieldErrors).length > 0 ? fieldErrors : formError,
@@ -195,15 +215,36 @@ export function ProductFormPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
-      <div>
-        <Link to="/produtos" className="text-sm text-primary hover:underline">
-          ← Voltar para produtos
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-foreground">
-          {isEdit ? "Editar produto" : "Novo produto"}
-        </h1>
-        {isEdit && product ? (
-          <p className="mt-1 text-sm text-muted-foreground">{product.name}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Link to="/produtos" className="text-sm text-primary hover:underline">
+            ← Voltar para produtos
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold text-foreground">
+            {isEdit ? "Editar produto" : "Novo produto"}
+          </h1>
+          {isEdit && product ? (
+            <p className="mt-1 text-sm text-muted-foreground">{product.name}</p>
+          ) : null}
+        </div>
+        {isEdit ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              void confirm({
+                title: "Duplicar produto?",
+                description:
+                  "Cria uma cópia com os dados já salvos, incluindo tributários, tabelas de preço e comissões. SKU, código de barras e estoque ficam vazios para você ajustar.",
+                confirmLabel: "Duplicar produto",
+              }).then((ok) => {
+                if (ok) duplicateProduct.mutate();
+              });
+            }}
+          >
+            {duplicateProduct.isPending ? "Duplicando…" : "Duplicar produto"}
+          </Button>
         ) : null}
       </div>
 
@@ -363,18 +404,71 @@ export function ProductFormPage() {
               </FormField>
 
               <FormField
-                label="URL da foto (catálogo no app)"
-                htmlFor="prod-image-url"
+                label="Foto do produto"
+                htmlFor="prod-image-file"
                 className="sm:col-span-2"
-                error={fieldError("imageUrl")}
+                hint="JPEG, PNG ou WebP · até 12 MB · otimizada automaticamente (WebP ~1200px). Usada no catálogo do app."
+                error={fieldError("imageUrl") ?? imageError ?? undefined}
               >
-                <Input
-                  id="prod-image-url"
-                  type="url"
-                  placeholder="https://… (opcional)"
-                  value={values.imageUrl}
-                  onChange={(e) => setField("imageUrl", e.target.value)}
-                />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40">
+                    {displayImageUrl ? (
+                      <img
+                        src={displayImageUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="px-2 text-center text-xs text-muted-foreground">
+                        Sem foto
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <Input
+                      id="prod-image-file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={pending || imageBusy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        void onImageFileChange(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {displayImageUrl ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending || imageBusy}
+                          onClick={() => void removeProductImage()}
+                        >
+                          Remover foto
+                        </Button>
+                      ) : null}
+                      {imageBusy ? (
+                        <span className="text-xs text-muted-foreground">
+                          Enviando…
+                        </span>
+                      ) : null}
+                    </div>
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer select-none">
+                        URL manual (avançado)
+                      </summary>
+                      <Input
+                        className="mt-2"
+                        id="prod-image-url"
+                        type="url"
+                        placeholder="https://… (opcional)"
+                        value={values.imageUrl}
+                        onChange={(e) => setField("imageUrl", e.target.value)}
+                      />
+                    </details>
+                  </div>
+                </div>
               </FormField>
             </FormGrid>
           </FormSection>
@@ -570,6 +664,7 @@ export function ProductFormPage() {
         ) : null}
 
         {activeTab === "comissoes" ? (
+          <>
           <FormSection
             title="Comissões"
             description="Percentuais quando o vendedor usa comissão por produto."
@@ -612,6 +707,21 @@ export function ProductFormPage() {
               </FormField>
             </FormGrid>
           </FormSection>
+          <ProductCommissionExceptions
+            sellers={sellerOptions}
+            sellerEnabled={sellerCommissionEnabled}
+            onSellerEnabledChange={setSellerCommissionEnabled}
+            sellerPercents={sellerCommissionPercents}
+            onSellerPercentChange={setSellerCommissionPercent}
+            priceTables={priceTables}
+            tableRows={priceTableCommissionRows}
+            addTableId={addCommissionTableId}
+            onAddTableIdChange={setAddCommissionTableId}
+            onAddTable={addCommissionTable}
+            onRemoveTable={removeCommissionTable}
+            onTablePercentChange={setCommissionTablePercent}
+          />
+          </>
         ) : null}
 
         {activeTab === "estoque" ? (
@@ -1181,11 +1291,32 @@ export function ProductFormPage() {
         <FormActions className="mt-6">
           <Button type="submit" disabled={pending}>
             {pending
-              ? "Salvando…"
+              ? duplicateProduct.isPending
+                ? "Duplicando…"
+                : "Salvando…"
               : isEdit
                 ? "Salvar alterações"
                 : "Criar produto"}
           </Button>
+          {isEdit ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                void confirm({
+                  title: "Duplicar produto?",
+                  description:
+                    "Cria uma cópia com os dados já salvos, incluindo tributários, tabelas de preço e comissões. SKU, código de barras e estoque ficam vazios para você ajustar.",
+                  confirmLabel: "Duplicar produto",
+                }).then((ok) => {
+                  if (ok) duplicateProduct.mutate();
+                });
+              }}
+            >
+              Duplicar produto
+            </Button>
+          ) : null}
           <Button variant="outline" asChild>
             <Link to="/produtos">Cancelar</Link>
           </Button>

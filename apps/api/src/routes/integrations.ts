@@ -12,6 +12,7 @@ import {
   fetchIbgeMunicipios,
   fetchIbgeUfs,
 } from "../services/ibge/brasilapi.js";
+import { enrichCepWithIbge } from "../services/ibge/municipio-resolver.js";
 import { sendZodError } from "../util/zod-reply.js";
 
 const digitsParam = z.object({
@@ -81,7 +82,8 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
       return sendZodError(reply, parsed.error, req, "CEP inválido");
     }
     try {
-      return await fetchCep(parsed.data.digits);
+      const data = await fetchCep(parsed.data.digits);
+      return await enrichCepWithIbge(data);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Falha ao consultar CEP.";

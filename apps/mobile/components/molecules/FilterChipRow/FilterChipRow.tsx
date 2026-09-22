@@ -1,7 +1,11 @@
-import { Pressable, ScrollView, StyleSheet } from "react-native";
-import { ThemedText } from "@/components/atoms/ThemedText";
-import { useTheme } from "@/lib/theme";
-import { radiiPx } from "@pedidos/design-tokens";
+import { GlassChip } from "@/components/atoms/GlassChip";
+import {
+  ScrollView,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 export type ChipOption<T extends string = string> = {
   id: T;
@@ -10,55 +14,46 @@ export type ChipOption<T extends string = string> = {
 
 type Props<T extends string> = {
   options: ChipOption<T>[];
-  value: T;
+  /** `null` = nenhum chip selecionado (ex.: período personalizado ativo). */
+  value: T | null;
   onChange: (id: T) => void;
+  /** Se true, usa ScrollView horizontal; senão wrap. */
+  scroll?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
-export function FilterChipRow<T extends string>({ options, value, onChange }: Props<T>) {
-  const { colors } = useTheme();
+export function FilterChipRow<T extends string>({
+  options,
+  value,
+  onChange,
+  scroll = true,
+  style,
+}: Props<T>) {
+  const chips = options.map((opt) => (
+    <GlassChip
+      key={opt.id}
+      label={opt.label}
+      active={opt.id === value}
+      onPress={() => onChange(opt.id)}
+    />
+  ));
+
+  if (!scroll) {
+    return <View style={[styles.wrap, style]}>{chips}</View>;
+  }
 
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.row}
+      contentContainerStyle={[styles.row, style]}
     >
-      {options.map((opt) => {
-        const active = opt.id === value;
-        return (
-          <Pressable
-            key={opt.id}
-            onPress={() => onChange(opt.id)}
-            style={[
-              styles.chip,
-              {
-                backgroundColor: active ? colors.chipActive : colors.chip,
-                borderColor: active ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <ThemedText
-              variant="bodySm"
-              style={{
-                fontWeight: "600",
-                color: active ? colors.chipTextActive : colors.chipText,
-              }}
-            >
-              {opt.label}
-            </ThemedText>
-          </Pressable>
-        );
-      })}
+      {chips}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 8, paddingVertical: 4 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 9999,
-    borderWidth: 1,
-  },
+  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
 });

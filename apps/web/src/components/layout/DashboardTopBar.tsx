@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/auth/AuthContext";
 import {
-  formatCnpjShort,
-  useActiveEstablishment,
+    formatCnpjShort,
+    useActiveEstablishment,
 } from "@/auth/EstablishmentContext";
 import { apiFetch } from "@/lib/api";
 import { isWebAdmin, isWebManager } from "@/lib/staff";
@@ -46,7 +46,7 @@ export function DashboardTopBar() {
   const orgLabel = user?.organizationName?.trim() || "Empresa";
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-card/80 px-4 backdrop-blur-md md:h-16 md:px-6">
+    <header className="glass-chrome sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-card px-4 md:h-16 md:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetTrigger asChild>

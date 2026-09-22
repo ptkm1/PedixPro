@@ -284,7 +284,7 @@ export function auditEntityHref(
     case "SalesTeam":
       return `/equipes`;
     case "PriceTable":
-      return `/tabelas-preco`;
+      return entityId ? `/tabelas-preco/${entityId}` : `/tabelas-preco`;
     case "FiscalInvoice":
       return `/faturamento`;
     case "FiscalConfig":

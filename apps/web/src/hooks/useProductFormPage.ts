@@ -1,14 +1,18 @@
 import type { CreatedPurchaseUnit } from "@/components/CreatePurchaseUnitSheet";
 import { apiFetch } from "@/lib/api";
 import {
-  computeMarkupPercent,
-  emptyProductForm,
-  formToProductPayload,
-  productToForm,
-  validateProductForm,
-  type ProductFormTab,
-  type ProductFormValues,
-  type ProductRecord,
+    uploadProductImageFile,
+    validateProductImageFile,
+} from "@/lib/product-image-upload";
+import {
+    computeMarkupPercent,
+    emptyProductForm,
+    formToProductPayload,
+    productToForm,
+    validateProductForm,
+    type ProductFormTab,
+    type ProductFormValues,
+    type ProductRecord,
 } from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FormEvent } from "react";
@@ -53,6 +57,18 @@ function normalizeAttrsJson(raw: unknown): Record<string, unknown> {
   return { ...(raw as Record<string, unknown>) };
 }
 
+type ProductSaveExtras = {
+  priceTablePrices?: Array<{ priceTableId: string; price: number }>;
+  sellerCommissions?: Array<{
+    sellerId: string;
+    commissionPercent: number | null;
+  }>;
+  priceTableCommissions?: Array<{
+    priceTableId: string;
+    commissionPercent: number;
+  }>;
+};
+
 export function useProductFormPage() {
   const { productId } = useParams<{ productId?: string }>();
   const navigate = useNavigate();
@@ -70,6 +86,19 @@ export function useProductFormPage() {
     Record<string, string>
   >({});
   const [addPriceTableId, setAddPriceTableId] = useState("");
+  /** Arquivo escolhido no cadastro (upload depois do create). */
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [sellerCommissionEnabled, setSellerCommissionEnabled] = useState(false);
+  const [sellerCommissionPercents, setSellerCommissionPercents] = useState<
+    Record<string, string>
+  >({});
+  const [priceTableCommissionRows, setPriceTableCommissionRows] = useState<
+    Array<{ priceTableId: string; percent: string }>
+  >([]);
+  const [addCommissionTableId, setAddCommissionTableId] = useState("");
 
   const setField = useCallback(
     <K extends keyof ProductFormValues>(
@@ -103,6 +132,21 @@ export function useProductFormPage() {
       apiFetch<Array<{ id: string; name: string }>>("/admin/price-tables"),
   });
 
+  const { data: sellers = [] } = useQuery({
+    queryKey: ["admin", "sellers"],
+    queryFn: () =>
+      apiFetch<
+        Array<{ id: string; user?: { name?: string | null } | null }>
+      >("/admin/sellers"),
+  });
+  const sellerOptions = useMemo(
+    () =>
+      sellers
+        .map((s) => ({ id: s.id, name: s.user?.name?.trim() || "Vendedor" }))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt")),
+    [sellers],
+  );
+
   const { data: purchaseUnits = [] } = useQuery({
     queryKey: ["admin", "purchase-units"],
     queryFn: () =>
@@ -135,7 +179,13 @@ export function useProductFormPage() {
   useEffect(() => {
     if (product) {
       setValues(productToForm(product));
-      setAttrs(normalizeAttrsJson(product.attributes));
+      const cat = categories.find((c) => c.id === product.categoryId);
+      const defs = coerceDefs(cat?.attributeSchema);
+      const loaded = normalizeAttrsJson(product.attributes);
+      setAttrs(defs.length > 0 ? pruneAttrs(loaded, defs) : loaded);
+      setPendingImageFile(null);
+      setImagePreviewUrl(null);
+      setImageError(null);
       const items =
         (
           product as ProductRecord & {
@@ -150,8 +200,48 @@ export function useProductFormPage() {
         map[item.priceTableId] = String(Number(item.price));
       }
       setPriceTablePrices(map);
+
+      const sellerRows =
+        (
+          product as ProductRecord & {
+            sellerCommissions?: Array<{
+              sellerId: string;
+              commissionPercent: unknown;
+            }>;
+          }
+        ).sellerCommissions ?? [];
+      const sellerMap: Record<string, string> = {};
+      for (const row of sellerRows) {
+        sellerMap[row.sellerId] = String(Number(row.commissionPercent));
+      }
+      setSellerCommissionPercents(sellerMap);
+      setSellerCommissionEnabled(sellerRows.length > 0);
+
+      const tableRows =
+        (
+          product as ProductRecord & {
+            priceTableCommissions?: Array<{
+              priceTableId: string;
+              commissionPercent: unknown;
+            }>;
+          }
+        ).priceTableCommissions ?? [];
+      setPriceTableCommissionRows(
+        tableRows.map((row) => ({
+          priceTableId: row.priceTableId,
+          percent: String(Number(row.commissionPercent)),
+        })),
+      );
     }
-  }, [product]);
+  }, [product, categories]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
 
   const markupPercent = useMemo(() => {
     const cost = values.costPrice.trim() ? Number(values.costPrice) : null;
@@ -167,16 +257,28 @@ export function useProductFormPage() {
   }, [values.costPrice, priceTablePrices]);
 
   const create = useMutation({
-    mutationFn: (
-      body: ReturnType<typeof formToProductPayload> & {
-        priceTablePrices?: Array<{ priceTableId: string; price: number }>;
-      },
-    ) =>
-      apiFetch<ProductRecord>("/admin/products", {
+    mutationFn: async (
+      body: ReturnType<typeof formToProductPayload> & ProductSaveExtras,
+    ) => {
+      const created = await apiFetch<ProductRecord>("/admin/products", {
         method: "POST",
         body: JSON.stringify(body),
-      }),
+      });
+      if (pendingImageFile) {
+        const publicUrl = await uploadProductImageFile(
+          created.id,
+          pendingImageFile,
+        );
+        return apiFetch<ProductRecord>(`/admin/products/${created.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ imageUrl: publicUrl }),
+        });
+      }
+      return created;
+    },
     onSuccess: async () => {
+      setPendingImageFile(null);
+      setImagePreviewUrl(null);
       await qc.invalidateQueries({ queryKey: ["admin", "products"] });
       await qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
       navigate("/produtos");
@@ -185,16 +287,27 @@ export function useProductFormPage() {
   });
 
   const update = useMutation({
-    mutationFn: (
-      body: ReturnType<typeof formToProductPayload> & {
-        priceTablePrices?: Array<{ priceTableId: string; price: number }>;
-      },
-    ) =>
-      apiFetch<ProductRecord>(`/admin/products/${productId}`, {
+    mutationFn: async (
+      body: ReturnType<typeof formToProductPayload> & ProductSaveExtras,
+    ) => {
+      let nextBody = body;
+      if (pendingImageFile && productId) {
+        const previousUrl = values.imageUrl.trim() || null;
+        const publicUrl = await uploadProductImageFile(
+          productId,
+          pendingImageFile,
+        );
+        nextBody = { ...body, imageUrl: publicUrl };
+        void previousUrl;
+      }
+      return apiFetch<ProductRecord>(`/admin/products/${productId}`, {
         method: "PATCH",
-        body: JSON.stringify(body),
-      }),
+        body: JSON.stringify(nextBody),
+      });
+    },
     onSuccess: async () => {
+      setPendingImageFile(null);
+      setImagePreviewUrl(null);
       await qc.invalidateQueries({ queryKey: ["admin", "products"] });
       await qc.invalidateQueries({ queryKey: ["admin", "product", productId] });
       await qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
@@ -203,7 +316,107 @@ export function useProductFormPage() {
     onError: (e: Error) => setFormError(e.message),
   });
 
-  const pending = create.isPending || update.isPending;
+  const duplicateProduct = useMutation({
+    mutationFn: () => {
+      if (!productId) throw new Error("Produto inválido");
+      return apiFetch<ProductRecord>(`/admin/products/${productId}/duplicate`, {
+        method: "POST",
+      });
+    },
+    onSuccess: async (copy) => {
+      await qc.invalidateQueries({ queryKey: ["admin", "products"] });
+      await qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
+      navigate(`/produtos/${copy.id}/editar`);
+    },
+    onError: (e: Error) => setFormError(e.message),
+  });
+
+  const pending =
+    create.isPending ||
+    update.isPending ||
+    imageBusy ||
+    duplicateProduct.isPending;
+
+  const onImageFileChange = useCallback(
+    async (file: File | null) => {
+      setImageError(null);
+      if (!file) return;
+
+      const err = validateProductImageFile(file);
+      if (err) {
+        setImageError(err);
+        return;
+      }
+
+      if (imagePreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+      const preview = URL.createObjectURL(file);
+      setImagePreviewUrl(preview);
+      setPendingImageFile(file);
+
+      // Em edição, sobe na hora para o catálogo refletir rápido.
+      if (isEdit && productId) {
+        setImageBusy(true);
+        try {
+          const publicUrl = await uploadProductImageFile(productId, file);
+          setField("imageUrl", publicUrl);
+          setPendingImageFile(null);
+          await apiFetch<ProductRecord>(`/admin/products/${productId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ imageUrl: publicUrl }),
+          });
+          await qc.invalidateQueries({
+            queryKey: ["admin", "product", productId],
+          });
+        } catch (e) {
+          setImageError(
+            e instanceof Error ? e.message : "Falha ao enviar a imagem.",
+          );
+        } finally {
+          setImageBusy(false);
+        }
+      }
+    },
+    [imagePreviewUrl, isEdit, productId, qc, setField],
+  );
+
+  const removeProductImage = useCallback(async () => {
+    setImageError(null);
+    if (imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setImagePreviewUrl(null);
+    setPendingImageFile(null);
+
+    if (isEdit && productId && values.imageUrl.trim()) {
+      setImageBusy(true);
+      try {
+        await apiFetch<ProductRecord>(`/admin/products/${productId}/image`, {
+          method: "DELETE",
+        });
+        setField("imageUrl", "");
+        await qc.invalidateQueries({
+          queryKey: ["admin", "product", productId],
+        });
+      } catch (e) {
+        setImageError(
+          e instanceof Error ? e.message : "Falha ao remover a imagem.",
+        );
+      } finally {
+        setImageBusy(false);
+      }
+      return;
+    }
+    setField("imageUrl", "");
+  }, [
+    imagePreviewUrl,
+    isEdit,
+    productId,
+    qc,
+    setField,
+    values.imageUrl,
+  ]);
 
   const handleSubmit = useCallback(
     (e: FormEvent) => {
@@ -234,6 +447,27 @@ export function useProductFormPage() {
         return;
       }
 
+      const sellerCommissions = sellerOptions.map((s) => {
+        const raw = (sellerCommissionPercents[s.id] ?? "").trim();
+        if (!raw) return { sellerId: s.id, commissionPercent: null };
+        const n = Number(raw.replace(",", "."));
+        return {
+          sellerId: s.id,
+          commissionPercent: Number.isNaN(n) ? null : n,
+        };
+      });
+      const priceTableCommissions = priceTableCommissionRows
+        .map((row) => ({
+          priceTableId: row.priceTableId,
+          commissionPercent: Number(row.percent.replace(",", ".")),
+        }))
+        .filter(
+          (row) =>
+            !Number.isNaN(row.commissionPercent) &&
+            row.commissionPercent >= 0 &&
+            row.commissionPercent <= 100,
+        );
+
       setFieldErrors({});
       try {
         const payload = formToProductPayload(values, attrs);
@@ -242,18 +476,41 @@ export function useProductFormPage() {
           update.mutate({
             ...(rest as typeof payload),
             priceTablePrices: syncPrices,
+            sellerCommissions,
+            priceTableCommissions,
           });
         } else {
+          // No create, imageUrl só entra se já for URL externa; arquivo sobe depois.
+          const { imageUrl, ...rest } = payload;
           create.mutate({
-            ...payload,
+            ...rest,
+            ...(pendingImageFile
+              ? {}
+              : imageUrl
+                ? { imageUrl }
+                : { imageUrl: null }),
             priceTablePrices: syncPrices,
+            sellerCommissions,
+            priceTableCommissions,
           });
         }
       } catch (err) {
         setFormError(err instanceof Error ? err.message : "Erro ao salvar.");
       }
     },
-    [attrs, create, isEdit, priceTablePrices, update, values],
+    [
+      attrs,
+      create,
+      isEdit,
+      pendingImageFile,
+      priceTableCommissionRows,
+      priceTablePrices,
+      sellerCommissionEnabled,
+      sellerCommissionPercents,
+      sellerOptions,
+      update,
+      values,
+    ],
   );
 
   const onCategoryChange = useCallback(
@@ -302,6 +559,41 @@ export function useProductFormPage() {
     [],
   );
 
+  const setSellerCommissionPercent = useCallback(
+    (sellerId: string, value: string) => {
+      setSellerCommissionPercents((prev) => ({ ...prev, [sellerId]: value }));
+    },
+    [],
+  );
+
+  const addCommissionTable = useCallback(() => {
+    if (!addCommissionTableId) return;
+    setPriceTableCommissionRows((prev) => {
+      if (prev.some((row) => row.priceTableId === addCommissionTableId)) {
+        return prev;
+      }
+      return [...prev, { priceTableId: addCommissionTableId, percent: "" }];
+    });
+    setAddCommissionTableId("");
+  }, [addCommissionTableId]);
+
+  const removeCommissionTable = useCallback((priceTableId: string) => {
+    setPriceTableCommissionRows((prev) =>
+      prev.filter((row) => row.priceTableId !== priceTableId),
+    );
+  }, []);
+
+  const setCommissionTablePercent = useCallback(
+    (priceTableId: string, percent: string) => {
+      setPriceTableCommissionRows((prev) =>
+        prev.map((row) =>
+          row.priceTableId === priceTableId ? { ...row, percent } : row,
+        ),
+      );
+    },
+    [],
+  );
+
   const applyCreatedPurchaseUnit = useCallback(
     (unit: CreatedPurchaseUnit) => {
       setField("purchaseUnit", unit.code);
@@ -334,13 +626,31 @@ export function useProductFormPage() {
     selectedSupplier,
     markupPercent,
     handleSubmit,
+    duplicateProduct,
     onCategoryChange,
-    pending,
+    pending;
     priceTablePrices,
     setPriceForTable,
     addPriceTableId,
     setAddPriceTableId,
     addProductToPriceTable,
     applyCreatedPriceTable,
+    imagePreviewUrl,
+    imageBusy,
+    imageError,
+    onImageFileChange,
+    removeProductImage,
+    displayImageUrl: imagePreviewUrl || values.imageUrl.trim() || null,
+    sellerOptions,
+    sellerCommissionEnabled,
+    setSellerCommissionEnabled,
+    sellerCommissionPercents,
+    setSellerCommissionPercent,
+    priceTableCommissionRows,
+    addCommissionTableId,
+    setAddCommissionTableId,
+    addCommissionTable,
+    removeCommissionTable,
+    setCommissionTablePercent,
   };
 }

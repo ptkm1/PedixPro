@@ -189,7 +189,13 @@ describe.skipIf(!hasDb)("POST /admin/orders", () => {
     });
   }
 
-  it("rejeita gestor sem permissão de escrita em pedidos", async () => {
+  it("rejeita gestor com orders:none", async () => {
+    const { updateOrgRolePermissions } = await import(
+      "../services/role-permissions.js"
+    );
+    await updateOrgRolePermissions(orgA, [
+      { role: "MANAGER", resource: "orders", level: "none" },
+    ]);
     const res = await postOrder(managerTokenA, {
       sellerId: sellerA,
       customerId: customerA,
@@ -198,6 +204,9 @@ describe.skipIf(!hasDb)("POST /admin/orders", () => {
       items: [{ productId: productA, quantity: 1 }],
     });
     expect(res.statusCode).toBe(403);
+    await updateOrgRolePermissions(orgA, [
+      { role: "MANAGER", resource: "orders", level: "write" },
+    ]);
   });
 
   it("não aceita vendedor ou cliente de outra empresa", async () => {

@@ -1,3 +1,4 @@
+import { GlassChip } from "@/components/atoms/GlassChip";
 import { MobileHeader, SafeScreen } from "@/components/layout";
 import { MOBILE_TAB_SCROLL_BOTTOM } from "@/components/layout/MobileScreen";
 import { StatCard } from "@/components/molecules/StatCard";
@@ -107,54 +108,19 @@ export default function RoutePlanScreen() {
         ) : null}
 
         <View style={styles.filterRow}>
-          <Pressable
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: s.myClientsOnly ? colors.primary : colors.chip,
-                borderColor: s.myClientsOnly ? colors.primary : colors.border,
-              },
-            ]}
+          <GlassChip
+            label="Só meus clientes"
+            active={s.myClientsOnly}
             onPress={() => s.setMyClientsOnly((v) => !v)}
-          >
-            <Text
-              style={[
-                styles.filterChipTxt,
-                {
-                  color: s.myClientsOnly
-                    ? colors.chipTextActive
-                    : colors.chipText,
-                },
-              ]}
-            >
-              Só meus clientes
-            </Text>
-          </Pressable>
-          {s.radiusOptions.map((km) => {
-            const on = s.radiusKm === km;
-            return (
-              <Pressable
-                key={km}
-                style={[
-                  styles.filterChip,
-                  {
-                    backgroundColor: on ? colors.primary : colors.chip,
-                    borderColor: on ? colors.primary : colors.border,
-                  },
-                ]}
-                onPress={() => s.setRadiusKm(km)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipTxt,
-                    { color: on ? colors.chipTextActive : colors.chipText },
-                  ]}
-                >
-                  {km} km
-                </Text>
-              </Pressable>
-            );
-          })}
+          />
+          {s.radiusOptions.map((km) => (
+            <GlassChip
+              key={km}
+              label={`${km} km`}
+              active={s.radiusKm === km}
+              onPress={() => s.setRadiusKm(km)}
+            />
+          ))}
         </View>
 
         {s.hasOpenVisit && s.activeVisit ? (

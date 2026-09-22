@@ -21,7 +21,7 @@ import {
 import { resolveOrderPdfLogo } from "./order-pdf-logo.js";
 
 const orderPdfInclude = {
-  seller: { include: { user: { select: { name: true, email: true } } } },
+  seller: { include: { user: { select: { name: true, email: true, phone: true } } } },
   customer: {
     select: {
       name: true,

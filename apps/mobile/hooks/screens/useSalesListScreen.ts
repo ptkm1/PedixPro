@@ -28,6 +28,7 @@ export type SellerOrderListItem = {
     productName: string;
     unitPrice?: unknown;
   }[];
+  seller?: { user: { name: string; phone?: string | null } } | null;
 };
 
 export function useSalesListScreen() {

@@ -472,6 +472,14 @@ export function adminPathToResource(
     return "teams";
   if (path.startsWith("/users") || path.startsWith("/staff")) return "users";
   if (path.startsWith("/customer-visits")) return "visits";
+  if (
+    path === "/reports/commissions-payable" ||
+    path === "/reports/commissions-payable.pdf" ||
+    path === "/reports/commissions-payable.xlsx"
+  ) {
+    return "reports_commissions_payable";
+  }
+  if (path === "/commission-settings") return "commissions";
   if (path.startsWith("/reports") || path.startsWith("/insights"))
     return "reports";
   if (path.startsWith("/expedition")) return "expedition";

@@ -1,25 +1,45 @@
+import type { PricingSyncPayload } from "@pedidos/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { isNetworkError } from "../lib/network-error";
 import { loadFavoriteIds, toggleFavoriteId } from "../lib/product-favorites";
+import { overlayCatalogProducts } from "../lib/sale/pricing";
 import type { SaleProduct } from "../lib/sale/types";
 import {
+  fetchSellerPricingSync,
   fetchSellerProductsBase,
+  SELLER_PRICING_KEY,
   sellerOfflineStaleTime,
 } from "../lib/seller-offline-queries";
 import { matchesProductSearch } from "../lib/utils/product-search";
+import { useDebouncedValue } from "./useDebouncedValue";
 
 type Options = {
   customerId?: string;
+  priceTableId?: string;
+  pricing?: PricingSyncPayload | null;
 };
 
 export function useSellerProductCatalog(options: Options = {}) {
-  const { customerId } = options;
-  const productsQueryKey = ["seller", "products", customerId ?? ""] as const;
+  const { customerId, priceTableId } = options;
+  const productsQueryKey = [
+    "seller",
+    "products",
+    customerId ?? "",
+    priceTableId ?? "",
+  ] as const;
+
+  const { data: fetchedPricing } = useQuery({
+    queryKey: SELLER_PRICING_KEY,
+    staleTime: sellerOfflineStaleTime,
+    queryFn: fetchSellerPricingSync,
+    enabled: options.pricing === undefined,
+  });
+  const pricing = options.pricing !== undefined ? options.pricing : fetchedPricing;
 
   const {
-    data: products = [],
+    data: rawProducts = [],
     isLoading,
     isFetching,
     refetch,
@@ -30,19 +50,29 @@ export function useSellerProductCatalog(options: Options = {}) {
       if (!customerId) {
         return fetchSellerProductsBase();
       }
+      const qs = new URLSearchParams({ customerId });
+      if (priceTableId) qs.set("priceTableId", priceTableId);
       try {
-        return await apiFetch<SaleProduct[]>(
-          `/seller/products?customerId=${encodeURIComponent(customerId)}`,
-        );
+        return await apiFetch<SaleProduct[]>(`/seller/products?${qs.toString()}`);
       } catch (e) {
         if (!isNetworkError(e)) throw e;
-        // Offline: preços especiais indisponíveis — catálogo base em cache
         return fetchSellerProductsBase();
       }
     },
   });
 
+  const products = useMemo(
+    () =>
+      overlayCatalogProducts(rawProducts, {
+        pricing,
+        customerId,
+        priceTableId,
+      }),
+    [rawProducts, pricing, customerId, priceTableId],
+  );
+
   const [productQuery, setProductQuery] = useState("");
+  const debouncedProductQuery = useDebouncedValue(productQuery, 300);
   const [categoryFilterIds, setCategoryFilterIds] = useState<string[]>([]);
   const [supplierFilterIds, setSupplierFilterIds] = useState<string[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -92,7 +122,7 @@ export function useSellerProductCatalog(options: Options = {}) {
       if (catSet && (!p.category || !catSet.has(p.category.id))) return false;
       if (supplierSet && (!p.supplier || !supplierSet.has(p.supplier.id)))
         return false;
-      return matchesProductSearch(p, productQuery);
+      return matchesProductSearch(p, debouncedProductQuery);
     });
     return [...list].sort((a, b) => {
       const ha =
@@ -106,7 +136,7 @@ export function useSellerProductCatalog(options: Options = {}) {
       if (hb !== ha) return hb - ha;
       return a.name.localeCompare(b.name, "pt");
     });
-  }, [products, productQuery, categoryFilterIds, supplierFilterIds]);
+  }, [products, debouncedProductQuery, categoryFilterIds, supplierFilterIds]);
 
   const topSellingProducts = useMemo(() => {
     const hot = products.filter((p) => (p.soldQty ?? 0) > 0);

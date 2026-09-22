@@ -152,8 +152,21 @@ export async function getCacheMeta<T>(key: string): Promise<T | null> {
 
 export const CACHE_META_COMMISSION = "commission_dashboard";
 export const CACHE_META_ORG_SETTINGS = "org_settings";
+export const CACHE_META_PRICE_TABLES = "price_tables";
+export const CACHE_META_PRICING = "pricing_sync";
 export const CACHE_META_LAST_SYNC = "last_sync_at";
 export const CACHE_META_LAST_SYNC_COUNT = "last_sync_count";
+
+export async function replaceCachedPriceTables(
+  tables: unknown[],
+): Promise<boolean> {
+  return setCacheMeta(CACHE_META_PRICE_TABLES, tables);
+}
+
+export async function getCachedPriceTables<T>(): Promise<T[] | null> {
+  const rows = await getCacheMeta<T[]>(CACHE_META_PRICE_TABLES);
+  return Array.isArray(rows) ? rows : null;
+}
 
 export async function markCacheSynced(syncedCount?: number): Promise<void> {
   await setCacheMeta(CACHE_META_LAST_SYNC, new Date().toISOString());

@@ -1,3 +1,16 @@
+import {
+  applyTableAdjustment,
+  isPriceTableUsable,
+  isWithinDateWindow,
+  PRICE_ORIGIN_KIND,
+  priceTableSpecificity,
+  resolveCatalogPrice,
+  type PriceAdjustmentKind,
+  type PriceAdjustmentMode,
+  type PriceOriginKind,
+  type ResolvedCatalogPrice,
+  type TableRuleInput,
+} from "@pedidos/shared";
 import type { PromotionKind, PromotionScope } from "@prisma/client";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
@@ -9,7 +22,7 @@ export type PriceResolutionContext = {
   regionId?: string | null;
   /** Quando informado, usa esta tabela em vez do ranking automático. */
   priceTableId?: string | null;
-  /** Quantidade da linha — promoções com `minQuantity` só entram se couber. */
+  /** Quantidade da linha — faixas e promoções com `minQuantity`. */
   quantity?: number;
   at?: Date;
 };
@@ -50,57 +63,334 @@ function applyPromotionKind(catalog: number, kind: PromotionKind, value: number)
   }
 }
 
-function priceTableSpecificity(t: {
+type TableRow = {
+  id: string;
+  name: string;
+  status: string;
+  validFrom: Date | null;
+  validTo: Date | null;
+  adjustmentKind: PriceAdjustmentKind;
+  adjustmentMode: PriceAdjustmentMode;
+  adjustmentValue: unknown;
   customerId: string | null;
   sellerId: string | null;
   regionId: string | null;
-}): number {
-  return (t.customerId ? 1 : 0) + (t.sellerId ? 1 : 0) + (t.regionId ? 1 : 0);
+  priority: number;
+  updatedAt: Date;
+};
+
+function toRuleInput(
+  table: TableRow,
+  item: {
+    useCustomPrice: boolean;
+    price: unknown;
+    minPrice: unknown;
+  } | null,
+  qtyTiers: Array<{ minQuantity: number; price: unknown }>,
+): TableRuleInput {
+  return {
+    id: table.id,
+    name: table.name,
+    adjustmentKind: table.adjustmentKind,
+    adjustmentMode: table.adjustmentMode,
+    adjustmentValue: decToNum(table.adjustmentValue),
+    item: item
+      ? {
+          useCustomPrice: item.useCustomPrice,
+          price: item.price != null ? decToNum(item.price) : null,
+          minPrice: item.minPrice != null ? decToNum(item.minPrice) : null,
+        }
+      : null,
+    qtyTiers: qtyTiers.map((t) => ({
+      minQuantity: t.minQuantity,
+      price: decToNum(t.price),
+    })),
+  };
 }
 
-/**
- * Catálogo por produto: escolhe a melhor `PriceTable` aplicável ao contexto (cliente > vendedor > região > global),
- * depois prioridade da tabela; senão `basePrice`.
- */
-export async function resolveCatalogUnitPrice(
-  organizationId: string,
-  productId: string,
-  ctx: PriceResolutionContext = {},
-): Promise<number> {
-  const product = await prisma.product.findFirst({
-    where: { id: productId, organizationId },
+function sortPriceTablesByCommercialRank<
+  T extends {
+    customerId: string | null;
+    sellerId: string | null;
+    regionId: string | null;
+    priority: number;
+    updatedAt: Date;
+  },
+>(tables: T[]): T[] {
+  return [...tables].sort((a, b) => {
+    const sp = priceTableSpecificity(b) - priceTableSpecificity(a);
+    if (sp !== 0) return sp;
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return b.updatedAt.getTime() - a.updatedAt.getTime();
   });
-  if (!product) throw new Error("Produto não encontrado");
+}
 
+/** Where Prisma das tabelas aplicáveis ao contexto comercial (cliente/vendedor/região + vigência). */
+export function applicablePriceTablesWhere(
+  organizationId: string,
+  ctx: Pick<PriceResolutionContext, "sellerId" | "customerId" | "regionId" | "at">,
+) {
   const at = ctx.at ?? new Date();
-
-  if (ctx.priceTableId) {
-    const table = await prisma.priceTable.findFirst({
-      where: { id: ctx.priceTableId, organizationId },
-      select: { id: true },
-    });
-    if (table) {
-      const forced = await prisma.priceTableItem.findFirst({
-        where: { priceTableId: table.id, productId },
-      });
-      if (forced) return decToNum(forced.price);
-    }
-  }
-
   const customerOk =
     ctx.customerId != null
       ? { OR: [{ customerId: null }, { customerId: ctx.customerId }] }
       : { customerId: null };
 
   const sellerOk =
-    ctx.sellerId != null ? { OR: [{ sellerId: null }, { sellerId: ctx.sellerId }] } : { sellerId: null };
+    ctx.sellerId != null
+      ? { OR: [{ sellerId: null }, { sellerId: ctx.sellerId }] }
+      : { sellerId: null };
 
+  const regionOk =
+    ctx.regionId != null
+      ? { OR: [{ regionId: null }, { regionId: ctx.regionId }] }
+      : { regionId: null };
+
+  return {
+    organizationId,
+    AND: [
+      { OR: [{ validFrom: null }, { validFrom: { lte: at } }] },
+      { OR: [{ validTo: null }, { validTo: { gte: at } }] },
+      customerOk,
+      sellerOk,
+      regionOk,
+    ],
+  };
+}
+
+/**
+ * Tabela cobre o produto se tem item, faixa de quantidade ou fórmula (% / R$).
+ */
+async function priceTableCoversProduct(params: {
+  priceTableId: string;
+  productId: string;
+  adjustmentValue: unknown;
+}): Promise<boolean> {
+  if (decToNum(params.adjustmentValue) > 0) return true;
+  const [item, tier] = await Promise.all([
+    prisma.priceTableItem.findFirst({
+      where: { priceTableId: params.priceTableId, productId: params.productId },
+      select: { id: true },
+    }),
+    prisma.priceTableQtyTier.findFirst({
+      where: { priceTableId: params.priceTableId, productId: params.productId },
+      select: { id: true },
+    }),
+  ]);
+  return Boolean(item || tier);
+}
+
+export type ApplicablePriceTableRow = {
+  id: string;
+  name: string;
+  priority: number;
+  customerId: string | null;
+  sellerId: string | null;
+  regionId: string | null;
+  validFrom: Date | null;
+  validTo: Date | null;
+  updatedAt: Date;
+};
+
+/** Lista tabelas vigentes e no escopo comercial do contexto (sem exigir item de produto). */
+export async function listApplicablePriceTables(
+  organizationId: string,
+  ctx: Pick<PriceResolutionContext, "sellerId" | "customerId" | "regionId" | "at"> = {},
+): Promise<ApplicablePriceTableRow[]> {
+  const tables = await prisma.priceTable.findMany({
+    where: applicablePriceTablesWhere(organizationId, ctx),
+    select: {
+      id: true,
+      name: true,
+      priority: true,
+      customerId: true,
+      sellerId: true,
+      regionId: true,
+      validFrom: true,
+      validTo: true,
+      updatedAt: true,
+    },
+  });
+  return sortPriceTablesByCommercialRank(tables);
+}
+
+/**
+ * Garante que a tabela existe na org, está no escopo comercial e (se productId) tem preço do produto.
+ * Usado quando o cliente força `priceTableId` — não confiar só em membership da org.
+ */
+export async function assertPriceTableApplicableForSale(params: {
+  organizationId: string;
+  priceTableId: string;
+  productId?: string;
+  ctx: Pick<PriceResolutionContext, "sellerId" | "customerId" | "regionId" | "at">;
+}): Promise<void> {
+  const table = await prisma.priceTable.findFirst({
+    where: {
+      id: params.priceTableId,
+      ...applicablePriceTablesWhere(params.organizationId, params.ctx),
+    },
+    select: { id: true, name: true, adjustmentValue: true },
+  });
+  if (!table) {
+    throw new Error(
+      "Tabela de preço inválida ou fora do escopo comercial desta operação.",
+    );
+  }
+  if (params.productId) {
+    const covered = await priceTableCoversProduct({
+      priceTableId: table.id,
+      productId: params.productId,
+      adjustmentValue: table.adjustmentValue,
+    });
+    if (!covered) {
+      throw new Error(
+        `Tabela «${table.name}» não possui preço para o produto selecionado.`,
+      );
+    }
+  }
+}
+
+export type ProductPriceTableOption = {
+  priceTableId: string;
+  name: string;
+  priority: number;
+  catalogUnitPrice: number;
+  effectiveUnitPrice: number;
+  promotionLabel: string | null;
+};
+
+/**
+ * Tabelas aplicáveis à operação que têm preço válido para o produto (com promoções).
+ */
+export async function listProductPriceTableOptions(
+  organizationId: string,
+  productId: string,
+  ctx: PriceResolutionContext = {},
+): Promise<ProductPriceTableOption[]> {
+  const tables = await prisma.priceTable.findMany({
+    where: applicablePriceTablesWhere(organizationId, ctx),
+    select: {
+      id: true,
+      name: true,
+      priority: true,
+      customerId: true,
+      sellerId: true,
+      regionId: true,
+      validFrom: true,
+      validTo: true,
+      updatedAt: true,
+      adjustmentValue: true,
+    },
+  });
+  const ranked = sortPriceTablesByCommercialRank(tables);
+  if (!ranked.length) return [];
+
+  const tableIds = ranked.map((t) => t.id);
+  const [items, tiers] = await Promise.all([
+    prisma.priceTableItem.findMany({
+      where: { productId, priceTableId: { in: tableIds } },
+      select: { priceTableId: true },
+    }),
+    prisma.priceTableQtyTier.findMany({
+      where: { productId, priceTableId: { in: tableIds } },
+      select: { priceTableId: true },
+    }),
+  ]);
+  const covered = new Set<string>([
+    ...items.map((i) => i.priceTableId),
+    ...tiers.map((t) => t.priceTableId),
+    ...ranked
+      .filter((t) => decToNum(t.adjustmentValue) > 0)
+      .map((t) => t.id),
+  ]);
+  if (!covered.size) return [];
+
+  const out: ProductPriceTableOption[] = [];
+
+  for (const t of ranked) {
+    if (!covered.has(t.id)) continue;
+    const priced = await resolveEffectiveUnitPrice(organizationId, productId, {
+      ...ctx,
+      priceTableId: t.id,
+    });
+    out.push({
+      priceTableId: t.id,
+      name: t.name,
+      priority: t.priority,
+      catalogUnitPrice: priced.catalogUnitPrice,
+      effectiveUnitPrice: priced.effectiveUnitPrice,
+      promotionLabel: priced.promotionLabel,
+    });
+  }
+
+  return out;
+}
+
+function tableWouldApply(
+  table: TableRow,
+  item: { useCustomPrice: boolean; price: unknown } | null,
+  qtyTiers: Array<{ minQuantity: number }>,
+): boolean {
+  if (qtyTiers.length > 0) return true;
+  if (item?.useCustomPrice && item.price != null) return true;
+  return decToNum(table.adjustmentValue) > 0;
+}
+
+async function loadSpecial(params: {
+  organizationId: string;
+  productId: string;
+  customerId?: string | null;
+}) {
+  if (!params.customerId) return null;
+  const row = await prisma.customerSpecialPrice.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      customerId: params.customerId,
+      productId: params.productId,
+    },
+  });
+  if (!row) return null;
+  return {
+    price: decToNum(row.price),
+    validFrom: row.validFrom,
+    validTo: row.validTo,
+  };
+}
+
+async function loadTableRule(
+  table: TableRow,
+  productId: string,
+): Promise<TableRuleInput> {
+  const [item, qtyTiers] = await Promise.all([
+    prisma.priceTableItem.findFirst({
+      where: { priceTableId: table.id, productId },
+    }),
+    prisma.priceTableQtyTier.findMany({
+      where: { priceTableId: table.id, productId },
+    }),
+  ]);
+  return toRuleInput(table, item, qtyTiers);
+}
+
+async function pickLegacyTable(
+  organizationId: string,
+  productId: string,
+  ctx: PriceResolutionContext,
+  at: Date,
+): Promise<TableRow | null> {
+  const customerOk =
+    ctx.customerId != null
+      ? { OR: [{ customerId: null }, { customerId: ctx.customerId }] }
+      : { customerId: null };
+  const sellerOk =
+    ctx.sellerId != null ? { OR: [{ sellerId: null }, { sellerId: ctx.sellerId }] } : { sellerId: null };
   const regionOk =
     ctx.regionId != null ? { OR: [{ regionId: null }, { regionId: ctx.regionId }] } : { regionId: null };
 
-  const tables = await prisma.priceTable.findMany({
+  const tables = (await prisma.priceTable.findMany({
     where: {
       organizationId,
+      status: "ACTIVE",
       AND: [
         { OR: [{ validFrom: null }, { validFrom: { lte: at } }] },
         { OR: [{ validTo: null }, { validTo: { gte: at } }] },
@@ -109,7 +399,7 @@ export async function resolveCatalogUnitPrice(
         regionOk,
       ],
     },
-  });
+  })) as TableRow[];
 
   tables.sort((a, b) => {
     const sp = priceTableSpecificity(b) - priceTableSpecificity(a);
@@ -118,19 +408,94 @@ export async function resolveCatalogUnitPrice(
     return b.updatedAt.getTime() - a.updatedAt.getTime();
   });
 
-  if (tables.length) {
-    const ids = tables.map((t) => t.id);
-    const items = await prisma.priceTableItem.findMany({
+  if (!tables.length) return null;
+
+  const ids = tables.map((t) => t.id);
+  const [items, tiers] = await Promise.all([
+    prisma.priceTableItem.findMany({
       where: { productId, priceTableId: { in: ids } },
-    });
-    const itemByTable = new Map(items.map((i) => [i.priceTableId, i]));
-    for (const t of tables) {
-      const row = itemByTable.get(t.id);
-      if (row) return decToNum(row.price);
-    }
+    }),
+    prisma.priceTableQtyTier.findMany({
+      where: { productId, priceTableId: { in: ids } },
+    }),
+  ]);
+  const itemByTable = new Map(items.map((i) => [i.priceTableId, i]));
+  const tiersByTable = new Map<string, typeof tiers>();
+  for (const t of tiers) {
+    const list = tiersByTable.get(t.priceTableId) ?? [];
+    list.push(t);
+    tiersByTable.set(t.priceTableId, list);
   }
 
-  return decToNum(product.basePrice);
+  for (const table of tables) {
+    if (
+      tableWouldApply(
+        table,
+        itemByTable.get(table.id) ?? null,
+        tiersByTable.get(table.id) ?? [],
+      )
+    ) {
+      return table;
+    }
+  }
+  return null;
+}
+
+export type CatalogPriceResult = ResolvedCatalogPrice & {
+  catalogUnitPrice: number;
+};
+
+/**
+ * Catálogo por produto: preço especial > faixa > override > regra da tabela > base.
+ * Sem `priceTableId`, mantém o ranking legado (cliente > vendedor > região > global).
+ */
+export async function resolveCatalogUnitPriceDetailed(
+  organizationId: string,
+  productId: string,
+  ctx: PriceResolutionContext = {},
+): Promise<CatalogPriceResult> {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, organizationId },
+  });
+  if (!product) throw new Error("Produto não encontrado");
+
+  const at = ctx.at ?? new Date();
+  const quantity = ctx.quantity ?? 1;
+  const special = await loadSpecial({
+    organizationId,
+    productId,
+    customerId: ctx.customerId,
+  });
+
+  let table: TableRow | null = null;
+  if (ctx.priceTableId) {
+    const found = await prisma.priceTable.findFirst({
+      where: { id: ctx.priceTableId, organizationId },
+    });
+    if (found) table = found as TableRow;
+  } else {
+    table = await pickLegacyTable(organizationId, productId, ctx, at);
+  }
+
+  const rule = table ? await loadTableRule(table, productId) : null;
+  const resolved = resolveCatalogPrice({
+    basePrice: decToNum(product.basePrice),
+    quantity,
+    at,
+    table: rule,
+    customerSpecial: special,
+  });
+
+  return { ...resolved, catalogUnitPrice: resolved.unitPrice };
+}
+
+export async function resolveCatalogUnitPrice(
+  organizationId: string,
+  productId: string,
+  ctx: PriceResolutionContext = {},
+): Promise<number> {
+  const r = await resolveCatalogUnitPriceDetailed(organizationId, productId, ctx);
+  return r.catalogUnitPrice;
 }
 
 export type EffectivePriceResult = {
@@ -138,21 +503,39 @@ export type EffectivePriceResult = {
   effectiveUnitPrice: number;
   promotionId: string | null;
   promotionLabel: string | null;
+  origin: PriceOriginKind;
+  originLabel: string;
+  minPrice: number | null;
+  priceTableId: string | null;
+  priceTableName: string | null;
 };
 
 /**
  * Preço por unidade após promoções aplicáveis.
- * Prioridade: escopo mais específico (cliente > vendedor > produto geral), depois `priority` maior.
- * Apenas uma promoção vencedora por linha; considera `minQuantity` quando definido.
+ * Preço especial do cliente não é alterado por promoção.
  */
 export async function resolveEffectiveUnitPrice(
   organizationId: string,
   productId: string,
   opts: PriceResolutionContext = {},
 ): Promise<EffectivePriceResult> {
-  const catalogUnitPrice = await resolveCatalogUnitPrice(organizationId, productId, opts);
+  const catalog = await resolveCatalogUnitPriceDetailed(organizationId, productId, opts);
   const at = opts.at ?? new Date();
   const qty = opts.quantity ?? 1;
+
+  if (catalog.origin === PRICE_ORIGIN_KIND.CUSTOMER_SPECIAL) {
+    return {
+      catalogUnitPrice: catalog.catalogUnitPrice,
+      effectiveUnitPrice: catalog.catalogUnitPrice,
+      promotionId: null,
+      promotionLabel: null,
+      origin: catalog.origin,
+      originLabel: catalog.originLabel,
+      minPrice: catalog.minPrice,
+      priceTableId: catalog.priceTableId,
+      priceTableName: catalog.priceTableName,
+    };
+  }
 
   const rows = await prisma.productPromotion.findMany({
     where: {
@@ -182,24 +565,34 @@ export async function resolveEffectiveUnitPrice(
   const winner = applicable[0];
   if (!winner) {
     return {
-      catalogUnitPrice,
-      effectiveUnitPrice: catalogUnitPrice,
+      catalogUnitPrice: catalog.catalogUnitPrice,
+      effectiveUnitPrice: catalog.catalogUnitPrice,
       promotionId: null,
       promotionLabel: null,
+      origin: catalog.origin,
+      originLabel: catalog.originLabel,
+      minPrice: catalog.minPrice,
+      priceTableId: catalog.priceTableId,
+      priceTableName: catalog.priceTableName,
     };
   }
 
   const effectiveUnitPrice = applyPromotionKind(
-    catalogUnitPrice,
+    catalog.catalogUnitPrice,
     winner.kind,
     decToNum(winner.value),
   );
 
   return {
-    catalogUnitPrice,
+    catalogUnitPrice: catalog.catalogUnitPrice,
     effectiveUnitPrice,
     promotionId: winner.id,
     promotionLabel: winner.label,
+    origin: catalog.origin,
+    originLabel: catalog.originLabel,
+    minPrice: catalog.minPrice,
+    priceTableId: catalog.priceTableId,
+    priceTableName: catalog.priceTableName,
   };
 }
 
@@ -208,3 +601,5 @@ export async function resolveUnitPrice(organizationId: string, productId: string
   const r = await resolveEffectiveUnitPrice(organizationId, productId, {});
   return r.effectiveUnitPrice;
 }
+
+export { applyTableAdjustment, isPriceTableUsable, isWithinDateWindow };

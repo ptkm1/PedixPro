@@ -1,10 +1,11 @@
+import { useConfirm } from "@/components/confirm";
 import {
   FormField,
   FormGrid,
   FormSheet,
   FormSheetActions,
 } from "@/components/forms";
-import { useConfirm } from "@/components/confirm";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,24 +17,73 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useScrollToFirstError } from "@/hooks/useScrollToFirstError";
+import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { apiFetch } from "../lib/api";
+import { Link } from "react-router-dom";
 
-type PriceTable = {
+export type PriceTableRow = {
   id: string;
   name: string;
+  status: "ACTIVE" | "INACTIVE";
+  adjustmentKind: "DISCOUNT" | "SURCHARGE";
+  adjustmentMode: "PERCENT" | "AMOUNT";
+  adjustmentValue: number;
+  validFrom: string | null;
+  validTo: string | null;
   items?: unknown[];
+  _count?: { items: number; qtyTiers: number };
   customer: { id: string; name: string } | null;
   seller: { id: string; user: { name: string } } | null;
   region: { id: string; code: string; name: string } | null;
 };
 
-function scopeLabel(table: PriceTable): string {
-  if (table.customer) return `Cliente: ${table.customer.name}`;
-  if (table.seller) return `Vendedor: ${table.seller.user.name}`;
-  if (table.region) return `Região: ${table.region.name}`;
-  return "Global";
+function ruleLabel(t: PriceTableRow): string {
+  if (!t.adjustmentValue) return "Preços manuais / base";
+  const sign = t.adjustmentKind === "DISCOUNT" ? "Desconto" : "Acréscimo";
+  const val =
+    t.adjustmentMode === "PERCENT"
+      ? `${t.adjustmentValue}%`
+      : `R$ ${t.adjustmentValue.toFixed(2).replace(".", ",")}`;
+  return `${sign} ${val}`;
+}
+
+function toDateInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
+
+type TableForm = {
+  name: string;
+  status: "ACTIVE" | "INACTIVE";
+  adjustmentKind: "DISCOUNT" | "SURCHARGE";
+  adjustmentMode: "PERCENT" | "AMOUNT";
+  adjustmentValue: string;
+  validFrom: string;
+  validTo: string;
+};
+
+const emptyForm = (): TableForm => ({
+  name: "",
+  status: "ACTIVE",
+  adjustmentKind: "DISCOUNT",
+  adjustmentMode: "PERCENT",
+  adjustmentValue: "0",
+  validFrom: "",
+  validTo: "",
+});
+
+function formToPayload(form: TableForm) {
+  return {
+    name: form.name.trim(),
+    status: form.status,
+    adjustmentKind: form.adjustmentKind,
+    adjustmentMode: form.adjustmentMode,
+    adjustmentValue: Number(form.adjustmentValue.replace(",", ".")) || 0,
+    validFrom: form.validFrom ? `${form.validFrom}T00:00:00.000Z` : null,
+    validTo: form.validTo ? `${form.validTo}T23:59:59.000Z` : null,
+  };
 }
 
 export function PriceTablesPage() {
@@ -41,64 +91,62 @@ export function PriceTablesPage() {
   const { confirm } = useConfirm();
   const { data: tables = [], isLoading } = useQuery({
     queryKey: ["admin", "price-tables"],
-    queryFn: () => apiFetch<PriceTable[]>("/admin/price-tables"),
+    queryFn: () => apiFetch<PriceTableRow[]>("/admin/price-tables"),
   });
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState<PriceTable | null>(null);
-  const [name, setName] = useState("");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editing, setEditing] = useState<PriceTableRow | null>(null);
+  const [form, setForm] = useState<TableForm>(emptyForm());
   const [showValidation, setShowValidation] = useState(false);
 
   function resetForm() {
-    setName("");
+    setForm(emptyForm());
     setShowValidation(false);
     setEditing(null);
   }
 
   function openCreate() {
     resetForm();
-    setCreateOpen(true);
+    setSheetOpen(true);
   }
 
-  function closeCreate() {
-    setCreateOpen(false);
-    resetForm();
-  }
-
-  function openEdit(table: PriceTable) {
+  function openEdit(table: PriceTableRow) {
     setEditing(table);
-    setName(table.name);
+    setForm({
+      name: table.name,
+      status: table.status ?? "ACTIVE",
+      adjustmentKind: table.adjustmentKind ?? "DISCOUNT",
+      adjustmentMode: table.adjustmentMode ?? "PERCENT",
+      adjustmentValue: String(table.adjustmentValue ?? 0),
+      validFrom: toDateInput(table.validFrom),
+      validTo: toDateInput(table.validTo),
+    });
     setShowValidation(false);
-    setEditOpen(true);
+    setSheetOpen(true);
   }
 
-  function closeEdit() {
-    setEditOpen(false);
+  function closeSheet() {
+    setSheetOpen(false);
     resetForm();
   }
 
-  const createTable = useMutation({
-    mutationFn: () =>
-      apiFetch<PriceTable>("/admin/price-tables", {
+  const save = useMutation({
+    mutationFn: () => {
+      const payload = formToPayload(form);
+      if (editing) {
+        return apiFetch<PriceTableRow>(`/admin/price-tables/${editing.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      }
+      return apiFetch<PriceTableRow>("/admin/price-tables", {
         method: "POST",
-        body: JSON.stringify({ name }),
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
-      closeCreate();
+        body: JSON.stringify(payload),
+      });
     },
-  });
-
-  const updateTable = useMutation({
-    mutationFn: () =>
-      apiFetch<PriceTable>(`/admin/price-tables/${editing!.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: name.trim() }),
-      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
-      closeEdit();
+      closeSheet();
     },
   });
 
@@ -110,32 +158,36 @@ export function PriceTablesPage() {
     },
   });
 
-  const createFieldErrors = useMemo(() => {
-    if (!showValidation) return {} as Record<string, string>;
-    return !name.trim() ? { name: "Nome é obrigatório." } : {};
-  }, [showValidation, name]);
-
-  useScrollToFirstError(createFieldErrors, {
-    enabled: showValidation && (createOpen || editOpen),
+  const duplicate = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<PriceTableRow>(`/admin/price-tables/${id}/duplicate`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
+    },
   });
 
-  function tryCreateTable() {
+  const fieldErrors = useMemo(() => {
+    if (!showValidation) return {} as Record<string, string>;
+    return !form.name.trim() ? { name: "Nome é obrigatório." } : {};
+  }, [showValidation, form.name]);
+
+  useScrollToFirstError(fieldErrors, {
+    enabled: showValidation && sheetOpen,
+  });
+
+  function trySave() {
     setShowValidation(true);
-    if (!name.trim()) return;
-    createTable.mutate();
+    if (!form.name.trim()) return;
+    save.mutate();
   }
 
-  function tryUpdateTable() {
-    setShowValidation(true);
-    if (!name.trim() || !editing) return;
-    updateTable.mutate();
-  }
-
-  async function confirmDeleteTable(table: PriceTable) {
+  async function confirmDeleteTable(table: PriceTableRow) {
     const ok = await confirm({
       title: "Excluir tabela?",
       description:
-        "A tabela de preços e os preços dos produtos nela serão removidos.",
+        "A tabela de preços, preços personalizados e faixas serão removidos.",
       confirmLabel: "Excluir",
       tone: "destructive",
     });
@@ -150,8 +202,8 @@ export function PriceTablesPage() {
             Tabelas de preço
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Crie e gerencie tabelas pelo nome. Os preços dos produtos são
-            definidos no cadastro de cada produto.
+            Defina desconto ou acréscimo sobre o preço base, preços
+            personalizados por produto e faixas de quantidade.
           </p>
         </div>
         <Button type="button" onClick={openCreate}>
@@ -160,19 +212,19 @@ export function PriceTablesPage() {
       </div>
 
       <FormSheet
-        open={createOpen}
+        open={sheetOpen}
         onOpenChange={(open) => {
-          if (!open) closeCreate();
-          else setCreateOpen(true);
+          if (!open) closeSheet();
+          else setSheetOpen(true);
         }}
-        title="Nova tabela"
-        description="Informe o nome. Depois associe preços no cadastro do produto."
+        title={editing ? "Editar tabela" : "Nova tabela"}
+        description="Nome, regra geral e validade. Preços por produto ficam na ficha da tabela."
         footer={
           <FormSheetActions
-            onCancel={closeCreate}
-            onSubmit={tryCreateTable}
-            submitLabel="Criar tabela"
-            pending={createTable.isPending}
+            onCancel={closeSheet}
+            onSubmit={trySave}
+            submitLabel={editing ? "Salvar" : "Criar tabela"}
+            pending={save.isPending}
           />
         }
       >
@@ -181,47 +233,119 @@ export function PriceTablesPage() {
             label="Nome"
             htmlFor="pt-name"
             required
-            error={createFieldErrors.name}
+            error={fieldErrors.name}
           >
             <Input
               id="pt-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </FormField>
-        </FormGrid>
-      </FormSheet>
-
-      <FormSheet
-        open={editOpen}
-        onOpenChange={(open) => {
-          if (!open) closeEdit();
-          else setEditOpen(true);
-        }}
-        title="Editar tabela"
-        description="Altere o nome da tabela de preço."
-        footer={
-          <FormSheetActions
-            onCancel={closeEdit}
-            onSubmit={tryUpdateTable}
-            submitLabel="Salvar"
-            pending={updateTable.isPending}
-          />
-        }
-      >
-        <FormGrid cols={1}>
+          <FormField label="Situação" htmlFor="pt-status">
+            <div className="flex gap-2">
+              {(
+                [
+                  ["ACTIVE", "Ativa"],
+                  ["INACTIVE", "Inativa"],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={form.status === value ? "default" : "outline"}
+                  onClick={() => setForm((f) => ({ ...f, status: value }))}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </FormField>
           <FormField
-            label="Nome"
-            htmlFor="pt-edit-name"
-            required
-            error={createFieldErrors.name}
+            label="Regra geral"
+            hint="Aplica no preço base de todos os produtos, salvo preço personalizado."
           >
-            <Input
-              id="pt-edit-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex overflow-hidden rounded-md border">
+                {(
+                  [
+                    ["DISCOUNT", "Desconto"],
+                    ["SURCHARGE", "Acréscimo"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={cn(
+                      "px-3 py-1.5 text-sm",
+                      form.adjustmentKind === value
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background",
+                    )}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, adjustmentKind: value }))
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <Input
+                className="w-28"
+                inputMode="decimal"
+                value={form.adjustmentValue}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, adjustmentValue: e.target.value }))
+                }
+              />
+              <div className="flex overflow-hidden rounded-md border">
+                {(
+                  [
+                    ["PERCENT", "%"],
+                    ["AMOUNT", "R$"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={cn(
+                      "px-3 py-1.5 text-sm",
+                      form.adjustmentMode === value
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background",
+                    )}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, adjustmentMode: value }))
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </FormField>
+          <FormGrid cols={2}>
+            <FormField label="Válida de" htmlFor="pt-from">
+              <Input
+                id="pt-from"
+                type="date"
+                value={form.validFrom}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, validFrom: e.target.value }))
+                }
+              />
+            </FormField>
+            <FormField label="Válida até" htmlFor="pt-to">
+              <Input
+                id="pt-to"
+                type="date"
+                value={form.validTo}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, validTo: e.target.value }))
+                }
+              />
+            </FormField>
+          </FormGrid>
         </FormGrid>
       </FormSheet>
 
@@ -237,7 +361,8 @@ export function PriceTablesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>Escopo</TableHead>
+                <TableHead>Regra</TableHead>
+                <TableHead>Situação</TableHead>
                 <TableHead className="text-right">Itens</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -245,20 +370,48 @@ export function PriceTablesPage() {
             <TableBody>
               {tables.map((t) => (
                 <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to={`/tabelas-preco/${t.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {t.name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {scopeLabel(t)}
+                    {ruleLabel(t)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={t.status === "ACTIVE" ? "default" : "secondary"}
+                    >
+                      {t.status === "ACTIVE" ? "Ativa" : "Inativa"}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {t.items?.length ?? 0}
+                    {t._count?.items ?? t.items?.length ?? 0}
                   </TableCell>
                   <TableCell className="text-right">
+                    <Link
+                      to={`/tabelas-preco/${t.id}`}
+                      className="text-primary"
+                    >
+                      Produtos
+                    </Link>
                     <button
                       type="button"
-                      className="text-primary"
+                      className="ml-3 text-primary"
                       onClick={() => openEdit(t)}
                     >
                       Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="ml-3 text-primary"
+                      disabled={duplicate.isPending}
+                      onClick={() => duplicate.mutate(t.id)}
+                    >
+                      Duplicar
                     </button>
                     <button
                       type="button"

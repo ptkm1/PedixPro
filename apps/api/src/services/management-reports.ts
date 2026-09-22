@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 import { calendarMonthBounds } from "./seller-metrics.js";
 
 function roundMoney(n: number): number {
@@ -116,16 +117,17 @@ export async function buildSalesScorecard(params: {
     const amount = decToNum(o.totalAmount);
     totalAmount += amount;
 
-    const s = bySeller.get(o.sellerId) ?? {
-      name: o.seller.user.name,
+    const sellerKey = o.sellerId ?? "__direct__";
+    const s = bySeller.get(sellerKey) ?? {
+      name: sellerLabelOrDirect(o.seller?.user.name),
       orderCount: 0,
       totalAmount: 0,
     };
     s.orderCount += 1;
     s.totalAmount += amount;
-    bySeller.set(o.sellerId, s);
+    bySeller.set(sellerKey, s);
 
-    const team = o.seller.team;
+    const team = o.seller?.team;
     if (team) {
       const t = byTeam.get(team.id) ?? {
         teamId: team.id,
@@ -325,16 +327,17 @@ export async function buildMarginReport(params: {
       sup.quantity += it.quantity;
       bySupplier.set(supplierKey, sup);
 
-      const sellerAcc = bySeller.get(o.sellerId) ?? {
+      const sellerKey = o.sellerId ?? "__direct__";
+      const sellerAcc = bySeller.get(sellerKey) ?? {
         revenue: 0,
         cost: 0,
         quantity: 0,
-        label: o.seller.user.name,
+        label: sellerLabelOrDirect(o.seller?.user.name),
       };
       sellerAcc.revenue += revenue;
       sellerAcc.cost += cost;
       sellerAcc.quantity += it.quantity;
-      bySeller.set(o.sellerId, sellerAcc);
+      bySeller.set(sellerKey, sellerAcc);
 
       const catKey = it.product.categoryId ?? "_none";
       const catLabel = it.product.category?.name ?? "Sem categoria";
@@ -455,6 +458,7 @@ export async function buildCommissionStatement(params: {
   });
 
   for (const o of orders) {
+    if (!o.sellerId) continue;
     const row = agg.get(o.sellerId) ?? {
       revenue: 0,
       commission: 0,
@@ -466,6 +470,7 @@ export async function buildCommissionStatement(params: {
   }
   for (const it of items) {
     const sid = it.order.sellerId;
+    if (!sid) continue;
     const row = agg.get(sid) ?? {
       revenue: 0,
       commission: 0,
@@ -796,7 +801,7 @@ export async function buildFiscalReconciliation(params: {
         orderId: o.id,
         createdAt: o.createdAt.toISOString(),
         customerName: o.customer?.name ?? "—",
-        sellerName: o.seller.user.name,
+        sellerName: sellerLabelOrDirect(o.seller?.user.name),
         totalAmount: roundMoney(decToNum(o.totalAmount)),
       });
       continue;

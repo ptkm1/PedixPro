@@ -10,13 +10,14 @@ import { apiFetch } from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Package } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 type Category = { id: string; name: string };
 type Supplier = { id: string; tradeName: string; legalName: string };
 
 export function ProductsPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { confirm } = useConfirm();
   const [supplierId, setSupplierId] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -52,6 +53,17 @@ export function ProductsPage() {
       apiFetch(`/admin/products/${id}`, { method: "DELETE" }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ["admin", "products"] }),
+  });
+
+  const duplicate = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ id: string }>(`/admin/products/${id}/duplicate`, {
+        method: "POST",
+      }),
+    onSuccess: (copy) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "products"] });
+      navigate(`/produtos/${copy.id}/editar`);
+    },
   });
 
   return (
@@ -140,6 +152,14 @@ export function ProductsPage() {
         </FormField>
       </div>
 
+      {duplicate.isError ? (
+        <p className="text-sm text-destructive">
+          {duplicate.error instanceof Error
+            ? duplicate.error.message
+            : "Não foi possível duplicar o produto."}
+        </p>
+      ) : null}
+
       {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {Array.from({ length: 12 }).map((_, i) => (
@@ -163,6 +183,16 @@ export function ProductsPage() {
             <ProductCard
               key={p.id}
               product={p}
+              onDuplicate={() => {
+                void confirm({
+                  title: "Duplicar produto?",
+                  description:
+                    "Cria uma cópia com os mesmos dados comerciais e tributários. SKU, código de barras e estoque ficam vazios para você ajustar.",
+                  confirmLabel: "Duplicar",
+                }).then((ok) => {
+                  if (ok) duplicate.mutate(p.id);
+                });
+              }}
               onDelete={() => {
                 void confirm({
                   title: "Excluir produto?",

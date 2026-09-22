@@ -1,14 +1,14 @@
 import { useAuth } from "@/auth/AuthContext";
 import { canRead, planHasFeature, type PlanFeature } from "@pedidos/shared";
 import {
-  BarChart3,
-  ClipboardList,
-  Lightbulb,
-  Package,
-  Percent,
-  Receipt,
-  Users,
-  type LucideIcon,
+    BarChart3,
+    ClipboardList,
+    Lightbulb,
+    Package,
+    Percent,
+    Receipt,
+    Users,
+    type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -17,6 +17,7 @@ type ReportLink = {
   title: string;
   description: string;
   planFeature?: PlanFeature;
+  permission?: Parameters<typeof canRead>[1];
 };
 
 type ReportCategory = {
@@ -188,6 +189,14 @@ const CATEGORIES: ReportCategory[] = [
         description: "Comissão acumulada em cada pedido.",
         planFeature: "commissions",
       },
+      {
+        to: "/relatorios/comissoes/a-pagar",
+        title: "Comissões a Pagar",
+        description:
+          "Comissões consolidadas por vendedor conforme o critério da empresa.",
+        planFeature: "commissions",
+        permission: "reports_commissions_payable",
+      },
     ],
   },
 ];
@@ -223,9 +232,17 @@ export function ReportsHubPage() {
 
   const categories = CATEGORIES.map((cat) => ({
     ...cat,
-    items: cat.items.filter((item) =>
-      userHasPlanFeature(user, item.planFeature),
-    ),
+    items: cat.items.filter((item) => {
+      if (!userHasPlanFeature(user, item.planFeature)) return false;
+      if (
+        item.permission &&
+        user &&
+        !canRead(user.role, item.permission, user.permissions)
+      ) {
+        return false;
+      }
+      return true;
+    }),
   })).filter((cat) => cat.items.length > 0);
 
   return (
@@ -273,7 +290,7 @@ export function ReportsHubPage() {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="group surface-card flex gap-3 p-4 transition hover:border-primary/40 hover:shadow-md"
+                  className="group surface-card-glass flex gap-3 p-4 transition hover:border-primary/40 hover:shadow-md"
                 >
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition group-hover:bg-primary/10 group-hover:text-primary">
                     <ClipboardList className="h-4 w-4" />

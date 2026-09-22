@@ -52,6 +52,7 @@ import { OrderDetailPage } from "./pages/OrderDetailPage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { PaymentConditionsPage } from "./pages/PaymentConditionsPage";
 import { PriceTablesPage } from "./pages/PriceTablesPage";
+import { PriceTableDetailPage } from "./pages/PriceTableDetailPage";
 import { ProductCategoriesPage } from "./pages/ProductCategoriesPage";
 import { ProductFormPage } from "./pages/ProductFormPage";
 import { ProductsPage } from "./pages/ProductsPage";
@@ -66,6 +67,7 @@ import {
   ReportCommissionsPage,
   ReportInvoicedOrdersPage,
 } from "./pages/ReportBillingCatalogPages";
+import { ReportCommissionsPayablePage } from "./pages/ReportCommissionsPayablePage";
 import {
   ReportCustomerAbcPage,
   ReportCustomerPositivacaoPage,
@@ -104,6 +106,7 @@ import { EstablishmentsSettingsPage } from "./pages/settings/EstablishmentsSetti
 import { HomePanelSettingsPage } from "./pages/settings/HomePanelSettingsPage";
 import { OrderFlowSettingsPage } from "./pages/settings/OrderFlowSettingsPage";
 import { OrderSyncSettingsPage } from "./pages/settings/OrderSyncSettingsPage";
+import { CatalogPriceDisplaySettingsPage } from "./pages/settings/CatalogPriceDisplaySettingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -332,6 +335,10 @@ function AppRoutes() {
             <Route path="ajuda" element={<HelpPage />} />
             <Route path="tabelas-preco" element={<PriceTablesPage />} />
             <Route
+              path="tabelas-preco/:tableId"
+              element={<PriceTableDetailPage />}
+            />
+            <Route
               path="produtos/categorias"
               element={<ProductCategoriesPage />}
             />
@@ -435,6 +442,10 @@ function AppRoutes() {
               element={<OrderSyncSettingsPage />}
             />
             <Route
+              path="configuracoes/catalogo-precos"
+              element={<CatalogPriceDisplaySettingsPage />}
+            />
+            <Route
               path="configuracoes/fluxo-pedido"
               element={<OrderFlowSettingsPage />}
             />
@@ -513,6 +524,10 @@ function AppRoutes() {
             <Route
               path="relatorios/comissoes/por-pedido"
               element={<ReportCommissionByOrderPage />}
+            />
+            <Route
+              path="relatorios/comissoes/a-pagar"
+              element={<ReportCommissionsPayablePage />}
             />
             <Route path="relatorios/gestao" element={<ReportsPage />} />
             <Route path="visitas" element={<CustomerVisitsPage />} />

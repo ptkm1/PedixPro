@@ -135,6 +135,8 @@ export async function getSellerCommissionDetail(params: {
           unitPrice: true,
           commissionPercent: true,
           commissionAmount: true,
+          commissionOrigin: true,
+          priceTableName: true,
         },
       },
     },
@@ -149,6 +151,8 @@ export async function getSellerCommissionDetail(params: {
       unitPrice: roundMoney(decToNum(item.unitPrice)),
       commissionPercent: roundMoney(decToNum(item.commissionPercent ?? 0)),
       commissionAmount: roundMoney(decToNum(item.commissionAmount ?? 0)),
+      commissionOrigin: item.commissionOrigin ?? null,
+      priceTableName: item.priceTableName ?? null,
     })),
   };
 }

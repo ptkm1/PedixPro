@@ -119,6 +119,7 @@ async function upsertSeller(
       name: def.name,
       role: Role.SELLER,
       organizationId,
+      activatedAt: new Date(),
     },
     create: {
       email: def.email,
@@ -126,6 +127,7 @@ async function upsertSeller(
       name: def.name,
       role: Role.SELLER,
       organizationId,
+      activatedAt: new Date(),
     },
   });
 

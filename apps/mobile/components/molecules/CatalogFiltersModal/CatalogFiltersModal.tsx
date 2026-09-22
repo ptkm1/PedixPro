@@ -1,6 +1,7 @@
 import { ThemedButton } from "@/components/atoms/ThemedButton";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useTheme } from "@/lib/theme";
 import { Check, ChevronDown, ChevronUp, Circle, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
@@ -130,6 +131,7 @@ export function CatalogFiltersModal({
   const [draftSupplierIds, setDraftSupplierIds] = useState<string[]>([]);
   const [draftCustomerId, setDraftCustomerId] = useState<string | undefined>();
   const [customerSearch, setCustomerSearch] = useState("");
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch, 300);
   const [clientsOpen, setClientsOpen] = useState(true);
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const [suppliersOpen, setSuppliersOpen] = useState(true);
@@ -147,10 +149,10 @@ export function CatalogFiltersModal({
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return [];
-    const q = customerSearch.trim().toLowerCase();
+    const q = debouncedCustomerSearch.trim().toLowerCase();
     if (!q) return customers;
     return customers.filter((c) => c.name.toLowerCase().includes(q));
-  }, [customers, customerSearch]);
+  }, [customers, debouncedCustomerSearch]);
 
   const allCategoriesSelected = draftCategoryIds.length === 0;
   const allSuppliersSelected = draftSupplierIds.length === 0;
@@ -267,7 +269,7 @@ export function CatalogFiltersModal({
                         />
                       ))}
                     {filteredCustomers.filter((c) => c.id !== lastCustomer?.id)
-                      .length === 0 && customerSearch.trim() ? (
+                      .length === 0 && debouncedCustomerSearch.trim() ? (
                       <ThemedText variant="bodySm" muted>
                         Nenhum cliente encontrado.
                       </ThemedText>

@@ -46,6 +46,10 @@ const MANAGER_GET_ALLOW = [
   /^\/reports\/top-products$/,
   /^\/reports\/product-positivacao$/,
   /^\/reports\/commission-by-order$/,
+  /^\/reports\/commissions-payable$/,
+  /^\/reports\/commissions-payable\.pdf$/,
+  /^\/reports\/commissions-payable\.xlsx$/,
+  /^\/commission-settings$/,
   /^\/reports\/invoiced-orders$/,
   /^\/reports\/home-dashboard-config$/,
   /^\/reports\/home-indicator$/,
@@ -148,10 +152,22 @@ export function sellerScopeWhere(auth: AccessPayload): Prisma.SellerWhereInput {
 export function orderScopeWhere(auth: AccessPayload): Prisma.OrderWhereInput {
   const base: Prisma.OrderWhereInput = { organizationId: auth.organizationId };
   if (auth.role === "MANAGER") {
-    return { ...base, seller: { managerUserId: auth.sub } };
+    return {
+      ...base,
+      OR: [
+        { seller: { managerUserId: auth.sub } },
+        { sellerId: null, createdByUserId: auth.sub },
+      ],
+    };
   }
   if (isTeamLeaderAuth(auth)) {
-    return { ...base, seller: { teamId: auth.teamLeaderTeamId! } };
+    return {
+      ...base,
+      OR: [
+        { seller: { teamId: auth.teamLeaderTeamId! } },
+        { sellerId: null, createdByUserId: auth.sub },
+      ],
+    };
   }
   return base;
 }

@@ -1,9 +1,9 @@
 import { AppSelect } from "@/components/ui/app-select";
 import { ReportBreadcrumb, ReportField } from "@/components/reports/ReportFormKit";
 import {
-  PERIOD_PRESET_LABELS,
-  periodRange,
-  type PeriodPreset,
+    PERIOD_PRESET_LABELS,
+    periodRange,
+    type PeriodPreset,
 } from "@/lib/period-presets";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
@@ -61,10 +61,8 @@ export function PeriodPresetBar(props: {
           type="button"
           onClick={() => props.onPreset(p)}
           className={cn(
-            "rounded-md border px-3 py-1.5 text-xs font-medium transition",
-            props.preset === p
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border bg-card text-foreground hover:bg-muted",
+            "glass-chip transition",
+            props.preset === p && "glass-chip-active",
           )}
         >
           {PERIOD_PRESET_LABELS[p]}
@@ -82,7 +80,7 @@ export function ReportKpis(props: {
       {props.items.map((k) => (
         <div
           key={k.label}
-          className="rounded-xl border border-border bg-card p-4"
+          className="surface-card-glass p-4"
         >
           <p className="text-sm text-muted-foreground">{k.label}</p>
           <p

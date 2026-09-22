@@ -37,11 +37,36 @@ import {
     validateCustomerForm,
 } from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { CustomerFormFields } from "../components/CustomerFormFields";
 import { CustomerTitlesPanel } from "../components/CustomerTitlesPanel";
+import {
+    LocationPinMap,
+    splitLatLngPaste,
+} from "../components/LocationPinMap";
 import { apiFetch } from "../lib/api";
+
+/** Limite da API em PATCH/POST batch de clientes. */
+const CUSTOMER_BATCH_CHUNK = 100;
+
+function chunkIds(ids: string[], size = CUSTOMER_BATCH_CHUNK): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function useDebouncedValue<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 const CUSTOMER_STATUS_OPTIONS: {
   value: CustomerStatus;
@@ -135,9 +160,20 @@ export function CustomersPage() {
         canWrite(user.role, "customers", user.permissions)),
   );
 
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
+
   const { data: customers = [], isLoading } = useQuery({
-    queryKey: ["admin", "customers"],
-    queryFn: () => apiFetch<CustomerRecord[]>("/admin/customers"),
+    queryKey: ["admin", "customers", debouncedSearch.trim()],
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      const term = debouncedSearch.trim();
+      if (term) qs.set("q", term);
+      const q = qs.toString();
+      return apiFetch<CustomerRecord[]>(
+        `/admin/customers${q ? `?${q}` : ""}`,
+      );
+    },
   });
   const { data: pending = [], isLoading: pendingLoading } = useQuery({
     queryKey: ["admin", "customers", "pending-approval"],
@@ -147,6 +183,17 @@ export function CustomersPage() {
   const { data: sellers = [] } = useQuery({
     queryKey: ["admin", "sellers"],
     queryFn: () => apiFetch<Seller[]>("/admin/sellers"),
+  });
+  const { data: priceTables = [] } = useQuery({
+    queryKey: ["admin", "price-tables"],
+    queryFn: () =>
+      apiFetch<Array<{ id: string; name: string }>>("/admin/price-tables"),
+  });
+  const { data: catalogProducts = [] } = useQuery({
+    queryKey: ["admin", "products", "names"],
+    queryFn: () =>
+      apiFetch<Array<{ id: string; name: string }>>("/admin/products"),
+    enabled: sheetOpen && Boolean(editing),
   });
 
   const { data: pricingSettings } = useQuery({
@@ -210,6 +257,10 @@ export function CustomersPage() {
   const [showValidation, setShowValidation] = useState(false);
   const [editing, setEditing] = useState<CustomerRecord | null>(null);
   const [sellerId, setSellerId] = useState("");
+  const [defaultPriceTableId, setDefaultPriceTableId] = useState("");
+  const [specialPrices, setSpecialPrices] = useState<
+    Array<{ productId: string; price: string; validFrom: string; validTo: string }>
+  >([]);
   const [creditLimitStr, setCreditLimitStr] = useState("");
   const [creditBlockedEdit, setCreditBlockedEdit] = useState(false);
   const [statusEdit, setStatusEdit] = useState<CustomerStatus>("ACTIVE");
@@ -217,6 +268,7 @@ export function CustomersPage() {
   const [geoLngStr, setGeoLngStr] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkSeller, setBulkSeller] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
   const canEditCustomers = Boolean(
@@ -262,6 +314,8 @@ export function CustomersPage() {
     setForm(emptyCustomerForm());
     setShowValidation(false);
     setSellerId("");
+    setDefaultPriceTableId("");
+    setSpecialPrices([]);
     setCreditLimitStr("");
     setCreditBlockedEdit(false);
     setStatusEdit("ACTIVE");
@@ -278,6 +332,7 @@ export function CustomersPage() {
     setEditing(c);
     setForm(customerToForm(c));
     setSellerId(c.sellerId ?? "");
+    setDefaultPriceTableId(c.defaultPriceTableId ?? "");
     setCreditBlockedEdit(Boolean(c.creditBlocked));
     setStatusEdit(c.status === "INACTIVE" ? "INACTIVE" : "ACTIVE");
     setCreditLimitStr(
@@ -296,6 +351,23 @@ export function CustomersPage() {
         : "",
     );
     setSheetOpen(true);
+    void apiFetch<
+      Array<{
+        productId: string;
+        price: number;
+        validFrom: string | null;
+        validTo: string | null;
+      }>
+    >(`/admin/customers/${c.id}/special-prices`).then((rows) => {
+      setSpecialPrices(
+        rows.map((r) => ({
+          productId: r.productId,
+          price: String(r.price),
+          validFrom: r.validFrom ? r.validFrom.slice(0, 10) : "",
+          validTo: r.validTo ? r.validTo.slice(0, 10) : "",
+        })),
+      );
+    });
   }
 
   function closeSheet() {
@@ -326,6 +398,7 @@ export function CustomersPage() {
         body: JSON.stringify(
           formToCustomerPayload(form, {
             sellerId: sellerId || null,
+            defaultPriceTableId: defaultPriceTableId || null,
             ...geo,
           }),
         ),
@@ -345,13 +418,14 @@ export function CustomersPage() {
   });
 
   const update = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const geo = parseGeo();
-      return apiFetch(`/admin/customers/${editing!.id}`, {
+      const updated = await apiFetch(`/admin/customers/${editing!.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           ...formToCustomerPayload(form, {
             sellerId: sellerId || null,
+            defaultPriceTableId: defaultPriceTableId || null,
             creditLimit:
               creditLimitStr.trim() === ""
                 ? null
@@ -362,6 +436,20 @@ export function CustomersPage() {
           }),
         }),
       });
+      await apiFetch(`/admin/customers/${editing!.id}/special-prices`, {
+        method: "PUT",
+        body: JSON.stringify({
+          items: specialPrices
+            .filter((r) => r.productId && r.price.trim())
+            .map((r) => ({
+              productId: r.productId,
+              price: Number(r.price.replace(",", ".")),
+              validFrom: r.validFrom || null,
+              validTo: r.validTo || null,
+            })),
+        }),
+      });
+      return updated;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "customers"] });
@@ -384,30 +472,69 @@ export function CustomersPage() {
   });
 
   const batchPatch = useMutation({
-    mutationFn: (body: {
+    mutationFn: async (body: {
       ids: string[];
       status?: CustomerStatus;
       creditBlocked?: boolean;
-    }) =>
-      apiFetch<{ updated: number }>("/admin/customers/batch", {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      }),
+      sellerId?: string | null;
+    }) => {
+      let updated = 0;
+      for (const ids of chunkIds(body.ids)) {
+        const res = await apiFetch<{ updated: number }>(
+          "/admin/customers/batch",
+          {
+            method: "PATCH",
+            body: JSON.stringify({ ...body, ids }),
+          },
+        );
+        updated += res.updated;
+      }
+      return { updated };
+    },
     onSuccess: () => {
       setActionError(null);
       setBulkStatus("");
+      setBulkSeller("");
       setSelectedIds(new Set());
       void qc.invalidateQueries({ queryKey: ["admin", "customers"] });
     },
     onError: (err) => {
       setBulkStatus("");
+      setBulkSeller("");
       setActionError(
         err instanceof Error ? err.message : "Erro ao atualizar clientes",
       );
     },
   });
 
-  const batchBusy = batchPatch.isPending;
+  const batchDelete = useMutation({
+    mutationFn: async (ids: string[]) => {
+      let deleted = 0;
+      for (const chunk of chunkIds(ids)) {
+        const res = await apiFetch<{ deleted: number }>(
+          "/admin/customers/batch-delete",
+          {
+            method: "POST",
+            body: JSON.stringify({ ids: chunk }),
+          },
+        );
+        deleted += res.deleted;
+      }
+      return { deleted };
+    },
+    onSuccess: () => {
+      setActionError(null);
+      setSelectedIds(new Set());
+      void qc.invalidateQueries({ queryKey: ["admin", "customers"] });
+    },
+    onError: (err) => {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao excluir clientes",
+      );
+    },
+  });
+
+  const batchBusy = batchPatch.isPending || batchDelete.isPending;
 
   async function applyBatchStatus(status: CustomerStatus) {
     if (!canEditCustomers || !hasSelection || batchBusy) return;
@@ -428,6 +555,26 @@ export function CustomersPage() {
   function applyBatchCreditBlocked(blocked: boolean) {
     if (!canEditCustomers || !hasSelection || batchBusy) return;
     batchPatch.mutate({ ids: [...selectedIds], creditBlocked: blocked });
+  }
+
+  function applyBatchSeller(v: string) {
+    if (!canEditCustomers || !hasSelection || batchBusy) return;
+    setBulkSeller(v);
+    batchPatch.mutate({
+      ids: [...selectedIds],
+      sellerId: v === "" ? null : v,
+    });
+  }
+
+  async function confirmBatchDelete() {
+    if (!canEditCustomers || !hasSelection || batchBusy) return;
+    const ok = await confirm({
+      title: "Excluir clientes selecionados?",
+      description: `${selectedIds.size} cliente(s) serão removidos permanentemente do sistema.`,
+      confirmLabel: "Excluir",
+      tone: "destructive",
+    });
+    if (ok) batchDelete.mutate([...selectedIds]);
   }
 
   const formErrors = useMemo(
@@ -625,6 +772,24 @@ export function CustomersPage() {
               onValueChange={setSellerId}
             />
           </FormField>
+          <FormField
+            label="Tabela de preço padrão"
+            htmlFor="cust-default-pt"
+            className="sm:col-span-2"
+            hint="Ao abrir um pedido, esta tabela é selecionada automaticamente."
+          >
+            <AppSelect
+              id="cust-default-pt"
+              value={defaultPriceTableId}
+              emptyLabel="Nenhuma"
+              placeholder="Nenhuma"
+              options={priceTables.map((t) => ({
+                value: t.id,
+                label: t.name,
+              }))}
+              onValueChange={setDefaultPriceTableId}
+            />
+          </FormField>
         </FormGrid>
 
         <div className="mt-4 rounded-lg border border-dashed border-border bg-background/90 p-4">
@@ -632,16 +797,35 @@ export function CustomersPage() {
             Localização no mapa (app do vendedor)
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Latitude/longitude em graus decimais. Opcional; necessário para rota
-            e «próximos».
+            Marque no mapa ou informe latitude/longitude em graus decimais.
+            Opcional; necessário para rota e «próximos».
           </p>
+          <LocationPinMap
+            className="mt-3"
+            active={sheetOpen}
+            latitude={geoLatStr}
+            longitude={geoLngStr}
+            onChange={(lat, lng) => {
+              setGeoLatStr(lat);
+              setGeoLngStr(lng);
+            }}
+          />
           <FormGrid cols={2} className="mt-3">
             <FormField label="Latitude" htmlFor="cust-lat">
               <Input
                 id="cust-lat"
                 placeholder="Ex.: -23.5505"
                 value={geoLatStr}
-                onChange={(e) => setGeoLatStr(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const split = splitLatLngPaste(v);
+                  if (split) {
+                    setGeoLatStr(split.lat);
+                    setGeoLngStr(split.lng);
+                    return;
+                  }
+                  setGeoLatStr(v);
+                }}
                 autoComplete="off"
               />
             </FormField>
@@ -650,7 +834,16 @@ export function CustomersPage() {
                 id="cust-lng"
                 placeholder="Ex.: -46.6333"
                 value={geoLngStr}
-                onChange={(e) => setGeoLngStr(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const split = splitLatLngPaste(v);
+                  if (split) {
+                    setGeoLatStr(split.lat);
+                    setGeoLngStr(split.lng);
+                    return;
+                  }
+                  setGeoLngStr(v);
+                }}
                 autoComplete="off"
               />
             </FormField>
@@ -710,6 +903,98 @@ export function CustomersPage() {
           </div>
         ) : null}
 
+        {editing ? (
+          <div className="mt-4 rounded-lg border border-border bg-background/80 p-4">
+            <p className="text-sm font-medium">Preços especiais</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Preço por produto, com validade opcional. Depois do prazo, volta
+              automaticamente à tabela.
+            </p>
+            <div className="mt-3 space-y-2">
+              {specialPrices.map((row, idx) => (
+                <div
+                  key={`${row.productId}-${idx}`}
+                  className="grid gap-2 sm:grid-cols-[1fr_6rem_7rem_7rem_auto]"
+                >
+                  <AppSelect
+                    value={row.productId}
+                    placeholder="Produto"
+                    options={catalogProducts.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    }))}
+                    onValueChange={(productId) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, productId } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    placeholder="Preço"
+                    value={row.price}
+                    onChange={(e) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, price: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    type="date"
+                    value={row.validFrom}
+                    onChange={(e) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, validFrom: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    type="date"
+                    value={row.validTo}
+                    onChange={(e) =>
+                      setSpecialPrices((prev) =>
+                        prev.map((r, i) =>
+                          i === idx ? { ...r, validTo: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setSpecialPrices((prev) =>
+                        prev.filter((_, i) => i !== idx),
+                      )
+                    }
+                  >
+                    Remover
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setSpecialPrices((prev) => [
+                    ...prev,
+                    { productId: "", price: "", validFrom: "", validTo: "" },
+                  ])
+                }
+              >
+                Adicionar preço especial
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {editing ? <CustomerTitlesPanel customerId={editing.id} /> : null}
         {editing ? (
           <AuditLogPanel
@@ -721,6 +1006,21 @@ export function CustomersPage() {
           />
         ) : null}
       </FormSheet>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <Input
+          className="max-w-md"
+          placeholder="Buscar por nome, fantasia, documento, cidade, vendedor…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+        />
+        {debouncedSearch.trim() && !isLoading ? (
+          <p className="text-sm text-muted-foreground">
+            {customers.length} resultado(s)
+          </p>
+        ) : null}
+      </div>
 
       {canEditCustomers && customers.length > 0 ? (
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -742,6 +1042,18 @@ export function CustomersPage() {
                   void applyBatchStatus(v);
               }}
             />
+            <AppSelect
+              value={bulkSeller}
+              disabled={!hasSelection || batchBusy}
+              placeholder="Alterar vendedor…"
+              emptyLabel="— Sem vendedor —"
+              triggerClassName="w-[12rem]"
+              options={sellers.map((s) => ({
+                value: s.id,
+                label: s.user.name,
+              }))}
+              onValueChange={(v) => applyBatchSeller(v)}
+            />
             <Button
               type="button"
               size="sm"
@@ -759,6 +1071,15 @@ export function CustomersPage() {
               onClick={() => applyBatchCreditBlocked(true)}
             >
               Bloquear crédito
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={!hasSelection || batchBusy}
+              onClick={() => void confirmBatchDelete()}
+            >
+              {batchDelete.isPending ? "Excluindo…" : "Excluir selecionados"}
             </Button>
           </div>
         </div>
@@ -794,7 +1115,9 @@ export function CustomersPage() {
                 <TableHead className="px-4">Status</TableHead>
                 <TableHead className="px-4">Validação</TableHead>
                 <TableHead className="px-4">Crédito</TableHead>
-                <TableHead className="px-4" />
+                <TableHead className="sticky right-0 z-10 min-w-[11rem] bg-card px-4 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)]">
+                  Ações
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -815,7 +1138,19 @@ export function CustomersPage() {
                         />
                       </TableCell>
                     ) : null}
-                    <TableCell className="px-4 py-3">{c.name}</TableCell>
+                    <TableCell className="px-4 py-3">
+                      {canEditCustomers ? (
+                        <button
+                          type="button"
+                          className="text-left font-medium text-foreground hover:text-primary hover:underline"
+                          onClick={() => openEdit(c)}
+                        >
+                          {c.name}
+                        </button>
+                      ) : (
+                        c.name
+                      )}
+                    </TableCell>
                     <TableCell className="px-4 py-3 font-mono text-xs">
                       {formatDocument(c)}
                     </TableCell>
@@ -898,31 +1233,39 @@ export function CustomersPage() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        className="text-primary"
-                        onClick={() => openEdit(c)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="ml-3 text-destructive"
-                        onClick={() => {
-                          void confirm({
-                            title: "Excluir cliente?",
-                            description:
-                              "O cliente será removido permanentemente do sistema.",
-                            confirmLabel: "Excluir",
-                            tone: "destructive",
-                          }).then((ok) => {
-                            if (ok) remove.mutate(c.id);
-                          });
-                        }}
-                      >
-                        Excluir
-                      </button>
+                    <TableCell className="sticky right-0 z-10 bg-card px-4 py-3 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)]">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEdit(c)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Editar cadastro
+                        </Button>
+                        {canEditCustomers ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => {
+                              void confirm({
+                                title: "Excluir cliente?",
+                                description:
+                                  "O cliente será removido permanentemente do sistema.",
+                                confirmLabel: "Excluir",
+                                tone: "destructive",
+                              }).then((ok) => {
+                                if (ok) remove.mutate(c.id);
+                              });
+                            }}
+                          >
+                            Excluir
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

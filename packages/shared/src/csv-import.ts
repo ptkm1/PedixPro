@@ -120,5 +120,27 @@ export function customerCsvTemplate(): string {
   return buildCsvTemplate(CUSTOMER_CSV_HEADERS, CUSTOMER_CSV_SAMPLE_ROW);
 }
 
+export const PRICE_TABLE_CSV_HEADERS = [
+  "codigo",
+  "nome",
+  "preco_base",
+  "preco_tabela",
+  "preco_minimo",
+] as const;
+
+export type PriceTableCsvHeader = (typeof PRICE_TABLE_CSV_HEADERS)[number];
+
+export const PRICE_TABLE_CSV_SAMPLE_ROW: Record<PriceTableCsvHeader, string> = {
+  codigo: "SKU-001",
+  nome: "Produto exemplo",
+  preco_base: "10.00",
+  preco_tabela: "9.00",
+  preco_minimo: "8.50",
+};
+
+export function priceTableCsvTemplate(): string {
+  return buildCsvTemplate(PRICE_TABLE_CSV_HEADERS, PRICE_TABLE_CSV_SAMPLE_ROW);
+}
+
 export const CSV_IMPORT_MAX_ROWS = 2000;
 export const CSV_IMPORT_MAX_CHARS = 1_500_000;

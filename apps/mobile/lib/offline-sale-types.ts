@@ -12,6 +12,9 @@ export type OfflineSaleQueuePayload = {
   clientMutationId: string;
   customerId: string;
   paymentConditionId: string;
+  /** Staff: vendedor atribuído; null/omit = venda direta. Vendedor ignora. */
+  sellerId?: string | null;
+  priceTableId?: string;
   operation?: "SALE";
   status: "CONFIRMED";
   notes?: string;
@@ -19,6 +22,7 @@ export type OfflineSaleQueuePayload = {
     productId: string;
     quantity: number;
     discountPercent?: number;
+    priceTableId?: string;
   }>;
   snapshot?: OfflineSaleSnapshot;
 };

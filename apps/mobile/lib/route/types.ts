@@ -11,6 +11,8 @@ export type NearbyCustomersResp = {
     addressNote: string | null;
     distanceKm: number;
     assignedToMe: boolean;
+    /** Cliente com vendedor atribuído (qualquer seller). */
+    hasSeller: boolean;
   }>;
   disclaimerAirKm: string;
 };

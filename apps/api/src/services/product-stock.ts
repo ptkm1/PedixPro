@@ -156,7 +156,8 @@ export async function applyStockOnStatusChange(
   });
   if (!order) return;
 
-  const userId = actorUserId ?? order.seller.userId;
+  const userId =
+    actorUserId ?? order.createdByUserId ?? order.seller?.userId ?? null;
 
   if (confirming) {
     await assertSufficientStock(

@@ -1,10 +1,12 @@
 import {
+  formatBrazilPhoneDigits,
   formatCnpjMask,
   formatCpfMask,
   formatStructuredAddress,
 } from "@pedidos/shared";
 import PDFDocument from "pdfkit";
 import { decToNum } from "../util/money.js";
+import { sellerLabelOrDirect } from "../util/order-seller-filter.js";
 import type { OrderPdfCustomer, OrderPdfInput } from "./order-pdf.js";
 import {
   money,
@@ -242,9 +244,22 @@ export async function buildOrderPdf80mm(order: OrderPdfInput): Promise<Buffer> {
   doc.text(`Data: ${shortDateTime(order.createdAt)}`, MARGIN, doc.y, {
     width: CONTENT_W,
   });
-  doc.text(`Vendedor: ${order.seller.user.name}`, MARGIN, doc.y, {
-    width: CONTENT_W,
-  });
+  doc.text(
+    `Vendedor: ${sellerLabelOrDirect(order.seller?.user.name)}`,
+    MARGIN,
+    doc.y,
+    {
+      width: CONTENT_W,
+    },
+  );
+  const sellerPhone = order.seller?.user.phone?.trim()
+    ? formatBrazilPhoneDigits(order.seller.user.phone)
+    : null;
+  if (sellerPhone) {
+    doc.text(`Tel. vendedor: ${sellerPhone}`, MARGIN, doc.y, {
+      width: CONTENT_W,
+    });
+  }
   if (payLabel) {
     doc.text(`Pagamento: ${payLabel}`, MARGIN, doc.y, {
       width: CONTENT_W,

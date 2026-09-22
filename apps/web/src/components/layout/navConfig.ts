@@ -132,6 +132,7 @@ export const DASHBOARD_NAV: NavItem[] = [
     label: "Indicadores IA",
     icon: Sparkles,
     resource: "reports",
+    planFeature: "reports_ai",
   },
   {
     to: "/configuracoes",
@@ -171,12 +172,6 @@ export const TEAM_LEADER_NAV: NavItem[] = [
     resource: "reports",
     planFeature: "insights",
   },
-  {
-    to: "/indicadores/ia",
-    label: "Indicadores IA",
-    icon: Sparkles,
-    resource: "reports",
-  },
 ];
 
 /** Prefixo de rota → recurso da matriz (para guards). */
@@ -192,6 +187,9 @@ export function resourceForPath(pathname: string): PermissionResource | null {
   if (pathname.startsWith("/usuarios")) return "users";
   if (pathname.startsWith("/equipes")) return "teams";
   if (pathname.startsWith("/comissao")) return "commissions";
+  if (pathname.startsWith("/relatorios/comissoes/a-pagar")) {
+    return "reports_commissions_payable";
+  }
   if (pathname.startsWith("/clientes") || pathname.startsWith("/notificacoes"))
     return "customers";
   if (pathname.startsWith("/visitas")) return "visits";
@@ -251,6 +249,9 @@ export function navForRole(
 
   return DASHBOARD_NAV.filter((item) => {
     if (!userHasPlanFeature(user, item.planFeature)) return false;
+    if (item.to === "/indicadores/ia") {
+      return user.role === "ADMIN";
+    }
     if (item.to === "/configuracoes") {
       return (
         user.role === "ADMIN" ||
@@ -286,6 +287,12 @@ const OFF_NAV_PLAN_FEATURES: { prefix: string; feature: PlanFeature }[] = [
 export function planFeatureForPath(pathname: string): PlanFeature | null {
   if (pathname === "/insights" || pathname.startsWith("/insights/")) {
     return "insights";
+  }
+  if (
+    pathname === "/indicadores/ia" ||
+    pathname.startsWith("/indicadores/ia/")
+  ) {
+    return "reports_ai";
   }
   // Prefixos mais específicos (relatórios avançados) antes do item «Relatórios».
   const offNav = OFF_NAV_PLAN_FEATURES.find(
