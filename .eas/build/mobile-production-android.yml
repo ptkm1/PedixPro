@@ -1,0 +1,38 @@
+# Build PedixPro Android a partir da raiz do monorepo (cwd = repo root).
+build:
+  name: PedixPro production Android
+  steps:
+    - eas/checkout
+    - eas/use_npm_token
+    - run:
+        name: Install monorepo and link Expo for CLI
+        command: bash apps/mobile/scripts/eas-prepare-monorepo.sh
+    - run:
+        name: Build @pedidos/shared
+        command: pnpm --filter @pedidos/shared run build
+    - run:
+        name: Build @pedidos/design-tokens
+        command: pnpm --filter @pedidos/design-tokens run build
+    - run:
+        name: Verify expo-router entry
+        working_directory: apps/mobile
+        command: |
+          node -e "const m=require('./package.json').main; if(m!=='expo-router/entry'&&m!=='./index.js'&&m!=='index.js'){console.error('main inválido:',m); process.exit(1)}; console.log('main OK:',m); console.log('cwd', process.cwd())"
+    - eas/resolve_build_config:
+        working_directory: apps/mobile
+    - run:
+        name: Expo prebuild (Android)
+        working_directory: apps/mobile
+        command: pnpm exec expo prebuild --no-install --platform android
+    - eas/configure_eas_update:
+        working_directory: apps/mobile
+        inputs:
+          throw_if_not_configured: false
+    - eas/inject_android_credentials:
+        working_directory: apps/mobile
+    - eas/configure_android_version:
+        working_directory: apps/mobile
+    - eas/run_gradle:
+        working_directory: apps/mobile
+    - eas/find_and_upload_build_artifacts:
+        working_directory: apps/mobile
