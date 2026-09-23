@@ -189,12 +189,6 @@ export function CustomersPage() {
     queryFn: () =>
       apiFetch<Array<{ id: string; name: string }>>("/admin/price-tables"),
   });
-  const { data: catalogProducts = [] } = useQuery({
-    queryKey: ["admin", "products", "names"],
-    queryFn: () =>
-      apiFetch<Array<{ id: string; name: string }>>("/admin/products"),
-    enabled: sheetOpen && Boolean(editing),
-  });
 
   const { data: pricingSettings } = useQuery({
     queryKey: ["admin", "pricing-settings"],
@@ -256,6 +250,12 @@ export function CustomersPage() {
   const [form, setForm] = useState<CustomerFormValues>(emptyCustomerForm());
   const [showValidation, setShowValidation] = useState(false);
   const [editing, setEditing] = useState<CustomerRecord | null>(null);
+  const { data: catalogProducts = [] } = useQuery({
+    queryKey: ["admin", "products", "names"],
+    queryFn: () =>
+      apiFetch<Array<{ id: string; name: string }>>("/admin/products"),
+    enabled: sheetOpen && Boolean(editing),
+  });
   const [sellerId, setSellerId] = useState("");
   const [defaultPriceTableId, setDefaultPriceTableId] = useState("");
   const [specialPrices, setSpecialPrices] = useState<

@@ -208,6 +208,14 @@ type EligibleOrder = {
   items: PayableItemRow[];
 };
 
+function payableSeller(
+  sellerId: string | null,
+  seller: { user: { name: string } } | null,
+): { sellerId: string; sellerName: string } | null {
+  if (!sellerId || !seller) return null;
+  return { sellerId, sellerName: seller.user.name };
+}
+
 async function eligibleEmitted(
   organizationId: string,
   skipIds: Set<string>,
@@ -229,19 +237,23 @@ async function eligibleEmitted(
       items: { select: itemSelect },
     },
   });
-  return orders.map((o) => {
+  return orders.flatMap((o) => {
+    const seller = payableSeller(o.sellerId, o.seller);
+    if (!seller) return [];
     const mapped = mapItems(o.items);
-    return {
-      orderId: o.id,
-      sellerId: o.sellerId,
-      sellerName: o.seller.user.name,
-      customerName: o.customer?.tradeName || o.customer?.name || "—",
-      orderNumber: o.orderNumber,
-      saleAmount: roundMoney(decToNum(o.totalAmount)),
-      commissionAmount: mapped.commissionAmount,
-      referenceDate: o.createdAt,
-      items: mapped.items,
-    };
+    return [
+      {
+        orderId: o.id,
+        sellerId: seller.sellerId,
+        sellerName: seller.sellerName,
+        customerName: o.customer?.tradeName || o.customer?.name || "—",
+        orderNumber: o.orderNumber,
+        saleAmount: roundMoney(decToNum(o.totalAmount)),
+        commissionAmount: mapped.commissionAmount,
+        referenceDate: o.createdAt,
+        items: mapped.items,
+      },
+    ];
   });
 }
 
@@ -290,19 +302,23 @@ async function eligibleInvoiced(
     },
   });
 
-  return orders.map((o) => {
+  return orders.flatMap((o) => {
+    const seller = payableSeller(o.sellerId, o.seller);
+    if (!seller) return [];
     const mapped = mapItems(o.items);
-    return {
-      orderId: o.id,
-      sellerId: o.sellerId,
-      sellerName: o.seller.user.name,
-      customerName: o.customer?.tradeName || o.customer?.name || "—",
-      orderNumber: o.orderNumber,
-      saleAmount: roundMoney(decToNum(o.totalAmount)),
-      commissionAmount: mapped.commissionAmount,
-      referenceDate: firstByOrder.get(o.id) ?? new Date(),
-      items: mapped.items,
-    };
+    return [
+      {
+        orderId: o.id,
+        sellerId: seller.sellerId,
+        sellerName: seller.sellerName,
+        customerName: o.customer?.tradeName || o.customer?.name || "—",
+        orderNumber: o.orderNumber,
+        saleAmount: roundMoney(decToNum(o.totalAmount)),
+        commissionAmount: mapped.commissionAmount,
+        referenceDate: firstByOrder.get(o.id) ?? new Date(),
+        items: mapped.items,
+      },
+    ];
   });
 }
 
@@ -367,11 +383,13 @@ async function eligibleSettled(
       }
     }
     if (!at) continue;
+    const seller = payableSeller(o.sellerId, o.seller);
+    if (!seller) continue;
     const mapped = mapItems(o.items);
     out.push({
       orderId: o.id,
-      sellerId: o.sellerId,
-      sellerName: o.seller.user.name,
+      sellerId: seller.sellerId,
+      sellerName: seller.sellerName,
       customerName: o.customer?.tradeName || o.customer?.name || "—",
       orderNumber: o.orderNumber,
       saleAmount: due,
@@ -492,8 +510,9 @@ export async function buildCommissionPayableReport(params: {
     const mapped = mapItems(row.order.items);
     const saleAmount = roundMoney(decToNum(row.saleAmount));
     const commissionAmount = roundMoney(decToNum(row.commissionAmount));
-    const sellerId = row.order.sellerId;
-    const sellerName = row.order.seller.user.name;
+    const seller = payableSeller(row.order.sellerId, row.order.seller);
+    if (!seller) continue;
+    const { sellerId, sellerName } = seller;
     const current = bySeller.get(sellerId) ?? {
       sellerId,
       sellerName,

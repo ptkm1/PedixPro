@@ -116,7 +116,7 @@ export function ProductFormPage() {
     handleSubmit,
     duplicateProduct,
     onCategoryChange,
-    pending;
+    pending,
     priceTablePrices,
     setPriceForTable,
     addPriceTableId,
