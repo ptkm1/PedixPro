@@ -360,7 +360,6 @@ export function useQuickSaleScreen() {
 
   useEffect(() => {
     setCart((prev) =>
-    setCart((prev) =>
       repriceCartLines(
         syncCartLinesWithProducts(prev, products, orgDefaultMaxDiscount),
         products,
