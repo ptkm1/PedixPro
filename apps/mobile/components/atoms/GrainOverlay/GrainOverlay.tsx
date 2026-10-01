@@ -14,7 +14,7 @@ export function GrainOverlay({ opacity = 0.18, style }: Props) {
   return (
     <Image
       pointerEvents="none"
-      source={require("../../../assets/noise-grain.png")}
+      source={require("../../../assets/noise-grain.webp")}
       style={[StyleSheet.absoluteFillObject, { opacity }, style]}
       resizeMode="repeat"
       accessibilityElementsHidden
