@@ -29,12 +29,8 @@
       "package": "com.pedixpro.app",
       "versionCode": 18,
       "googleServicesFile": "./google-services.json",
-      "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "usesCleartextTraffic": false
-    },
-    "androidNavigationBar": {
-      "enforceContrast": false
     },
     "web": {
       "favicon": "./assets/favicon.png",
