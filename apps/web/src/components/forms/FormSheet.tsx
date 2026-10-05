@@ -40,11 +40,12 @@ export function FormSheet({
       <SheetContent
         side="bottom"
         className={cn(
-          "glass !bg-[color:var(--glass-fill)] flex max-h-[90vh] w-full flex-col gap-0 rounded-t-2xl border-[color:var(--glass-border)] p-0",
+          "flex h-[min(92dvh,44rem)] w-full flex-col gap-0 overflow-hidden rounded-t-2xl border-border bg-background p-0 shadow-lg",
           contentClassName,
         )}
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <SheetHeader className="border-b border-border pr-12">
+        <SheetHeader className="shrink-0 border-b border-border pr-12">
           <SheetTitle>{title}</SheetTitle>
           {description ? (
             <SheetDescription>{description}</SheetDescription>
@@ -52,12 +53,12 @@ export function FormSheet({
         </SheetHeader>
         <div
           data-form-sheet-scroll
-          className="flex-1 overflow-y-auto px-4 py-4"
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
         >
           {children}
         </div>
         {footer ? (
-          <SheetFooter className="border-t border-border sm:flex-row sm:justify-end">
+          <SheetFooter className="shrink-0 border-t border-border sm:flex-row sm:justify-end">
             {footer}
           </SheetFooter>
         ) : null}
