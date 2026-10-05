@@ -917,21 +917,46 @@ export function useQuickSaleScreen() {
     setErr(null);
     if (!customerId) {
       setErr("Selecione o cliente do pedido.");
+      showToast({
+        message: "Selecione o cliente do pedido.",
+        tone: "danger",
+      });
       setTab("clientes");
       return;
     }
     if (!paymentConditionId) {
       setErr("Selecione a condição de pagamento.");
-      setTab("clientes");
+      showToast({
+        message: "Selecione a condição de pagamento.",
+        tone: "danger",
+      });
+      setTab("finalizar");
       return;
     }
     if (usableTables.length > 0 && !priceTableId) {
       setErr("Selecione a tabela de preço.");
-      setTab("clientes");
+      showToast({
+        message: "Selecione a tabela de preço.",
+        tone: "danger",
+      });
+      setTab("finalizar");
+      return;
+    }
+    if (creditBlockedCheckout) {
+      setErr("Pedido bloqueado pela política de crédito.");
+      showToast({
+        message: "Pedido bloqueado pela política de crédito.",
+        tone: "danger",
+      });
+      setTab("finalizar");
       return;
     }
     if (cartLines.length === 0) {
       setErr("Adicione produtos ao pedido.");
+      showToast({
+        message: "Adicione produtos ao pedido.",
+        tone: "danger",
+      });
       setTab("produtos");
       return;
     }
@@ -961,12 +986,13 @@ export function useQuickSaleScreen() {
     alert,
     cartLines,
     create,
+    creditBlockedCheckout,
     customerId,
     paymentConditionId,
     priceTableId,
-    usableTables.length,
     products,
-    notes,
+    showToast,
+    usableTables.length,
   ]);
 
   const openCustomerCredit = useCallback(() => {
@@ -1007,28 +1033,61 @@ export function useQuickSaleScreen() {
     (next: QuickSaleTab) => {
       if (next !== "clientes" && !customerId) {
         setErr("Selecione um cliente para continuar.");
+        showToast({
+          message: "Selecione um cliente para continuar.",
+          tone: "danger",
+        });
         setTab("clientes");
         return;
       }
       if (next === "finalizar" && cartLines.length === 0) {
         setErr("Adicione pelo menos um produto para continuar.");
+        showToast({
+          message: "Adicione pelo menos um produto para continuar.",
+          tone: "danger",
+        });
         setTab("produtos");
         return;
       }
-      if (next === "finalizar" && !paymentConditionId) {
-        setErr("Selecione a condição de pagamento.");
-        setTab("clientes");
-        return;
-      }
-      if (next === "finalizar" && usableTables.length > 0 && !priceTableId) {
-        setErr("Selecione a tabela de preço.");
-        setTab("clientes");
+      // Nunca resetar silenciosamente para Clientes: pagamento/tabela e
+      // crédito são resolvidos na própria aba Finalizar (CTA visível).
+      if (next === "finalizar") {
+        if (!paymentConditionId) {
+          setErr("Selecione a condição de pagamento para confirmar o pedido.");
+          showToast({
+            message: "Selecione a condição de pagamento na aba Finalizar.",
+            tone: "danger",
+          });
+        } else if (usableTables.length > 0 && !priceTableId) {
+          setErr("Selecione a tabela de preço para confirmar o pedido.");
+          showToast({
+            message: "Selecione a tabela de preço na aba Finalizar.",
+            tone: "danger",
+          });
+        } else if (creditBlockedCheckout) {
+          setErr("Pedido bloqueado pela política de crédito.");
+          showToast({
+            message: "Pedido bloqueado pela política de crédito.",
+            tone: "danger",
+          });
+        } else {
+          setErr(null);
+        }
+        setTab("finalizar");
         return;
       }
       setErr(null);
       setTab(next);
     },
-    [cartLines.length, customerId, paymentConditionId, priceTableId, usableTables.length],
+    [
+      cartLines.length,
+      creditBlockedCheckout,
+      customerId,
+      paymentConditionId,
+      priceTableId,
+      showToast,
+      usableTables.length,
+    ],
   );
 
   const emptyCatalogMessage =

@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import { InteractionManager } from "react-native";
 import { PRIVACY_LINKS } from "./privacy-preferences";
 
 export type LocationDisclosurePurpose =
@@ -34,7 +35,7 @@ const DISCLOSURES: Record<
   background_tracking: {
     title: "Ativar rastreamento de rota?",
     description:
-      "O PedixPro coletará sua localização precisa e enviará as coordenadas para a gestão da sua organização, para acompanhar suas rotas e visitas de trabalho. A coleta pode continuar em segundo plano, quando o app estiver fechado ou não estiver em uso, até você desativar este recurso. Detalhes: " +
+      "O PedixPro coletará sua localização precisa e enviará as coordenadas para a gestão da sua organização, para acompanhar rotas e visitas de trabalho. A coleta pode continuar em segundo plano, quando o app estiver fechado ou não estiver em uso, até você desativar este recurso. Em seguida o Android pedirá permissão de localização (incluindo o tempo todo / segundo plano). Detalhes: " +
       PRIVACY_LINKS.privacyPolicy,
     confirmLabel: "Ativar rastreamento",
   },
@@ -44,7 +45,7 @@ const DISCLOSURES: Record<
 const BACKGROUND_RUNTIME_DISCLOSURE = {
   title: "Permitir localização em segundo plano?",
   description:
-    "Para o rastreamento continuar com o app fechado ou fora de uso, o PedixPro precisa da permissão de localização em segundo plano. As coordenadas precisas serão enviadas à gestão da sua organização até você desativar o rastreamento. Detalhes: " +
+    "Para o rastreamento continuar com o app fechado ou fora de uso, o PedixPro precisa da permissão de localização em segundo plano (\"Permitir o tempo todo\"). As coordenadas precisas serão enviadas à gestão da sua organização até você desativar o rastreamento. Detalhes: " +
     PRIVACY_LINKS.privacyPolicy,
   confirmLabel: "Permitir em segundo plano",
 };
@@ -57,16 +58,36 @@ export type LocationPermissionResult = {
   declinedDisclosure?: boolean;
 };
 
+/**
+ * Garante que o modal in-app sumiu antes do prompt do SO.
+ * Sem isso o diálogo do Android pode abrir por cima do disclosure
+ * (setState do Confirm é assíncrono) e o Play rejeita por falta de
+ * declaração "imediatamente precedente".
+ */
+function waitForInAppDisclosureDismiss(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(resolve, 350);
+      });
+    });
+  });
+}
+
 async function confirmDisclosure(
   confirm: LocationConfirmFn,
   copy: { title: string; description: string; confirmLabel: string },
 ): Promise<boolean> {
-  return confirm({
+  const accepted = await confirm({
     title: copy.title,
     description: copy.description,
     confirmLabel: copy.confirmLabel,
     cancelLabel: "Agora não",
   });
+  if (accepted) {
+    await waitForInAppDisclosureDismiss();
+  }
+  return accepted;
 }
 
 /**
@@ -74,10 +95,10 @@ async function confirmDisclosure(
  * requestForeground/BackgroundPermissions (política Google Play).
  *
  * Ordem obrigatória:
- * 1) disclosure in-app → 2) consentimento → 3) runtime permission.
- * Se FG e BG forem necessários e FG ainda não estiver concedida, há um
- * segundo disclosure imediatamente antes do request de background
- * (o diálogo FG do SO não pode “interromper” a cadeia disclosure→BG).
+ * 1) disclosure in-app → 2) consentimento → 3) modal some → 4) runtime permission.
+ * Background: sempre um disclosure próprio imediatamente antes do
+ * requestBackgroundPermissions (o diálogo FG do SO não pode interromper
+ * a cadeia disclosure→BG).
  */
 export async function requestLocationPermissions(input: {
   purpose: LocationDisclosurePurpose;
@@ -115,9 +136,6 @@ export async function requestLocationPermissions(input: {
     };
   }
 
-  // Captura se o prompt FG do SO vai interromper a cadeia disclosure→BG.
-  const fgWasAlreadyGranted = fgOk;
-
   let foreground = fgCurrent.status;
   if (foreground !== Location.PermissionStatus.GRANTED) {
     const req = await Location.requestForegroundPermissionsAsync();
@@ -137,22 +155,19 @@ export async function requestLocationPermissions(input: {
     return { granted: true, foreground, background };
   }
 
-  // Se o prompt FG acabou de aparecer, o disclosure inicial já não está
-  // "imediatamente" antes do BG — reexibir disclosure específico de background.
-  // Se FG já estava concedida, o disclosure inicial permanece imediato ao BG.
-  if (!fgWasAlreadyGranted) {
-    const acceptedBg = await confirmDisclosure(
-      input.confirm,
-      BACKGROUND_RUNTIME_DISCLOSURE,
-    );
-    if (!acceptedBg) {
-      return {
-        granted: false,
-        foreground,
-        background,
-        declinedDisclosure: true,
-      };
-    }
+  // Sempre reexibir disclosure imediatamente antes do prompt BG do SO —
+  // política Play exige declaração imediatamente precedente a CADA request.
+  const acceptedBg = await confirmDisclosure(
+    input.confirm,
+    BACKGROUND_RUNTIME_DISCLOSURE,
+  );
+  if (!acceptedBg) {
+    return {
+      granted: false,
+      foreground,
+      background,
+      declinedDisclosure: true,
+    };
   }
 
   const reqBg = await Location.requestBackgroundPermissionsAsync();
