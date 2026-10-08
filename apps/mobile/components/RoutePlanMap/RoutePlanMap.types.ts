@@ -18,11 +18,11 @@ export type RoutePlanMapProps = {
   region: RoutePlanMapCoord & { latitudeDelta: number; longitudeDelta: number };
   followUser: boolean;
   /**
-   * Só true quando ACCESS_FINE_LOCATION já foi concedida após disclosure in-app.
-   * `showsUserLocation` no MapView dispara o prompt do Android no mount se true
-   * sem permissão — viola Prominent Disclosure (Play).
+   * Posição do vendedor já obtida após disclosure + runtime permission.
+   * Nunca usar `MapView.showsUserLocation` — no Android isso pede
+   * ACCESS_FINE_LOCATION no mount e viola Prominent Disclosure (Play).
    */
-  showsUserLocation?: boolean;
+  userCoordinate?: RoutePlanMapCoord | null;
   customers: RoutePlanMapCustomerPin[];
   polyCoords: RoutePlanMapCoord[];
   /** Cliente com visita em aberto — marcador destacado. */

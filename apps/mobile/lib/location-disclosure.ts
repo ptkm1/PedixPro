@@ -21,7 +21,7 @@ const DISCLOSURES: Record<
   foreground_map: {
     title: "Permitir localização?",
     description:
-      "O PedixPro precisa da sua localização precisa para mostrar o mapa de rota, clientes próximos e check-in de visitas enquanto o app estiver em uso. Os dados são usados só para a operação comercial da sua organização. Detalhes: " +
+      "O PedixPro coleta a sua localização precisa para mostrar o mapa de rota, clientes próximos e check-in de visitas enquanto o app estiver em uso. Os dados são usados só para a operação comercial da sua organização e não são vendidos. Detalhes: " +
       PRIVACY_LINKS.privacyPolicy,
     confirmLabel: "Continuar",
   },
@@ -35,7 +35,7 @@ const DISCLOSURES: Record<
   background_tracking: {
     title: "Ativar rastreamento de rota?",
     description:
-      "O PedixPro coletará sua localização precisa e enviará as coordenadas para a gestão da sua organização, para acompanhar rotas e visitas de trabalho. A coleta pode continuar em segundo plano, quando o app estiver fechado ou não estiver em uso, até você desativar este recurso. Em seguida o Android pedirá permissão de localização (incluindo o tempo todo / segundo plano). Detalhes: " +
+      "O PedixPro coleta e transmite a sua localização precisa para a gestão da sua organização acompanhar rotas e visitas de trabalho. A coleta pode continuar em segundo plano, quando o app estiver fechado ou não estiver em uso, até você desativar este recurso. Em seguida o sistema pedirá a permissão de localização. Detalhes: " +
       PRIVACY_LINKS.privacyPolicy,
     confirmLabel: "Ativar rastreamento",
   },
@@ -45,7 +45,7 @@ const DISCLOSURES: Record<
 const BACKGROUND_RUNTIME_DISCLOSURE = {
   title: "Permitir localização em segundo plano?",
   description:
-    "Para o rastreamento continuar com o app fechado ou fora de uso, o PedixPro precisa da permissão de localização em segundo plano (\"Permitir o tempo todo\"). As coordenadas precisas serão enviadas à gestão da sua organização até você desativar o rastreamento. Detalhes: " +
+    "O PedixPro coleta localização precisa mesmo quando o app está fechado ou não está em uso, para o rastreamento de rota continuar ativo. As coordenadas serão enviadas à gestão da sua organização até você desativar o rastreamento. Em seguida o Android pedirá \"Permitir o tempo todo\". Detalhes: " +
     PRIVACY_LINKS.privacyPolicy,
   confirmLabel: "Permitir em segundo plano",
 };
@@ -68,7 +68,8 @@ function waitForInAppDisclosureDismiss(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
       InteractionManager.runAfterInteractions(() => {
-        setTimeout(resolve, 350);
+        // Margem extra: Modal RN + animação Android costumam > 300ms.
+        setTimeout(resolve, 500);
       });
     });
   });
@@ -91,14 +92,10 @@ async function confirmDisclosure(
 }
 
 /**
- * Declaração em destaque imediatamente antes de qualquer
- * requestForeground/BackgroundPermissions (política Google Play).
- *
- * Ordem obrigatória:
- * 1) disclosure in-app → 2) consentimento → 3) modal some → 4) runtime permission.
- * Background: sempre um disclosure próprio imediatamente antes do
- * requestBackgroundPermissions (o diálogo FG do SO não pode interromper
- * a cadeia disclosure→BG).
+ * Único ponto que chama requestForeground/BackgroundPermissions.
+ * Ordem obrigatória (Play Prominent Disclosure):
+ * 1) disclosure in-app → 2) aceite explícito → 3) modal some → 4) runtime.
+ * Background: disclosure próprio imediatamente antes de requestBackground.
  */
 export async function requestLocationPermissions(input: {
   purpose: LocationDisclosurePurpose;
@@ -156,7 +153,7 @@ export async function requestLocationPermissions(input: {
   }
 
   // Sempre reexibir disclosure imediatamente antes do prompt BG do SO —
-  // política Play exige declaração imediatamente precedente a CADA request.
+  // o diálogo FG do SO não pode quebrar a cadeia disclosure→BG.
   const acceptedBg = await confirmDisclosure(
     input.confirm,
     BACKGROUND_RUNTIME_DISCLOSURE,

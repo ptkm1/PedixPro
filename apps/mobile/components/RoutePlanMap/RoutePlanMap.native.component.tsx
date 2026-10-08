@@ -17,7 +17,7 @@ export const RoutePlanMap = forwardRef<RoutePlanMapRef, RoutePlanMapProps>(funct
     style,
     region,
     followUser,
-    showsUserLocation = false,
+    userCoordinate = null,
     customers,
     polyCoords,
     activeVisitCustomerId,
@@ -56,8 +56,26 @@ export const RoutePlanMap = forwardRef<RoutePlanMapRef, RoutePlanMapProps>(funct
         provider={useGoogleProvider ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
         region={followUser ? region : undefined}
-        showsUserLocation={showsUserLocation}
+        // Nunca ligar showsUserLocation / my-location do Google Maps:
+        // no Android o SDK solicita ACCESS_FINE_LOCATION no mount.
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        followsUserLocation={false}
       >
+        {userCoordinate ? (
+          <Marker
+            coordinate={userCoordinate}
+            title="Você"
+            description="Sua posição atual"
+            zIndex={20}
+            tracksViewChanges={false}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <View style={styles.userDotOuter}>
+              <View style={styles.userDotInner} />
+            </View>
+          </Marker>
+        ) : null}
         {customers.map((c) => {
           const isActive = c.id === activeVisitCustomerId;
           const pinFill = c.hasSeller ? PIN_WITH_SELLER : PIN_WITHOUT_SELLER;
