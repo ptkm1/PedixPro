@@ -616,21 +616,62 @@ export default function QuickSaleScreen() {
           <Text style={styles.summaryLine}>
             Documento: {s.formatDoc(s.selectedCustomer)}
           </Text>
-          <Text style={styles.summaryLine}>
-            Pagamento:{" "}
-            {s.selectedPaymentCondition
-              ? `${s.selectedPaymentCondition.code} - ${s.selectedPaymentCondition.name}`
-              : "—"}
-          </Text>
-          {s.selectedPriceTable ? (
-            <Text style={styles.summaryLine}>
-              Tabela: {s.selectedPriceTable.name}
-            </Text>
-          ) : null}
           <Text style={styles.summaryLine}>Operação: 1 - VENDA</Text>
         </View>
       ) : null}
+
+      <Text style={[styles.fieldLabel, { marginTop: 8 }]}>
+        Condição de pagamento
+      </Text>
+      <Pressable
+        style={styles.selectBtn}
+        onPress={() => s.setPaymentPickerOpen(true)}
+      >
+        <Text style={styles.selectBtnTxt} numberOfLines={1}>
+          {s.selectedPaymentCondition
+            ? `${s.selectedPaymentCondition.code} - ${s.selectedPaymentCondition.name}`
+            : "Selecione…"}
+        </Text>
+        <ChevronDown size={18} color={colors.textSecondary} />
+      </Pressable>
+
+      {s.usableTables.length > 0 ? (
+        <>
+          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
+            Tabela de preço
+          </Text>
+          <Pressable
+            style={styles.selectBtn}
+            onPress={() => s.setPriceTablePickerOpen(true)}
+          >
+            <Text style={styles.selectBtnTxt} numberOfLines={1}>
+              {s.selectedPriceTable
+                ? s.selectedPriceTable.name
+                : "Selecione…"}
+            </Text>
+            <ChevronDown size={18} color={colors.textSecondary} />
+          </Pressable>
+        </>
+      ) : null}
+
       {creditBlock}
+      {s.creditBlockedCheckout ? (
+        <Text style={styles.warn}>
+          Pedido bloqueado pela política de crédito — o escritório precisa
+          liberar o cliente antes de confirmar.
+        </Text>
+      ) : null}
+      {!s.paymentConditionId ? (
+        <Text style={styles.warn}>
+          Selecione a condição de pagamento para confirmar o pedido.
+        </Text>
+      ) : null}
+      {s.usableTables.length > 0 && !s.priceTableId ? (
+        <Text style={styles.warn}>
+          Selecione a tabela de preço para confirmar o pedido.
+        </Text>
+      ) : null}
+
       {s.cartLines.length === 0 ? (
         <Text style={styles.warn}>Nenhum produto no carrinho.</Text>
       ) : (
