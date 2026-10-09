@@ -2,8 +2,8 @@
   "expo": {
     "name": "PedixPro",
     "slug": "pedidos-mobile",
-    "version": "1.0.3",
-    "orientation": "portrait",
+    "version": "1.0.8",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "scheme": "pedixpro",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pedixpro.app",
-      "buildNumber": "5",
+      "buildNumber": "22",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -27,9 +27,8 @@
         "backgroundColor": "#02445C"
       },
       "package": "com.pedixpro.app",
-      "versionCode": 5,
+      "versionCode": 20,
       "googleServicesFile": "./google-services.json",
-      "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "usesCleartextTraffic": false
     },
@@ -49,23 +48,26 @@
               "arm64-v8a"
             ],
             "enableMinifyInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enablePngCrunchInReleaseBuilds": true,
+            "extraProguardRules": "-allowaccessmodification\n-keepattributes SourceFile,LineNumberTable\n-keepattributes *Annotation*\n-keep class com.facebook.react.** { *; }\n-keep class com.facebook.hermes.** { *; }\n-keep class com.swmansion.** { *; }\n-keep class expo.modules.** { *; }\n-dontwarn com.facebook.react.**\n-dontwarn com.facebook.hermes.**"
           }
         }
       ],
+      "./plugins/withPlayConsoleAndroidFixes.js",
       "expo-document-picker",
       [
         "expo-camera",
         {
-          "cameraPermission": "Usamos a c\u00e2mara s\u00f3 para ler c\u00f3digos de barras ao registar vendas.",
+          "cameraPermission": "Usamos a câmara só para ler códigos de barras ao registar vendas.",
           "recordAudioAndroid": false
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "O PedixPro usa a sua localiza\u00e7\u00e3o em segundo plano para o gestor acompanhar a rota da equipa (uso profissional).",
-          "locationWhenInUsePermission": "O PedixPro usa a sua localiza\u00e7\u00e3o para o mapa de rota, check-in de visitas e rastreio.",
+          "locationAlwaysAndWhenInUsePermission": "O PedixPro usa a sua localização em segundo plano para o gestor acompanhar a rota da equipa (uso profissional).",
+          "locationWhenInUsePermission": "O PedixPro usa a sua localização para o mapa de rota, check-in de visitas e rastreio.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true
         }

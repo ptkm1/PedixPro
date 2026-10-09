@@ -14,7 +14,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { StyleSheet, View } from "react-native";
+import { InteractionManager, StyleSheet, View } from "react-native";
 
 type ConfirmContextValue = {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
@@ -35,7 +35,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     const resolve = resolveRef.current;
     resolveRef.current = null;
     setState(null);
-    resolve?.(result);
+    // Deferir o resolve para o Modal desmontar antes de callers (ex.:
+    // request*Permissions) abrirem o diálogo do SO por cima do disclosure.
+    requestAnimationFrame(() => {
+      InteractionManager.runAfterInteractions(() => {
+        resolve?.(result);
+      });
+    });
   }, []);
 
   const confirm = useCallback((options: ConfirmOptions) => {
