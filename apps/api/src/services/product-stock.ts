@@ -92,12 +92,7 @@ function shortageMessage(s: StockShortage): string {
   );
 }
 
-export async function assertSufficientStock(
-  organizationId: string,
-  items: OrderLine[],
-): Promise<void> {
-  if (items.length === 0) return;
-
+function aggregateQty(items: OrderLine[]): Map<string, number> {
   const qtyByProduct = new Map<string, number>();
   for (const item of items) {
     qtyByProduct.set(
@@ -105,7 +100,16 @@ export async function assertSufficientStock(
       (qtyByProduct.get(item.productId) ?? 0) + item.quantity,
     );
   }
+  return qtyByProduct;
+}
 
+export async function assertSufficientStock(
+  organizationId: string,
+  items: OrderLine[],
+): Promise<void> {
+  if (items.length === 0) return;
+
+  const qtyByProduct = aggregateQty(items);
   const products = await getProductStockLevels(
     organizationId,
     [...qtyByProduct.keys()],
@@ -123,6 +127,51 @@ export async function assertSufficientStock(
         sku: p.sku,
         available: p.stockQty,
         requested: qty,
+      });
+    }
+  }
+
+  if (shortages.length > 0) {
+    throw new StockError(
+      shortages.map(shortageMessage).join(" "),
+      shortages,
+    );
+  }
+}
+
+/**
+ * Valida estoque ao substituir itens de pedido já confirmado:
+ * considera que as quantidades antigas voltam ao saldo antes de baixar as novas.
+ */
+export async function assertSufficientStockForReplace(
+  organizationId: string,
+  previousItems: OrderLine[],
+  nextItems: OrderLine[],
+): Promise<void> {
+  if (nextItems.length === 0) return;
+
+  const oldBy = aggregateQty(previousItems);
+  const newBy = aggregateQty(nextItems);
+  const productIds = [
+    ...new Set([...oldBy.keys(), ...newBy.keys()]),
+  ];
+  const products = await getProductStockLevels(organizationId, productIds);
+  const byId = new Map(products.map((p) => [p.productId, p]));
+  const shortages: StockShortage[] = [];
+
+  for (const productId of productIds) {
+    const p = byId.get(productId);
+    if (!p?.blockSaleWhenOutOfStock) continue;
+    const oldQty = oldBy.get(productId) ?? 0;
+    const newQty = newBy.get(productId) ?? 0;
+    const availableAfterReturn = p.stockQty + oldQty;
+    if (availableAfterReturn < newQty) {
+      shortages.push({
+        productId,
+        name: p.name,
+        sku: p.sku,
+        available: availableAfterReturn,
+        requested: newQty,
       });
     }
   }
