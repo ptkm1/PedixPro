@@ -10,7 +10,11 @@ import {
     auditFromAuth,
 } from "../services/audit-log.js";
 import { buildAdminMobileRankingDashboard, buildSellerCommissionDashboard } from "../services/commission-dashboard.js";
-import { teamMemberSellerIds, sellerScopeWhere } from "../auth/org-roles.js";
+import {
+  assertSellerInScope,
+  teamMemberSellerIds,
+  sellerScopeWhere,
+} from "../auth/org-roles.js";
 import { buildSellerCustomerCreditSnapshot } from "../services/credit.js";
 import {
     createSaleOrder,
@@ -64,6 +68,7 @@ import {
     isStaffSaleActor,
     mobileOrderWhere,
     requireSellerActor,
+    resolveCustomerSellerId,
     resolveSaleSellerId,
 } from "../util/mobile-seller-access.js";
 import { resolveMobileReportSellerIds } from "../util/mobile-report-scope.js";
@@ -1063,12 +1068,18 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/customers", async (req, reply) => {
     const auth = req.auth!;
-    const sellerId = requireSellerActor(auth, reply);
-    if (!sellerId) return;
     const body = customerBodySchema.safeParse(req.body);
     if (!body.success) {
         return sendZodError(reply, body.error, req);
       }
+
+    const resolved = resolveCustomerSellerId(auth, body.data.sellerId, reply);
+    if (!resolved.ok) return;
+    const sellerId = resolved.sellerId;
+    if (sellerId && isStaffSaleActor(auth)) {
+      const ok = await assertSellerInScope(reply, auth, sellerId);
+      if (!ok) return;
+    }
 
     const registrationMode = await getCustomerRegistrationMode(
       auth.organizationId,
@@ -1083,7 +1094,6 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           data: {
             organizationId: auth.organizationId,
             code,
-            sellerId,
             approvalStatus,
             ...(approvalStatus === "APPROVED"
               ? {
@@ -1092,6 +1102,7 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
                 }
               : {}),
             ...toCustomerPrismaData(body.data),
+            sellerId,
           } as Prisma.CustomerUncheckedCreateInput,
         });
       });
@@ -1135,22 +1146,44 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch("/customers/:id", async (req, reply) => {
     const auth = req.auth!;
-    const sellerId = requireSellerActor(auth, reply);
-    if (!sellerId) return;
     const { id } = idParam.parse(req.params);
     const body = customerPatchSchema.safeParse(req.body);
     if (!body.success) {
         return sendZodError(reply, body.error, req);
       }
 
+    let customerWhere: Prisma.CustomerWhereInput = {
+      id,
+      organizationId: auth.organizationId,
+    };
+    if (auth.role === "ADMIN") {
+      // org inteira
+    } else if (auth.role === "MANAGER") {
+      customerWhere = {
+        ...customerWhere,
+        OR: [{ sellerId: null }, { seller: { managerUserId: auth.sub } }],
+      };
+    } else if (auth.sellerId) {
+      customerWhere = { ...customerWhere, sellerId: auth.sellerId };
+    } else {
+      return reply.status(403).send({ error: "Apenas vendedores" });
+    }
+
     const existing = await prisma.customer.findFirst({
-      where: {
-        id,
-        organizationId: auth.organizationId,
-        sellerId,
-      },
+      where: customerWhere,
     });
     if (!existing) return reply.status(404).send({ error: "Não encontrado" });
+
+    let nextSellerId: string | null | undefined;
+    if (isStaffSaleActor(auth) && body.data.sellerId !== undefined) {
+      const resolved = resolveCustomerSellerId(auth, body.data.sellerId, reply);
+      if (!resolved.ok) return;
+      nextSellerId = resolved.sellerId;
+      if (nextSellerId) {
+        const ok = await assertSellerInScope(reply, auth, nextSellerId);
+        if (!ok) return;
+      }
+    }
 
     const merged = {
       name: body.data.name ?? existing.name,
@@ -1236,9 +1269,12 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     try {
       const updated = await prisma.customer.update({
         where: { id },
-        data: toCustomerPrismaData(
-          complete.data,
-        ) as Prisma.CustomerUncheckedUpdateInput,
+        data: {
+          ...toCustomerPrismaData(
+            complete.data,
+          ),
+          ...(nextSellerId !== undefined ? { sellerId: nextSellerId } : {}),
+        } as Prisma.CustomerUncheckedUpdateInput,
       });
       await auditFromAuth(auth, {
         action: AUDIT_ACTION.UPDATE,

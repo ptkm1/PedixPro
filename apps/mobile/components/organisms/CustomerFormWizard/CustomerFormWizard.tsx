@@ -34,6 +34,8 @@ const DOC_OPTIONS = [
   { id: "CPF" as CustomerDocumentType, label: "CPF" },
 ];
 
+type SellerOption = { id: string; name: string };
+
 type Props = {
   step: number;
   form: CustomerFormValues;
@@ -45,6 +47,13 @@ type Props = {
   longitude?: number | null;
   onCaptureLocation?: () => void;
   locationLoading?: boolean;
+  /** Staff (ADM/Gestor): picker de vendedor responsável. */
+  showSellerPicker?: boolean;
+  sellerId?: string;
+  onSellerIdChange?: (sellerId: string) => void;
+  sellers?: SellerOption[];
+  sellersLoading?: boolean;
+  sellerError?: string;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -118,6 +127,12 @@ export function CustomerFormWizard({
   longitude,
   onCaptureLocation,
   locationLoading,
+  showSellerPicker,
+  sellerId = "",
+  onSellerIdChange,
+  sellers = [],
+  sellersLoading,
+  sellerError,
 }: Props) {
   const { colors } = useTheme();
   const { data: ufs = [] } = useIbgeUfs();
@@ -495,6 +510,29 @@ export function CustomerFormWizard({
   return (
     <View style={styles.gap}>
       <ThemedText variant="titleSm">Contato</ThemedText>
+
+      {showSellerPicker ? (
+        <>
+          <FormSelectField
+            label="Vendedor"
+            value={sellerId}
+            placeholder={
+              sellersLoading ? "Carregando vendedores…" : "Sem vendedor"
+            }
+            options={[
+              { value: "", label: "Sem vendedor" },
+              ...sellers.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+            onChange={(v) => onSellerIdChange?.(v)}
+            disabled={sellersLoading}
+            error={sellerError}
+          />
+          <ThemedText variant="caption" muted>
+            Opcional — atribui o cliente à carteira do vendedor.
+          </ThemedText>
+        </>
+      ) : null}
+
       <FieldLabel>Telefone *</FieldLabel>
       <ThemedTextInput
         invalid={!!errors.phone}

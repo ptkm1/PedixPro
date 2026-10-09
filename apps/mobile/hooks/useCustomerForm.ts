@@ -1,6 +1,8 @@
+import { useAuth } from "@/context/AuthContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { apiFetch } from "@/lib/api";
 import { requestLocationPermissions } from "@/lib/location-disclosure";
+import { canAssignSaleSeller } from "@/lib/seller-login-messages";
 import {
   fetchSellerCustomer,
   sellerOfflineStaleTime,
@@ -20,6 +22,8 @@ import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
+export type CustomerSellerOption = { id: string; name: string };
+
 function parseCoord(value: unknown): number | null {
   if (value == null) return null;
   const n = typeof value === "number" ? value : Number(value);
@@ -28,6 +32,7 @@ function parseCoord(value: unknown): number | null {
 
 export function useCustomerForm(customerId?: string) {
   const router = useRouter();
+  const { user } = useAuth();
   const { alert, confirm } = useConfirm();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
@@ -36,6 +41,9 @@ export function useCustomerForm(customerId?: string) {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [sellerId, setSellerId] = useState("");
+
+  const canPickSeller = Boolean(user?.role && canAssignSaleSeller(user.role));
 
   const { data: initial, isLoading } = useQuery({
     queryKey: ["seller", "customer", customerId],
@@ -44,12 +52,20 @@ export function useCustomerForm(customerId?: string) {
     enabled: !!customerId,
   });
 
+  const { data: sellers = [], isLoading: sellersLoading } = useQuery({
+    queryKey: ["seller", "sale-sellers"],
+    staleTime: sellerOfflineStaleTime,
+    queryFn: () => apiFetch<CustomerSellerOption[]>("/seller/sale-sellers"),
+    enabled: canPickSeller,
+  });
+
   useEffect(() => {
     setStep(0);
     if (!customerId) {
       setForm(emptyCustomerForm());
       setLatitude(null);
       setLongitude(null);
+      setSellerId("");
     }
   }, [customerId]);
 
@@ -58,6 +74,7 @@ export function useCustomerForm(customerId?: string) {
     setForm(customerToForm(initial));
     setLatitude(parseCoord(initial.latitude));
     setLongitude(parseCoord(initial.longitude));
+    setSellerId(initial.sellerId ?? "");
   }, [initial]);
 
   const patch = useCallback((p: Partial<CustomerFormValues>) => {
@@ -145,6 +162,9 @@ export function useCustomerForm(customerId?: string) {
       const payload = formToCustomerPayload(form, {
         latitude,
         longitude,
+        ...(canPickSeller
+          ? { sellerId: sellerId.trim() ? sellerId.trim() : null }
+          : {}),
       });
       if (customerId) {
         return apiFetch(`/seller/customers/${customerId}`, {
@@ -207,5 +227,10 @@ export function useCustomerForm(customerId?: string) {
     longitude,
     captureLocation,
     locationLoading,
+    canPickSeller,
+    sellerId,
+    setSellerId,
+    sellers,
+    sellersLoading,
   };
 }
