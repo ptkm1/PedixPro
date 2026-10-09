@@ -87,3 +87,28 @@ export function resolveSaleSellerId(
   void reply.status(403).send({ error: "Sem permissão para lançar venda" });
   return { ok: false };
 }
+
+/**
+ * Resolve o sellerId do cadastro de cliente no app mobile:
+ * - SELLER → sempre o próprio (ignora body)
+ * - ADMIN/MANAGER → body.sellerId opcional (null/omitido = sem vendedor, como na web)
+ */
+export function resolveCustomerSellerId(
+  auth: AccessPayload,
+  bodySellerId: string | null | undefined,
+  reply: FastifyReply,
+): { ok: true; sellerId: string | null } | { ok: false } {
+  if (auth.role === "SELLER") {
+    if (!auth.sellerId) {
+      void reply.status(403).send({ error: "Apenas vendedores" });
+      return { ok: false };
+    }
+    return { ok: true, sellerId: auth.sellerId };
+  }
+  if (auth.role === "ADMIN" || auth.role === "MANAGER") {
+    const raw = bodySellerId?.trim();
+    return { ok: true, sellerId: raw ? raw : null };
+  }
+  void reply.status(403).send({ error: "Sem permissão para cadastrar cliente" });
+  return { ok: false };
+}

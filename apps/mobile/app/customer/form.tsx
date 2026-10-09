@@ -43,6 +43,11 @@ export default function CustomerFormScreen() {
     longitude,
     captureLocation,
     locationLoading,
+    canPickSeller,
+    sellerId,
+    setSellerId,
+    sellers,
+    sellersLoading,
   } = useCustomerForm(customerId);
 
   const [showValidation, setShowValidation] = useState(false);
@@ -155,6 +160,11 @@ export default function CustomerFormScreen() {
             longitude={longitude}
             onCaptureLocation={() => void captureLocation()}
             locationLoading={locationLoading}
+            showSellerPicker={canPickSeller}
+            sellerId={sellerId}
+            onSellerIdChange={setSellerId}
+            sellers={sellers}
+            sellersLoading={sellersLoading}
           />
         )}
       </KeyboardForm>
