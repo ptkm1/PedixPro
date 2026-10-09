@@ -152,6 +152,7 @@ import {
     sellerAllowedProductIds,
 } from "../services/create-sale-order.js";
 import { reassignOrderSeller } from "../services/reassign-order-seller.js";
+import { updateSaleOrderItems } from "../services/update-sale-order-items.js";
 import { applyOrderSellerFilter } from "../util/order-seller-filter.js";
 import { checkCustomer, evaluateOrderCredit } from "../services/credit.js";
 import {
@@ -5872,6 +5873,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     ) {
       return reply.status(403).send({ error: "Sem permissão para criar pedidos" });
     }
+    const allowUnitPriceOverride = auth.role === "ADMIN";
     const body = z
       .object({
         sellerId: z.string().min(1).nullable().optional(),
@@ -5883,12 +5885,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
               productId: z.string(),
               quantity: z.number().int().positive(),
               discountPercent: z.number().min(0).max(100).optional(),
+              unitPrice: z.number().nonnegative().optional(),
             }),
           )
           .min(1),
       })
       .safeParse(req.body);
     if (!body.success) return sendZodError(reply, body.error, req);
+
+    if (
+      !allowUnitPriceOverride &&
+      body.data.items.some((i) => i.unitPrice != null)
+    ) {
+      return reply
+        .status(403)
+        .send({ error: "Somente administradores podem informar preço unitário" });
+    }
 
     const sellerId = body.data.sellerId?.trim() || null;
     if (sellerId) {
@@ -5917,7 +5929,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         sellerId,
         customerId: body.data.customerId,
         priceTableId: body.data.priceTableId ?? null,
-        items: body.data.items,
+        items: body.data.items.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          discountPercent: i.discountPercent,
+          ...(allowUnitPriceOverride && i.unitPrice != null
+            ? { unitPrice: i.unitPrice }
+            : {}),
+        })),
         allowedProductIds,
       });
       const credit = await evaluateOrderCredit({
@@ -6192,6 +6211,60 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         source: "admin",
         actorRole: auth.role,
         allowedProductIds,
+      });
+    } catch (e) {
+      if (replySaleCreateError(reply, e)) return;
+      throw e;
+    }
+  });
+
+  app.patch("/orders/:id/items", async (req, reply) => {
+    const auth = req.auth!;
+    if (!requireAdmin(reply, auth)) return;
+    if (
+      !(await canWriteEffectiveForUser(
+        auth.organizationId,
+        auth.sub,
+        auth.role,
+        "orders",
+      ))
+    ) {
+      return reply.status(403).send({ error: "Sem permissão para editar pedidos" });
+    }
+    const { id } = idParam.parse(req.params);
+    const body = z
+      .object({
+        items: z
+          .array(
+            z.object({
+              productId: z.string().min(1),
+              quantity: z.number().int().positive(),
+              unitPrice: z.number().nonnegative(),
+              discountPercent: z.number().min(0).max(100).optional(),
+            }),
+          )
+          .min(1),
+      })
+      .safeParse(req.body);
+    if (!body.success) return sendZodError(reply, body.error, req);
+
+    const scoped = await prisma.order.findFirst({
+      where: { id, ...orderScopeWhere(auth) },
+      select: { id: true },
+    });
+    if (!scoped) return reply.status(404).send({ error: "Pedido não encontrado" });
+
+    try {
+      return await updateSaleOrderItems({
+        organizationId: auth.organizationId,
+        orderId: id,
+        actorUserId: auth.sub,
+        items: body.data.items.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          discountPercent: i.discountPercent,
+        })),
       });
     } catch (e) {
       if (replySaleCreateError(reply, e)) return;

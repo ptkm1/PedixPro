@@ -1,6 +1,7 @@
 import { useAuth } from "@/auth/AuthContext";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { useConfirm } from "@/components/confirm";
+import { EditOrderItemsSheet } from "@/components/orders/EditOrderItemsSheet";
 import { ProductListCell } from "@/components/ProductCombobox";
 import { AppSelect } from "@/components/ui/app-select";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +33,7 @@ import {
   formatBrazilPhoneDigits,
 } from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, Printer } from "lucide-react";
+import { ArrowLeft, Download, Pencil, Printer } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -43,6 +44,12 @@ type OrderSituation = {
   active: boolean;
   mapsToCancel?: boolean;
 };
+
+const EDITABLE_ITEM_STATUSES = new Set([
+  "DRAFT",
+  "CONFIRMED",
+  "PENDING_CREDIT_APPROVAL",
+]);
 
 type Order = {
   id: string;
@@ -55,12 +62,14 @@ type Order = {
   creditHoldReasons?: unknown;
   createdAt: string;
   sellerId?: string | null;
+  customerId?: string | null;
+  priceTableId?: string | null;
   seller: {
     id?: string;
     user: { name: string; email: string; phone?: string | null };
   } | null;
   createdByUser?: { id: string; name: string; email: string } | null;
-  customer: { name: string; email: string | null } | null;
+  customer: { id?: string; name: string; email: string | null } | null;
   items: {
     id: string;
     productId?: string;
@@ -107,6 +116,7 @@ export function OrderDetailPage() {
   const qc = useQueryClient();
   const [pdfPending, setPdfPending] = useState(false);
   const [pdfErr, setPdfErr] = useState<string | null>(null);
+  const [editItemsOpen, setEditItemsOpen] = useState(false);
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["admin", "order", orderId],
@@ -163,6 +173,11 @@ export function OrderDetailPage() {
     canWriteOrders &&
     order &&
     EDITABLE_SELLER_STATUSES.has(order.status ?? "");
+
+  const canEditItems =
+    canWriteStage &&
+    Boolean(order) &&
+    EDITABLE_ITEM_STATUSES.has(order?.status ?? "");
 
   async function handlePrintPdf() {
     if (!orderId) return;
@@ -456,11 +471,24 @@ export function OrderDetailPage() {
       </div>
 
       <div className="surface-card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
           <h2 className="font-medium text-foreground">Itens</h2>
-          <span className="text-sm text-muted-foreground">
-            {order.items.length} {order.items.length === 1 ? "item" : "itens"}
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              {order.items.length} {order.items.length === 1 ? "item" : "itens"}
+            </span>
+            {canEditItems ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditItemsOpen(true)}
+              >
+                <Pencil className="size-4" />
+                Editar itens
+              </Button>
+            ) : null}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <Table>
@@ -514,6 +542,21 @@ export function OrderDetailPage() {
       <div className="surface-card p-6">
         <AuditLogPanel entityType="Order" entityId={order.id} take={40} />
       </div>
+
+      {canEditItems ? (
+        <EditOrderItemsSheet
+          open={editItemsOpen}
+          onOpenChange={setEditItemsOpen}
+          order={order}
+          onSaved={() => {
+            void qc.invalidateQueries({ queryKey: ["admin", "order", orderId] });
+            void qc.invalidateQueries({ queryKey: ["admin", "orders"] });
+            void qc.invalidateQueries({
+              queryKey: ["admin", "pending-credit-summary"],
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }
