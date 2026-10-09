@@ -151,6 +151,12 @@ export function useProductCatalogTileStyles(
           maxWidth: 76,
           zIndex: 3,
         },
+        qtyEditor: {
+          paddingHorizontal: variant === "list" ? 10 : 8,
+          paddingBottom: 10,
+          paddingTop: 2,
+          alignItems: variant === "list" ? "flex-end" : "center",
+        },
       }),
     [
       colors,

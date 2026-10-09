@@ -10,6 +10,7 @@ export function HorizontalProductRail(props: {
   favoriteIds: Set<string>;
   onToggleFavorite: (id: string) => void;
   onProductPress: (p: CatalogTileProduct) => void;
+  onQtyChange?: (p: CatalogTileProduct, qty: number) => void;
   qtyByProductId?: Record<string, number>;
   badgeBackgroundColor?: string;
 }) {
@@ -20,6 +21,7 @@ export function HorizontalProductRail(props: {
     favoriteIds,
     onToggleFavorite,
     onProductPress,
+    onQtyChange,
     qtyByProductId,
     badgeBackgroundColor,
   } = props;
@@ -41,6 +43,9 @@ export function HorizontalProductRail(props: {
               favorite={favoriteIds.has(p.id)}
               onToggleFavorite={() => onToggleFavorite(p.id)}
               onAddPress={() => onProductPress(p)}
+              onQtyChange={
+                onQtyChange ? (qty) => onQtyChange(p, qty) : undefined
+              }
               qtyInCart={qtyByProductId?.[p.id]}
               badgeBackgroundColor={badgeBackgroundColor}
             />

@@ -16,6 +16,7 @@ type Props = {
   favoriteIds: Set<string>;
   onToggleFavorite: (id: string) => void;
   onProductPress: (p: CatalogTileProduct) => void;
+  onQtyChange?: (p: CatalogTileProduct, qty: number) => void;
   qtyByProductId?: Record<string, number>;
   defaultExpanded?: boolean;
 };
@@ -30,6 +31,7 @@ export function CollapsibleCatalogSection({
   favoriteIds,
   onToggleFavorite,
   onProductPress,
+  onQtyChange,
   qtyByProductId,
   defaultExpanded = true,
 }: Props) {
@@ -68,6 +70,9 @@ export function CollapsibleCatalogSection({
                 favorite={favoriteIds.has(p.id)}
                 onToggleFavorite={() => onToggleFavorite(p.id)}
                 onAddPress={() => onProductPress(p)}
+                onQtyChange={
+                  onQtyChange ? (qty) => onQtyChange(p, qty) : undefined
+                }
                 qtyInCart={qtyByProductId?.[p.id]}
               />
             ))}
@@ -83,6 +88,9 @@ export function CollapsibleCatalogSection({
                 favorite={favoriteIds.has(p.id)}
                 onToggleFavorite={() => onToggleFavorite(p.id)}
                 onAddPress={() => onProductPress(p)}
+                onQtyChange={
+                  onQtyChange ? (qty) => onQtyChange(p, qty) : undefined
+                }
                 qtyInCart={qtyByProductId?.[p.id]}
               />
             ))}
