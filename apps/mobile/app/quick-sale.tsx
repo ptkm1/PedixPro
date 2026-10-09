@@ -6,6 +6,7 @@ import {
 import { AppToast } from "@/components/molecules/AppToast";
 import { CatalogFiltersModal } from "@/components/molecules/CatalogFiltersModal";
 import { CatalogViewModeToggle } from "@/components/molecules/CatalogViewModeToggle";
+import { QuantityStepper } from "@/components/molecules/QuantityStepper";
 import { CATALOG_SEARCH_PLACEHOLDER } from "@/lib/catalog-search";
 import type { QuickSaleTab } from "@/lib/sale/types";
 import { formatCustomerCode } from "@pedidos/shared";
@@ -13,8 +14,6 @@ import {
     ChevronDown,
     ChevronUp,
     ClipboardCheck,
-    Minus,
-    Plus,
     ScanBarcode,
     Search,
     ShoppingCart,
@@ -53,6 +52,10 @@ const TABS: { id: QuickSaleTab; label: string }[] = [
   { id: "finalizar", label: "Finalizar" },
 ];
 
+/** Altura aproximada de uma linha do carrinho no footer (nome + meta + stepper). */
+const CART_ROW_PEEK_H = 88;
+const CART_PEEK_ROWS = 3;
+
 export default function QuickSaleScreen() {
   const styles = useThemedStyles(createQuickSaleStyles);
   const { colors } = useTheme();
@@ -73,11 +76,17 @@ export default function QuickSaleScreen() {
     s.searchCustomers();
   };
 
+  const cartPeekMaxH = CART_ROW_PEEK_H * CART_PEEK_ROWS;
   const cartExpandedMaxH = Math.min(windowHeight * 0.4, 280);
+  const cartPanelMaxH = cartExpanded ? cartExpandedMaxH : cartPeekMaxH;
   const hasCart = s.cartLines.length > 0;
   const filterActive =
     catalog.categoryFilterIds.length > 0 ||
     catalog.supplierFilterIds.length > 0;
+
+  const setProductQty = (p: SaleProduct, qty: number) => {
+    s.setCartQty(p, qty);
+  };
 
   useEffect(() => {
     if (!hasCart) setCartExpanded(false);
@@ -91,17 +100,17 @@ export default function QuickSaleScreen() {
     const padBottom = Math.max(s.insets.bottom, 12);
     let h = 10 + padBottom + 56;
     if (s.err || s.creditBlockedCheckout) h += 28;
-    if (hasCart && s.tab === "produtos") h += 52;
-    if (hasCart && cartExpanded && s.tab === "produtos")
-      h += cartExpandedMaxH + 8;
+    if (hasCart && s.tab === "produtos") {
+      // Resumo + painel sempre visível (peek ~3 ou expandido) + gaps
+      h += 52 + cartPanelMaxH + 8;
+    }
     return h;
   }, [
     s.insets.bottom,
     s.err,
     s.creditBlockedCheckout,
     hasCart,
-    cartExpanded,
-    cartExpandedMaxH,
+    cartPanelMaxH,
     s.tab,
   ]);
 
@@ -577,6 +586,7 @@ export default function QuickSaleScreen() {
         favoriteIds={catalog.favoriteIds}
         onToggleFavorite={catalog.toggleFavorite}
         onProductPress={(p) => s.scheduleProductTap(p as SaleProduct)}
+        onQtyChange={(p, qty) => setProductQty(p as SaleProduct, qty)}
         qtyByProductId={s.cartQtyByProductId}
       />
 
@@ -590,6 +600,7 @@ export default function QuickSaleScreen() {
         favoriteIds={catalog.favoriteIds}
         onToggleFavorite={catalog.toggleFavorite}
         onProductPress={(p) => s.scheduleProductTap(p as SaleProduct)}
+        onQtyChange={(p, qty) => setProductQty(p as SaleProduct, qty)}
         qtyByProductId={s.cartQtyByProductId}
       />
 
@@ -719,6 +730,7 @@ export default function QuickSaleScreen() {
                 favorite={catalog.favoriteIds.has(p.id)}
                 onToggleFavorite={() => catalog.toggleFavorite(p.id)}
                 onAddPress={() => s.scheduleProductTap(p)}
+                onQtyChange={(qty) => setProductQty(p, qty)}
                 qtyInCart={s.cartQtyByProductId[p.id]}
               />
             )}
@@ -750,6 +762,11 @@ export default function QuickSaleScreen() {
                 <Pressable
                   style={styles.cartSummaryBtn}
                   onPress={() => setCartExpanded((v) => !v)}
+                  accessibilityLabel={
+                    cartExpanded
+                      ? "Recolher lista do carrinho"
+                      : "Expandir lista do carrinho"
+                  }
                 >
                   <ShoppingCart
                     size={18}
@@ -769,99 +786,75 @@ export default function QuickSaleScreen() {
                     <ChevronUp size={20} color={colors.textSecondary} />
                   )}
                 </Pressable>
-                {cartExpanded ? (
-                  <View
-                    style={[
-                      styles.cartExpandedPanel,
-                      { maxHeight: cartExpandedMaxH },
-                    ]}
+                <View
+                  style={[
+                    styles.cartExpandedPanel,
+                    { maxHeight: cartPanelMaxH },
+                  ]}
+                >
+                  <ScrollView
+                    style={styles.cartExpandedScroll}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
                   >
-                    <ScrollView
-                      style={styles.cartExpandedScroll}
-                      nestedScrollEnabled
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {s.cartLines.map((line) => (
-                        <View key={line.productId} style={styles.cartRow}>
-                          <View style={styles.cartMain}>
-                            <Text style={styles.cartName} numberOfLines={2}>
-                              {line.name}
+                    {s.cartLines.map((line) => (
+                      <View key={line.productId} style={styles.cartRow}>
+                        <View style={styles.cartMain}>
+                          <Text style={styles.cartName} numberOfLines={2}>
+                            {line.name}
+                          </Text>
+                          <Text style={styles.cartMeta}>
+                            R$ {fmtMoney(line.effectiveUnitPrice)}
+                            {line.discountPercent > 0
+                              ? ` · −${line.discountPercent}%`
+                              : ""}
+                            {" · "}Subtotal R${" "}
+                            {fmtMoney(s.cartLineTotal(line))}
+                          </Text>
+                          {line.priceTableName ? (
+                            <Text style={styles.cartMeta} numberOfLines={1}>
+                              Tabela: {line.priceTableName}
                             </Text>
+                          ) : null}
+                          {line.priceOriginLabel ? (
                             <Text style={styles.cartMeta}>
-                              R$ {fmtMoney(line.effectiveUnitPrice)}
-                              {line.discountPercent > 0
-                                ? ` · −${line.discountPercent}%`
-                                : ""}
-                              {" · "}Subtotal R${" "}
-                              {fmtMoney(s.cartLineTotal(line))}
+                              {line.priceOriginLabel}
                             </Text>
-                            {line.priceTableName ? (
-                              <Text style={styles.cartMeta} numberOfLines={1}>
-                                Tabela: {line.priceTableName}
-                              </Text>
-                            ) : null}
-                            {line.priceOriginLabel ? (
-                              <Text style={styles.cartMeta}>
-                                {line.priceOriginLabel}
-                              </Text>
-                            ) : null}
-                          </View>
-                          <View style={styles.cartActions}>
-                            <View style={styles.qtyRow}>
-                              <Pressable
-                                hitSlop={8}
-                                style={styles.iconBtn}
-                                onPress={() =>
-                                  s.bumpQty(s.cartProductStub(line), -1)
-                                }
-                              >
-                                <Minus
-                                  size={20}
-                                  color={colors.text}
-                                  strokeWidth={2.5}
-                                />
-                              </Pressable>
-                              <Text style={styles.qtyTxt}>{line.qty}</Text>
-                              <Pressable
-                                hitSlop={8}
-                                style={styles.iconBtn}
-                                onPress={() =>
-                                  s.bumpQty(s.cartProductStub(line), 1)
-                                }
-                              >
-                                <Plus
-                                  size={20}
-                                  color={colors.text}
-                                  strokeWidth={2.5}
-                                />
-                              </Pressable>
-                            </View>
-                            <Pressable
-                              style={[
-                                styles.discBtn,
-                                line.maxSellerDiscountPercent <= 0 &&
-                                  styles.discBtnDis,
-                              ]}
-                              disabled={line.maxSellerDiscountPercent <= 0}
-                              onPress={() => s.cycleDiscount(line.productId)}
-                            >
-                              <Text style={styles.discBtnTxt}>
-                                {line.maxSellerDiscountPercent <= 0
-                                  ? "Sem desc."
-                                  : `Desc. ${line.discountPercent}%`}
-                              </Text>
-                              {line.maxSellerDiscountPercent > 0 ? (
-                                <Text style={styles.discBtnHint}>
-                                  Máx. {line.maxSellerDiscountPercent}%
-                                </Text>
-                              ) : null}
-                            </Pressable>
-                          </View>
+                          ) : null}
                         </View>
-                      ))}
-                    </ScrollView>
-                  </View>
-                ) : null}
+                        <View style={styles.cartActions}>
+                          <QuantityStepper
+                            value={line.qty}
+                            min={0}
+                            onChange={(qty) =>
+                              s.setCartQty(s.cartProductStub(line), qty)
+                            }
+                          />
+                          <Pressable
+                            style={[
+                              styles.discBtn,
+                              line.maxSellerDiscountPercent <= 0 &&
+                                styles.discBtnDis,
+                            ]}
+                            disabled={line.maxSellerDiscountPercent <= 0}
+                            onPress={() => s.cycleDiscount(line.productId)}
+                          >
+                            <Text style={styles.discBtnTxt}>
+                              {line.maxSellerDiscountPercent <= 0
+                                ? "Sem desc."
+                                : `Desc. ${line.discountPercent}%`}
+                            </Text>
+                            {line.maxSellerDiscountPercent > 0 ? (
+                              <Text style={styles.discBtnHint}>
+                                Máx. {line.maxSellerDiscountPercent}%
+                              </Text>
+                            ) : null}
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
               </>
             ) : null}
 

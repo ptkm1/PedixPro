@@ -1,3 +1,4 @@
+import { QuantityStepper } from "@/components/molecules/QuantityStepper";
 import { ProductPriceDisplay } from "@/components/molecules/ProductPriceDisplay";
 import { useOrderSyncMode } from "@/hooks/useOrderSyncMode";
 import { useTheme } from "@/lib/theme";
@@ -20,6 +21,8 @@ export function ProductCatalogTile(props: {
   onToggleFavorite: () => void;
   onAddPress: () => void;
   qtyInCart?: number;
+  /** Quando no carrinho: altera quantidade (0 remove). */
+  onQtyChange?: (qty: number) => void;
   badgeBackgroundColor?: string;
   disabled?: boolean;
 }) {
@@ -31,6 +34,7 @@ export function ProductCatalogTile(props: {
     onToggleFavorite,
     onAddPress,
     qtyInCart,
+    onQtyChange,
     badgeBackgroundColor,
     disabled: disabledProp,
   } = props;
@@ -64,6 +68,8 @@ export function ProductCatalogTile(props: {
   const uri = product.imageUrl?.trim();
   const unitLabel = formatProductUnitLabel(product.attributes);
   const stockLabel = formatProductStockLabel(stockQty);
+  const inCart = qtyInCart != null && qtyInCart > 0;
+  const showQtyEditor = inCart && onQtyChange != null;
 
   const priceNode = (
     <ProductPriceDisplay
@@ -158,7 +164,7 @@ export function ProductCatalogTile(props: {
               </Text>
             </View>
           ) : null}
-          {qtyInCart != null && qtyInCart > 0 ? (
+          {inCart && !showQtyEditor ? (
             <View style={styles.badge}>
               <Text style={styles.badgeTxt}>{qtyInCart}</Text>
             </View>
@@ -194,6 +200,16 @@ export function ProductCatalogTile(props: {
           priceNode
         )}
       </Pressable>
+      {showQtyEditor ? (
+        <View style={styles.qtyEditor}>
+          <QuantityStepper
+            value={qtyInCart}
+            onChange={onQtyChange}
+            min={0}
+            compact
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

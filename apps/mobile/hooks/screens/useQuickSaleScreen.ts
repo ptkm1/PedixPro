@@ -360,7 +360,6 @@ export function useQuickSaleScreen() {
 
   useEffect(() => {
     setCart((prev) =>
-    setCart((prev) =>
       repriceCartLines(
         syncCartLinesWithProducts(prev, products, orgDefaultMaxDiscount),
         products,
@@ -562,6 +561,18 @@ export function useQuickSaleScreen() {
       return true;
     },
     [alert, cart, customerId, orgDefaultMaxDiscount, priceTableId, pricing, products],
+  );
+
+  /** Define quantidade absoluta (0 remove o item). */
+  const setCartQty = useCallback(
+    (p: SaleProduct, qty: number): boolean => {
+      const currentQty = cart[p.id]?.qty ?? 0;
+      const target = Math.floor(qty);
+      if (!Number.isFinite(target)) return false;
+      if (target === currentQty) return true;
+      return bumpQty(p, target - currentQty);
+    },
+    [bumpQty, cart],
   );
 
   const resolvePriceOptions = useCallback(
@@ -1091,6 +1102,7 @@ export function useQuickSaleScreen() {
     canAccessFinalize,
     canFinalize,
     bumpQty,
+    setCartQty,
     scheduleProductTap,
     cycleDiscount,
     priceTablePicker,
