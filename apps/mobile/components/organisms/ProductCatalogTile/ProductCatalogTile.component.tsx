@@ -51,14 +51,16 @@ export function ProductCatalogTile(props: {
   const isHighlighted =
     Boolean(product.highlighted) || isFeatured || isPromo;
 
-  const imgHeight = variant === "rail" ? 104 : variant === "list" ? 88 : 128;
+  const inCart = qtyInCart != null && qtyInCart > 0;
+  const imgHeight = variant === "rail" ? 112 : variant === "list" ? 88 : 136;
   const styles = useProductCatalogTileStyles({
     variant,
     tileWidth,
     imgHeight,
     badgeBackgroundColor,
     disabled,
-    highlighted: isHighlighted,
+    highlighted: isHighlighted && !inCart,
+    inCart,
   });
   const { colors } = useTheme();
   const { settings } = useOrderSyncMode();
@@ -68,7 +70,6 @@ export function ProductCatalogTile(props: {
   const uri = product.imageUrl?.trim();
   const unitLabel = formatProductUnitLabel(product.attributes);
   const stockLabel = formatProductStockLabel(stockQty);
-  const inCart = qtyInCart != null && qtyInCart > 0;
   const showQtyEditor = inCart && onQtyChange != null;
 
   const priceNode = (
@@ -174,12 +175,12 @@ export function ProductCatalogTile(props: {
           <Text style={styles.name} numberOfLines={variant === "list" ? 2 : 2}>
             {product.name}
           </Text>
-          {product.category ? (
+          {variant === "list" && product.category ? (
             <Text style={styles.catLine} numberOfLines={1}>
               {product.category.name}
             </Text>
           ) : null}
-          {unitLabel && variant !== "list" ? (
+          {unitLabel && variant === "list" ? (
             <Text style={styles.metaLine} numberOfLines={1}>
               {unitLabel}
             </Text>

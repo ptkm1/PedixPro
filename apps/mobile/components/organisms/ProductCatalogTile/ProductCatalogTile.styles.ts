@@ -9,6 +9,8 @@ export type ProductCatalogTileStylesParams = {
   badgeBackgroundColor?: string;
   disabled?: boolean;
   highlighted?: boolean;
+  /** Item já no carrinho — borda ciano distinta de promo/destaque. */
+  inCart?: boolean;
 };
 
 export function useProductCatalogTileStyles(
@@ -22,7 +24,15 @@ export function useProductCatalogTileStyles(
     badgeBackgroundColor = colors.primary,
     disabled = false,
     highlighted = false,
+    inCart = false,
   } = params;
+
+  const borderColor = inCart
+    ? colors.primary
+    : highlighted
+      ? colors.primary
+      : colors.border;
+  const borderWidth = inCart ? 2 : highlighted ? 1.5 : 1;
 
   return useMemo(
     () =>
@@ -31,8 +41,8 @@ export function useProductCatalogTileStyles(
           width: tileWidth,
           backgroundColor: colors.card,
           borderRadius: 14,
-          borderWidth: highlighted ? 1.5 : 1,
-          borderColor: highlighted ? colors.primary : colors.border,
+          borderWidth,
+          borderColor,
           overflow: "hidden",
           marginBottom: variant === "list" ? 10 : 2,
           opacity: disabled ? 0.55 : 1,
@@ -113,11 +123,10 @@ export function useProductCatalogTileStyles(
           }),
         },
         name: {
-          fontSize: variant === "list" ? 14 : 12,
+          fontSize: variant === "list" ? 14 : 13,
           fontWeight: "700",
           color: colors.text,
           lineHeight: variant === "list" ? 20 : 18,
-          minHeight: variant === "list" ? undefined : 36,
         },
         catLine: {
           marginTop: 2,
@@ -126,12 +135,17 @@ export function useProductCatalogTileStyles(
           color: colors.link,
         },
         metaLine: {
-          marginTop: 4,
+          marginTop: 2,
           fontSize: 11,
           fontWeight: "600",
           color: colors.textMuted,
         },
-        stockLine: { marginTop: 2, fontSize: 11, fontWeight: "700" },
+        stockLine: {
+          marginTop: 2,
+          fontSize: 10,
+          fontWeight: "600",
+          opacity: 0.85,
+        },
         price: {
           marginTop: 6,
           fontSize: variant === "list" ? 14 : 12,
@@ -166,6 +180,9 @@ export function useProductCatalogTileStyles(
       badgeBackgroundColor,
       disabled,
       highlighted,
+      inCart,
+      borderColor,
+      borderWidth,
     ],
   );
 }

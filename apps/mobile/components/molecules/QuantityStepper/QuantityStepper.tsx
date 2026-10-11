@@ -15,6 +15,8 @@ export type QuantityStepperProps = {
   onChange: (qty: number) => void;
   /** Mínimo aceito ao confirmar (0 = remover, se o caller tratar). Default 0. */
   min?: number;
+  /** Máximo opcional (ex.: estoque). Validação comercial continua no caller. */
+  max?: number;
   disabled?: boolean;
   /** Versão compacta para tiles do catálogo. */
   compact?: boolean;
@@ -24,12 +26,13 @@ export type QuantityStepperProps = {
 /**
  * Stepper de quantidade com +/- e input digitável (teclado numérico).
  * Enquanto o campo está focado, a digitação fica em rascunho e só confirma
- * no blur / submit — assim dá para digitar 80 sem passar por 8 unidades.
+ * no blur / submit — assim dá para digitar 120 sem passar por 1/12 unidades.
  */
 export function QuantityStepper({
   value,
   onChange,
   min = 0,
+  max,
   disabled = false,
   compact = false,
   style,
@@ -42,6 +45,14 @@ export function QuantityStepper({
     if (!focused) setDraft(String(value));
   }, [value, focused]);
 
+  const clamp = (n: number) => {
+    let next = Math.max(min, n);
+    if (typeof max === "number" && Number.isFinite(max)) {
+      next = Math.min(next, max);
+    }
+    return next;
+  };
+
   const commit = (raw: string) => {
     const cleaned = raw.replace(/\D/g, "");
     if (cleaned === "") {
@@ -53,7 +64,7 @@ export function QuantityStepper({
       setDraft(String(value));
       return;
     }
-    const next = Math.max(min, n);
+    const next = clamp(n);
     if (next !== value) onChange(next);
     setDraft(String(next));
   };
@@ -80,7 +91,7 @@ export function QuantityStepper({
             opacity: disabled || value <= min ? 0.4 : 1,
           },
         ]}
-        onPress={() => onChange(Math.max(min, value - 1))}
+        onPress={() => onChange(clamp(value - 1))}
         accessibilityLabel="Diminuir quantidade"
       >
         <Minus size={compact ? 16 : 20} color={colors.text} strokeWidth={2.5} />
@@ -118,17 +129,24 @@ export function QuantityStepper({
       />
       <Pressable
         hitSlop={8}
-        disabled={disabled}
+        disabled={
+          disabled ||
+          (typeof max === "number" && Number.isFinite(max) && value >= max)
+        }
         style={[
           styles.btn,
           {
             width: btnSize,
             height: btnSize,
             backgroundColor: colors.surfaceMuted,
-            opacity: disabled ? 0.4 : 1,
+            opacity:
+              disabled ||
+              (typeof max === "number" && Number.isFinite(max) && value >= max)
+                ? 0.4
+                : 1,
           },
         ]}
-        onPress={() => onChange(value + 1)}
+        onPress={() => onChange(clamp(value + 1))}
         accessibilityLabel="Aumentar quantidade"
       >
         <Plus size={compact ? 16 : 20} color={colors.text} strokeWidth={2.5} />

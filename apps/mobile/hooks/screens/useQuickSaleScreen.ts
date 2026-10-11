@@ -23,9 +23,9 @@ import {
 import {
   bumpCartQty,
   cartLineTotal,
-  cycleCartLineDiscount,
   LAST_CUSTOMER_STORAGE_KEY,
   PRODUCT_DOUBLE_TAP_MS,
+  setCartLineDiscount,
   syncCartLinesWithProducts,
   type BumpCartQtyOptions,
 } from "../../lib/sale/cart";
@@ -631,7 +631,15 @@ export function useQuickSaleScreen() {
       }
       // Já no carrinho: só altera quantidade (mantém tabela/preço escolhidos).
       if (cart[p.id]) {
-        bumpQty(p, qty);
+        const ok = bumpQty(p, qty);
+        if (ok) {
+          const next = (cart[p.id]?.qty ?? 0) + qty;
+          showToast({
+            message: `${p.name} · ${next} no carrinho`,
+            tone: "success",
+            durationMs: 1400,
+          });
+        }
         return;
       }
 
@@ -647,6 +655,11 @@ export function useQuickSaleScreen() {
           setPriceTablePicker(null);
           const ok = applyProductWithPriceOption(p, qty, options[0] ?? null);
           if (!ok) return;
+          showToast({
+            message: `${p.name} · adicionado`,
+            tone: "success",
+            durationMs: 1400,
+          });
           return;
         }
         setPriceTablePicker({
@@ -676,6 +689,7 @@ export function useQuickSaleScreen() {
       cart,
       customerId,
       resolvePriceOptions,
+      showToast,
     ],
   );
 
@@ -684,9 +698,16 @@ export function useQuickSaleScreen() {
       if (!priceTablePicker) return;
       const { product, qty } = priceTablePicker;
       setPriceTablePicker(null);
-      applyProductWithPriceOption(product, qty, option);
+      const ok = applyProductWithPriceOption(product, qty, option);
+      if (ok) {
+        showToast({
+          message: `${product.name} · adicionado`,
+          tone: "success",
+          durationMs: 1400,
+        });
+      }
     },
-    [applyProductWithPriceOption, priceTablePicker],
+    [applyProductWithPriceOption, priceTablePicker, showToast],
   );
 
   const closePriceTablePicker = useCallback(() => {
@@ -718,39 +739,38 @@ export function useQuickSaleScreen() {
     [beginAddProduct, customerId],
   );
 
-  const cycleDiscount = useCallback(
-    (productId: string) => {
-      setCart((prev) => {
-        const result = cycleCartLineDiscount(prev, productId);
-        const nextLine = result.cart[productId];
-        if (nextLine) {
-          const check = applySellerDiscountWithMinPrice({
-            catalogUnitPrice:
-              nextLine.catalogUnitPrice ?? nextLine.effectiveUnitPrice,
-            discountPercent: nextLine.discountPercent,
-            minPrice: nextLine.minPrice,
-          });
-          if (!check.ok) {
-            setErr(check.message);
-            void alert({
-              title: "Preço mínimo",
-              description: check.message,
-              tone: "danger",
-            });
-            return prev;
-          }
-        }
-        if (result.hitMax) {
-          showToast({
-            message: `Desconto máximo deste produto: ${result.maxPct}%`,
-            tone: "warning",
-          });
-        }
-        setErr(null);
-        return result.cart;
+  /** Aplica % de desconto manual (modal). 0 remove. Respeita máx. e preço mínimo. */
+  const applyLineDiscount = useCallback(
+    (productId: string, percent: number): boolean => {
+      const result = setCartLineDiscount(cart, productId, percent);
+      const nextLine = result.cart[productId];
+      if (!nextLine) return false;
+      if (result.exceededMax) {
+        showToast({
+          message: `Desconto máximo deste produto: ${result.maxPct}%`,
+          tone: "warning",
+        });
+      }
+      const check = applySellerDiscountWithMinPrice({
+        catalogUnitPrice:
+          nextLine.catalogUnitPrice ?? nextLine.effectiveUnitPrice,
+        discountPercent: result.appliedPercent,
+        minPrice: nextLine.minPrice,
       });
+      if (!check.ok) {
+        setErr(check.message);
+        void alert({
+          title: "Preço mínimo",
+          description: check.message,
+          tone: "danger",
+        });
+        return false;
+      }
+      setErr(null);
+      setCart(result.cart);
+      return true;
     },
-    [alert, showToast],
+    [alert, cart, showToast],
   );
 
   const onBarcode = useCallback(
@@ -1104,7 +1124,7 @@ export function useQuickSaleScreen() {
     bumpQty,
     setCartQty,
     scheduleProductTap,
-    cycleDiscount,
+    applyLineDiscount,
     priceTablePicker,
     confirmPriceTableOption,
     closePriceTablePicker,

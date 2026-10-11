@@ -78,15 +78,16 @@ export function syncCartLinesWithProducts(
         : line.catalogUnitPrice;
     const nl = keepTablePrice ? line.promotionLabel : (p.promotionLabel ?? null);
     const effMax = effectiveMaxDiscountForProduct(p, orgDefaultMaxDiscount);
-    const steps = discountStepsForMax(effMax);
-    const cappedDisc = Math.min(line.discountPercent, Math.max(...steps));
-    const snappedDisc = [...steps].filter((x) => x <= cappedDisc).pop() ?? 0;
+    const cappedDisc = Math.min(
+      Math.max(0, line.discountPercent),
+      Math.max(0, effMax),
+    );
     if (
       line.effectiveUnitPrice !== nu ||
       line.catalogUnitPrice !== nc ||
       line.promotionLabel !== nl ||
       line.maxSellerDiscountPercent !== effMax ||
-      line.discountPercent !== snappedDisc
+      line.discountPercent !== cappedDisc
     ) {
       next[id] = {
         ...line,
@@ -94,7 +95,7 @@ export function syncCartLinesWithProducts(
         catalogUnitPrice: nc,
         promotionLabel: nl,
         maxSellerDiscountPercent: effMax,
-        discountPercent: snappedDisc,
+        discountPercent: cappedDisc,
       };
       changed = true;
     }
@@ -124,9 +125,7 @@ export function bumpCartQty(
     return rest;
   }
   const prevDisc = cur?.discountPercent ?? 0;
-  const steps = discountStepsForMax(maxDisc);
-  const capped = Math.min(prevDisc, Math.max(...steps));
-  const snapped = [...steps].filter((x) => x <= capped).pop() ?? 0;
+  const cappedDisc = Math.min(Math.max(0, prevDisc), Math.max(0, maxDisc));
 
   const isNewOrReprice = !cur || optedUnit != null;
   const unit = optedUnit ?? cur?.effectiveUnitPrice ?? effective ?? 0;
@@ -156,7 +155,7 @@ export function bumpCartQty(
       effectiveUnitPrice: unit,
       catalogUnitPrice,
       promotionLabel,
-      discountPercent: snapped,
+      discountPercent: cappedDisc,
       maxSellerDiscountPercent: maxDisc,
       priceTableId,
       priceTableName,
@@ -170,7 +169,40 @@ export function bumpCartQty(
   };
 }
 
-/** Aplica desconto no ciclo de chips; nunca ultrapassa o máx. do produto. */
+/**
+ * Define desconto percentual livre (0–máx. do produto).
+ * Não acumula em passos de 5% — o caller valida preço mínimo.
+ */
+export function setCartLineDiscount(
+  cart: Record<string, CartLine>,
+  productId: string,
+  percent: number,
+): {
+  cart: Record<string, CartLine>;
+  appliedPercent: number;
+  maxPct: number;
+  exceededMax: boolean;
+} {
+  const line = cart[productId];
+  if (!line) {
+    return { cart, appliedPercent: 0, maxPct: 0, exceededMax: false };
+  }
+  const maxPct = Math.max(0, line.maxSellerDiscountPercent);
+  const raw = Number.isFinite(percent) ? percent : 0;
+  const exceededMax = raw > maxPct + 1e-9;
+  const appliedPercent = Math.min(maxPct, Math.max(0, raw));
+  return {
+    cart: {
+      ...cart,
+      [productId]: { ...line, discountPercent: appliedPercent },
+    },
+    appliedPercent,
+    maxPct,
+    exceededMax,
+  };
+}
+
+/** @deprecated Preferir setCartLineDiscount (modal). Mantido para compat. */
 export function cycleCartLineDiscount(
   cart: Record<string, CartLine>,
   productId: string,
