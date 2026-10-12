@@ -1,6 +1,6 @@
 import {
-  applySellerDiscountWithMinPrice,
-  pickDefaultPriceTableId,
+    applySellerDiscountWithMinPrice,
+    pickDefaultPriceTableId,
 } from "@pedidos/shared";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,50 +17,50 @@ import { apiFetch } from "../../lib/api";
 import { enqueueOfflineSale } from "../../lib/offline-outbox";
 import { postSellerSale } from "../../lib/offline-sale-sync";
 import {
-  buildRepeatSalePrefill,
-  resolveRepeatSaleSource,
+    buildRepeatSalePrefill,
+    resolveRepeatSaleSource,
 } from "../../lib/repeat-sale";
 import {
-  bumpCartQty,
-  cartLineTotal,
-  LAST_CUSTOMER_STORAGE_KEY,
-  PRODUCT_DOUBLE_TAP_MS,
-  setCartLineDiscount,
-  syncCartLinesWithProducts,
-  type BumpCartQtyOptions,
+    bumpCartQty,
+    cartLineTotal,
+    LAST_CUSTOMER_STORAGE_KEY,
+    PRODUCT_DOUBLE_TAP_MS,
+    setCartLineDiscount,
+    syncCartLinesWithProducts,
+    type BumpCartQtyOptions,
 } from "../../lib/sale/cart";
 import {
-  filterCachedPriceOptionsForProduct,
-  type CachedPriceTable,
+    filterCachedPriceOptionsForProduct,
+    type CachedPriceTable,
 } from "../../lib/sale/price-table-options";
 import {
-  repriceCartLines,
-  resolveProductForQty,
-  usablePriceTables,
+    repriceCartLines,
+    resolveProductForQty,
+    usablePriceTables,
 } from "../../lib/sale/pricing";
 import {
-  getCartStockBlockMessage,
-  getProductStockBlockMessage,
+    getCartStockBlockMessage,
+    getProductStockBlockMessage,
 } from "../../lib/sale/stock";
 import type {
-  CartLine,
-  CreditOverview,
-  PaymentCondition,
-  ProductPriceTableOption,
-  QuickSaleTab,
-  SaleCustomer,
-  SaleProduct,
+    CartLine,
+    CreditOverview,
+    PaymentCondition,
+    ProductPriceTableOption,
+    QuickSaleTab,
+    SaleCustomer,
+    SaleProduct,
 } from "../../lib/sale/types";
 import { canAssignSaleSeller } from "../../lib/seller-login-messages";
 import {
-  fetchSellerCustomers,
-  fetchSellerOrgSettings,
-  fetchSellerPriceTables,
-  fetchSellerPricingSync,
-  SELLER_PRICING_KEY,
-  sellerOfflineStaleTime,
-  SELLER_ORG_SETTINGS_KEY,
-  SELLER_PRICE_TABLES_KEY,
+    fetchSellerCustomers,
+    fetchSellerOrgSettings,
+    fetchSellerPriceTables,
+    fetchSellerPricingSync,
+    SELLER_PRICING_KEY,
+    sellerOfflineStaleTime,
+    SELLER_ORG_SETTINGS_KEY,
+    SELLER_PRICE_TABLES_KEY,
 } from "../../lib/seller-offline-queries";
 import { findProductByBarcode } from "../../lib/utils/barcode";
 import { computeCatalogTileWidths } from "../../lib/utils/catalog-layout";
@@ -68,8 +68,8 @@ import { useNetInfoOnline } from "../useNetInfoOnline";
 import { useOrderSyncMode } from "../useOrderSyncMode";
 import { useSellerProductCatalog } from "../useSellerProductCatalog";
 import {
-  DIRECT_SALE_OPTION_LABEL,
-  ORDER_SELLER_FILTER_DIRECT,
+    DIRECT_SALE_OPTION_LABEL,
+    ORDER_SELLER_FILTER_DIRECT,
 } from "@pedidos/shared";
 import { isNetworkError } from "../../lib/network-error";
 
@@ -817,6 +817,7 @@ export function useQuickSaleScreen() {
         id: line.productId,
         name: line.name,
         sku: line.sku ?? fromCatalog?.sku,
+        imageUrl: line.imageUrl ?? fromCatalog?.imageUrl,
         effectiveUnitPrice: line.effectiveUnitPrice,
         catalogUnitPrice: line.catalogUnitPrice,
         promotionLabel: line.promotionLabel,

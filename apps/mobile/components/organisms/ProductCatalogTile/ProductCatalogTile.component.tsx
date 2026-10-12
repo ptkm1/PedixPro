@@ -3,10 +3,10 @@ import { ProductPriceDisplay } from "@/components/molecules/ProductPriceDisplay"
 import { useOrderSyncMode } from "@/hooks/useOrderSyncMode";
 import { useTheme } from "@/lib/theme";
 import {
-  formatProductStockLabel,
-  formatProductUnitLabel,
-  isProductSaleBlockedByStock,
-  parseCatalogPriceDisplayMode,
+    formatProductStockLabel,
+    formatProductUnitLabel,
+    isProductSaleBlockedByStock,
+    parseCatalogPriceDisplayMode,
 } from "@pedidos/shared";
 import { Heart, Package } from "lucide-react-native";
 import { Image, Pressable, Text, View } from "react-native";
@@ -208,6 +208,7 @@ export function ProductCatalogTile(props: {
             onChange={onQtyChange}
             min={0}
             compact
+            fullWidth
           />
         </View>
       ) : null}

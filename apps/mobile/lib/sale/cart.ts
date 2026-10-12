@@ -77,6 +77,7 @@ export function syncCartLinesWithProducts(
         ? p.catalogUnitPrice
         : line.catalogUnitPrice;
     const nl = keepTablePrice ? line.promotionLabel : (p.promotionLabel ?? null);
+    const nImg = p.imageUrl?.trim() || line.imageUrl || null;
     const effMax = effectiveMaxDiscountForProduct(p, orgDefaultMaxDiscount);
     const cappedDisc = Math.min(
       Math.max(0, line.discountPercent),
@@ -86,6 +87,7 @@ export function syncCartLinesWithProducts(
       line.effectiveUnitPrice !== nu ||
       line.catalogUnitPrice !== nc ||
       line.promotionLabel !== nl ||
+      line.imageUrl !== nImg ||
       line.maxSellerDiscountPercent !== effMax ||
       line.discountPercent !== cappedDisc
     ) {
@@ -94,6 +96,7 @@ export function syncCartLinesWithProducts(
         effectiveUnitPrice: nu,
         catalogUnitPrice: nc,
         promotionLabel: nl,
+        imageUrl: nImg,
         maxSellerDiscountPercent: effMax,
         discountPercent: cappedDisc,
       };
@@ -155,6 +158,7 @@ export function bumpCartQty(
       effectiveUnitPrice: unit,
       catalogUnitPrice,
       promotionLabel,
+      imageUrl: p.imageUrl?.trim() || cur?.imageUrl || null,
       discountPercent: cappedDisc,
       maxSellerDiscountPercent: maxDisc,
       priceTableId,

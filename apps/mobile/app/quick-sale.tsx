@@ -8,6 +8,7 @@ import { CartBottomSheet } from "@/components/molecules/CartBottomSheet";
 import { CatalogFiltersModal } from "@/components/molecules/CatalogFiltersModal";
 import { CatalogViewModeToggle } from "@/components/molecules/CatalogViewModeToggle";
 import { DiscountSheet } from "@/components/molecules/DiscountSheet";
+import { OrderSummaryPanel } from "@/components/molecules/OrderSummaryPanel";
 import { CATALOG_SEARCH_PLACEHOLDER } from "@/lib/catalog-search";
 import type { CartLine, QuickSaleTab } from "@/lib/sale/types";
 import { formatCustomerCode } from "@pedidos/shared";
@@ -633,68 +634,29 @@ export default function QuickSaleScreen() {
       contentContainerStyle={styles.listContent}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.sectionTitle}>Resumo do pedido</Text>
-      {s.selectedCustomer ? (
-        <View style={styles.summaryBox}>
-          <Text style={styles.summaryLine}>
-            Cliente:{" "}
-            <Text style={styles.summaryStrong}>
-              {s.selectedCustomer.tradeName || s.selectedCustomer.name}
-            </Text>
-          </Text>
-          <Text style={styles.summaryLine}>
-            Documento: {s.formatDoc(s.selectedCustomer)}
-          </Text>
-          <Text style={styles.summaryLine}>
-            Pagamento:{" "}
-            {s.selectedPaymentCondition
-              ? `${s.selectedPaymentCondition.code} - ${s.selectedPaymentCondition.name}`
-              : "—"}
-          </Text>
-          {s.selectedPriceTable ? (
-            <Text style={styles.summaryLine}>
-              Tabela: {s.selectedPriceTable.name}
-            </Text>
-          ) : null}
-          <Text style={styles.summaryLine}>Operação: 1 - VENDA</Text>
-        </View>
-      ) : null}
-      {creditBlock}
-      {s.cartLines.length === 0 ? (
-        <Text style={styles.warn}>Nenhum produto no carrinho.</Text>
-      ) : (
-        s.cartLines.map((line) => (
-          <View key={line.productId} style={styles.cartRow}>
-            <View style={styles.cartMain}>
-              <Text style={styles.cartName}>{line.name}</Text>
-              <Text style={styles.cartMeta}>
-                {line.qty} × R$ {fmtMoney(line.effectiveUnitPrice)}
-                {line.discountPercent > 0 ? ` · −${line.discountPercent}%` : ""}
-              </Text>
-              {line.priceOriginLabel ? (
-                <Text style={styles.cartMeta}>{line.priceOriginLabel}</Text>
-              ) : null}
-            </View>
-            <Text style={styles.cartSummaryMeta}>
-              R$ {fmtMoney(s.cartLineTotal(line))}
-            </Text>
-          </View>
-        ))
-      )}
-      <Text style={styles.cartTotal}>Total R$ {fmtMoney(s.cartTotal)}</Text>
-      <View style={styles.notesField}>
-        <Text style={styles.fieldLabel}>Observação (opcional)</Text>
-        <ThemedTextInput
-          value={s.notes}
-          onChangeText={s.setNotes}
-          placeholder="Ex.: entregar pela manhã"
-          multiline
-          numberOfLines={3}
-          textAlignVertical="top"
-          maxLength={1000}
-          style={styles.notesInput}
-        />
-      </View>
+      <OrderSummaryPanel
+        customerName={
+          s.selectedCustomer
+            ? s.selectedCustomer.tradeName || s.selectedCustomer.name
+            : null
+        }
+        documentLabel={
+          s.selectedCustomer ? s.formatDoc(s.selectedCustomer) : null
+        }
+        paymentLabel={
+          s.selectedPaymentCondition
+            ? `${s.selectedPaymentCondition.code} - ${s.selectedPaymentCondition.name}`
+            : null
+        }
+        priceTableLabel={s.selectedPriceTable?.name ?? null}
+        lines={s.cartLines}
+        cartTotal={s.cartTotal}
+        itemCount={cartItemCount}
+        lineTotal={s.cartLineTotal}
+        notes={s.notes}
+        onNotesChange={s.setNotes}
+        creditSlot={creditBlock}
+      />
       <View style={{ height: 120 }} />
     </ScrollView>
   );

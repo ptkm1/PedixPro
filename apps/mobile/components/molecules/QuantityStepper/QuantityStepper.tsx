@@ -20,6 +20,8 @@ export type QuantityStepperProps = {
   disabled?: boolean;
   /** Versão compacta para tiles do catálogo. */
   compact?: boolean;
+  /** Ocupa 100% da largura do pai (input cresce no meio). */
+  fullWidth?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -35,11 +37,16 @@ export function QuantityStepper({
   max,
   disabled = false,
   compact = false,
+  fullWidth = false,
   style,
 }: QuantityStepperProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [draft, setDraft] = useState(String(value));
   const [focused, setFocused] = useState(false);
+
+  /** Fundo suave na cor da marca (primaryMuted no light é cinza genérico). */
+  const shellBg = isDark ? colors.primaryMuted : `${colors.primary}14`;
+  const shellBorder = isDark ? colors.primary : `${colors.primary}55`;
 
   useEffect(() => {
     if (!focused) setDraft(String(value));
@@ -69,33 +76,56 @@ export function QuantityStepper({
     setDraft(String(next));
   };
 
-  const btnSize = compact ? 30 : 36;
-  const inputMinW = compact ? 36 : 44;
-  const fontSize = compact ? 14 : 16;
+  const atMin = disabled || value <= min;
+  const atMax =
+    disabled ||
+    (typeof max === "number" && Number.isFinite(max) && value >= max);
+
+  const shellH = compact ? 34 : 40;
+  const btnSize = compact ? 24 : 32;
+  const inputW = compact ? 40 : 48;
+  const iconSize = compact ? 15 : 18;
+  const fontSize = compact ? 15 : 17;
+  const shellRadius = shellH / 2;
+  const btnRadius = btnSize / 2;
 
   return (
     <View
-      style={[styles.row, style]}
+      style={[
+        styles.shell,
+        compact && styles.shellCompact,
+        fullWidth && styles.shellFull,
+        {
+          height: shellH,
+          borderRadius: shellRadius,
+          backgroundColor: shellBg,
+          borderColor: shellBorder,
+        },
+        disabled && styles.shellDisabled,
+        style,
+      ]}
       accessibilityRole="adjustable"
       accessibilityLabel={`Quantidade ${value}`}
     >
       <Pressable
-        hitSlop={8}
-        disabled={disabled || value <= min}
+        hitSlop={compact ? 4 : 6}
+        disabled={atMin}
         style={[
           styles.btn,
           {
             width: btnSize,
             height: btnSize,
-            backgroundColor: colors.surfaceMuted,
-            opacity: disabled || value <= min ? 0.4 : 1,
+            borderRadius: btnRadius,
+            backgroundColor: colors.card,
+            opacity: atMin ? 0.35 : 1,
           },
         ]}
         onPress={() => onChange(clamp(value - 1))}
         accessibilityLabel="Diminuir quantidade"
       >
-        <Minus size={compact ? 16 : 20} color={colors.text} strokeWidth={2.5} />
+        <Minus size={iconSize} color={colors.primary} strokeWidth={2.75} />
       </Pressable>
+
       <TextInput
         value={focused ? draft : String(value)}
         editable={!disabled}
@@ -116,63 +146,88 @@ export function QuantityStepper({
         onSubmitEditing={() => commit(draft)}
         style={[
           styles.input,
+          fullWidth ? styles.inputFull : null,
           {
-            minWidth: inputMinW,
+            ...(fullWidth ? {} : { width: inputW }),
+            height: btnSize,
             fontSize,
-            color: colors.text,
-            borderColor: colors.inputBorder,
-            backgroundColor: colors.inputBackground,
-            opacity: disabled ? 0.5 : 1,
+            color: colors.primary,
+            opacity: disabled ? 0.45 : 1,
           },
         ]}
         accessibilityLabel="Quantidade"
       />
+
       <Pressable
-        hitSlop={8}
-        disabled={
-          disabled ||
-          (typeof max === "number" && Number.isFinite(max) && value >= max)
-        }
+        hitSlop={compact ? 4 : 6}
+        disabled={atMax}
         style={[
           styles.btn,
           {
             width: btnSize,
             height: btnSize,
-            backgroundColor: colors.surfaceMuted,
-            opacity:
-              disabled ||
-              (typeof max === "number" && Number.isFinite(max) && value >= max)
-                ? 0.4
-                : 1,
+            borderRadius: btnRadius,
+            backgroundColor: colors.primary,
+            opacity: atMax ? 0.35 : 1,
           },
         ]}
         onPress={() => onChange(clamp(value + 1))}
         accessibilityLabel="Aumentar quantidade"
       >
-        <Plus size={compact ? 16 : 20} color={colors.text} strokeWidth={2.5} />
+        <Plus
+          size={iconSize}
+          color={colors.primaryForeground}
+          strokeWidth={2.75}
+        />
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  shell: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
+    alignSelf: "center",
+    flexShrink: 0,
+    gap: 2,
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+  },
+  shellCompact: {
+    gap: 1,
+    paddingHorizontal: 2.5,
+  },
+  shellFull: {
+    alignSelf: "stretch",
+    width: "100%",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  shellDisabled: {
+    opacity: 0.55,
   },
   btn: {
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    flexGrow: 0,
+    flexShrink: 0,
   },
   input: {
     textAlign: "center",
-    fontWeight: "700",
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderRadius: 8,
-    minHeight: 36,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+    paddingHorizontal: 2,
+    paddingVertical: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  inputFull: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 36,
+    width: undefined,
   },
 });

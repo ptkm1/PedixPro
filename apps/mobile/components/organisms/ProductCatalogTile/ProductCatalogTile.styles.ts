@@ -166,10 +166,12 @@ export function useProductCatalogTileStyles(
           zIndex: 3,
         },
         qtyEditor: {
-          paddingHorizontal: variant === "list" ? 10 : 8,
+          paddingHorizontal: 10,
           paddingBottom: 10,
-          paddingTop: 2,
-          alignItems: variant === "list" ? "flex-end" : "center",
+          paddingTop: 4,
+          alignItems: "stretch",
+          alignSelf: "stretch",
+          width: "100%",
         },
       }),
     [

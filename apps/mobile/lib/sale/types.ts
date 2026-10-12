@@ -96,6 +96,8 @@ export type CartLine = {
   promotionLabel?: string | null;
   discountPercent: number;
   maxSellerDiscountPercent: number;
+  /** Miniatura do produto (quando disponível no catálogo). */
+  imageUrl?: string | null;
   /** Tabela escolhida no lançamento (null = auto-resolve / sem tabela). */
   priceTableId?: string | null;
   priceTableName?: string | null;
