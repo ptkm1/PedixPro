@@ -12,7 +12,10 @@ import {
   SELLER_PRICING_KEY,
   sellerOfflineStaleTime,
 } from "../lib/seller-offline-queries";
-import { matchesProductSearch } from "../lib/utils/product-search";
+import {
+  matchesProductSearch,
+  scoreProductSearch,
+} from "../lib/utils/product-search";
 import { useDebouncedValue } from "./useDebouncedValue";
 
 type Options = {
@@ -118,13 +121,20 @@ export function useSellerProductCatalog(options: Options = {}) {
       categoryFilterIds.length > 0 ? new Set(categoryFilterIds) : null;
     const supplierSet =
       supplierFilterIds.length > 0 ? new Set(supplierFilterIds) : null;
+    const q = debouncedProductQuery.trim();
     const list = products.filter((p) => {
       if (catSet && (!p.category || !catSet.has(p.category.id))) return false;
       if (supplierSet && (!p.supplier || !supplierSet.has(p.supplier.id)))
         return false;
-      return matchesProductSearch(p, debouncedProductQuery);
+      return matchesProductSearch(p, q);
     });
     return [...list].sort((a, b) => {
+      if (q) {
+        const sa = scoreProductSearch(a, q);
+        const sb = scoreProductSearch(b, q);
+        if (sb !== sa) return sb - sa;
+        return a.name.localeCompare(b.name, "pt");
+      }
       const ha =
         a.highlighted || a.featured || a.hasActivePromotion || a.promotionLabel
           ? 1

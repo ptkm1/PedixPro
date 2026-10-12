@@ -1,11 +1,12 @@
+import { QuantityStepper } from "@/components/molecules/QuantityStepper";
 import { ProductPriceDisplay } from "@/components/molecules/ProductPriceDisplay";
 import { useOrderSyncMode } from "@/hooks/useOrderSyncMode";
 import { useTheme } from "@/lib/theme";
 import {
-  formatProductStockLabel,
-  formatProductUnitLabel,
-  isProductSaleBlockedByStock,
-  parseCatalogPriceDisplayMode,
+    formatProductStockLabel,
+    formatProductUnitLabel,
+    isProductSaleBlockedByStock,
+    parseCatalogPriceDisplayMode,
 } from "@pedidos/shared";
 import { Heart, Package } from "lucide-react-native";
 import { Image, Pressable, Text, View } from "react-native";
@@ -20,6 +21,8 @@ export function ProductCatalogTile(props: {
   onToggleFavorite: () => void;
   onAddPress: () => void;
   qtyInCart?: number;
+  /** Quando no carrinho: altera quantidade (0 remove). */
+  onQtyChange?: (qty: number) => void;
   badgeBackgroundColor?: string;
   disabled?: boolean;
 }) {
@@ -31,6 +34,7 @@ export function ProductCatalogTile(props: {
     onToggleFavorite,
     onAddPress,
     qtyInCart,
+    onQtyChange,
     badgeBackgroundColor,
     disabled: disabledProp,
   } = props;
@@ -47,14 +51,16 @@ export function ProductCatalogTile(props: {
   const isHighlighted =
     Boolean(product.highlighted) || isFeatured || isPromo;
 
-  const imgHeight = variant === "rail" ? 104 : variant === "list" ? 88 : 128;
+  const inCart = qtyInCart != null && qtyInCart > 0;
+  const imgHeight = variant === "rail" ? 112 : variant === "list" ? 88 : 136;
   const styles = useProductCatalogTileStyles({
     variant,
     tileWidth,
     imgHeight,
     badgeBackgroundColor,
     disabled,
-    highlighted: isHighlighted,
+    highlighted: isHighlighted && !inCart,
+    inCart,
   });
   const { colors } = useTheme();
   const { settings } = useOrderSyncMode();
@@ -64,6 +70,7 @@ export function ProductCatalogTile(props: {
   const uri = product.imageUrl?.trim();
   const unitLabel = formatProductUnitLabel(product.attributes);
   const stockLabel = formatProductStockLabel(stockQty);
+  const showQtyEditor = inCart && onQtyChange != null;
 
   const priceNode = (
     <ProductPriceDisplay
@@ -158,7 +165,7 @@ export function ProductCatalogTile(props: {
               </Text>
             </View>
           ) : null}
-          {qtyInCart != null && qtyInCart > 0 ? (
+          {inCart && !showQtyEditor ? (
             <View style={styles.badge}>
               <Text style={styles.badgeTxt}>{qtyInCart}</Text>
             </View>
@@ -168,12 +175,12 @@ export function ProductCatalogTile(props: {
           <Text style={styles.name} numberOfLines={variant === "list" ? 2 : 2}>
             {product.name}
           </Text>
-          {product.category ? (
+          {variant === "list" && product.category ? (
             <Text style={styles.catLine} numberOfLines={1}>
               {product.category.name}
             </Text>
           ) : null}
-          {unitLabel && variant !== "list" ? (
+          {unitLabel && variant === "list" ? (
             <Text style={styles.metaLine} numberOfLines={1}>
               {unitLabel}
             </Text>
@@ -194,6 +201,17 @@ export function ProductCatalogTile(props: {
           priceNode
         )}
       </Pressable>
+      {showQtyEditor ? (
+        <View style={styles.qtyEditor}>
+          <QuantityStepper
+            value={qtyInCart}
+            onChange={onQtyChange}
+            min={0}
+            compact
+            fullWidth
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

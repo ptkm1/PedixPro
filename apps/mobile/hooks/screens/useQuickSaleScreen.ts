@@ -1,6 +1,6 @@
 import {
-  applySellerDiscountWithMinPrice,
-  pickDefaultPriceTableId,
+    applySellerDiscountWithMinPrice,
+    pickDefaultPriceTableId,
 } from "@pedidos/shared";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,50 +17,50 @@ import { apiFetch } from "../../lib/api";
 import { enqueueOfflineSale } from "../../lib/offline-outbox";
 import { postSellerSale } from "../../lib/offline-sale-sync";
 import {
-  buildRepeatSalePrefill,
-  resolveRepeatSaleSource,
+    buildRepeatSalePrefill,
+    resolveRepeatSaleSource,
 } from "../../lib/repeat-sale";
 import {
-  bumpCartQty,
-  cartLineTotal,
-  cycleCartLineDiscount,
-  LAST_CUSTOMER_STORAGE_KEY,
-  PRODUCT_DOUBLE_TAP_MS,
-  syncCartLinesWithProducts,
-  type BumpCartQtyOptions,
+    bumpCartQty,
+    cartLineTotal,
+    LAST_CUSTOMER_STORAGE_KEY,
+    PRODUCT_DOUBLE_TAP_MS,
+    setCartLineDiscount,
+    syncCartLinesWithProducts,
+    type BumpCartQtyOptions,
 } from "../../lib/sale/cart";
 import {
-  filterCachedPriceOptionsForProduct,
-  type CachedPriceTable,
+    filterCachedPriceOptionsForProduct,
+    type CachedPriceTable,
 } from "../../lib/sale/price-table-options";
 import {
-  repriceCartLines,
-  resolveProductForQty,
-  usablePriceTables,
+    repriceCartLines,
+    resolveProductForQty,
+    usablePriceTables,
 } from "../../lib/sale/pricing";
 import {
-  getCartStockBlockMessage,
-  getProductStockBlockMessage,
+    getCartStockBlockMessage,
+    getProductStockBlockMessage,
 } from "../../lib/sale/stock";
 import type {
-  CartLine,
-  CreditOverview,
-  PaymentCondition,
-  ProductPriceTableOption,
-  QuickSaleTab,
-  SaleCustomer,
-  SaleProduct,
+    CartLine,
+    CreditOverview,
+    PaymentCondition,
+    ProductPriceTableOption,
+    QuickSaleTab,
+    SaleCustomer,
+    SaleProduct,
 } from "../../lib/sale/types";
 import { canAssignSaleSeller } from "../../lib/seller-login-messages";
 import {
-  fetchSellerCustomers,
-  fetchSellerOrgSettings,
-  fetchSellerPriceTables,
-  fetchSellerPricingSync,
-  SELLER_PRICING_KEY,
-  sellerOfflineStaleTime,
-  SELLER_ORG_SETTINGS_KEY,
-  SELLER_PRICE_TABLES_KEY,
+    fetchSellerCustomers,
+    fetchSellerOrgSettings,
+    fetchSellerPriceTables,
+    fetchSellerPricingSync,
+    SELLER_PRICING_KEY,
+    sellerOfflineStaleTime,
+    SELLER_ORG_SETTINGS_KEY,
+    SELLER_PRICE_TABLES_KEY,
 } from "../../lib/seller-offline-queries";
 import { findProductByBarcode } from "../../lib/utils/barcode";
 import { computeCatalogTileWidths } from "../../lib/utils/catalog-layout";
@@ -68,8 +68,8 @@ import { useNetInfoOnline } from "../useNetInfoOnline";
 import { useOrderSyncMode } from "../useOrderSyncMode";
 import { useSellerProductCatalog } from "../useSellerProductCatalog";
 import {
-  DIRECT_SALE_OPTION_LABEL,
-  ORDER_SELLER_FILTER_DIRECT,
+    DIRECT_SALE_OPTION_LABEL,
+    ORDER_SELLER_FILTER_DIRECT,
 } from "@pedidos/shared";
 import { isNetworkError } from "../../lib/network-error";
 
@@ -360,7 +360,6 @@ export function useQuickSaleScreen() {
 
   useEffect(() => {
     setCart((prev) =>
-    setCart((prev) =>
       repriceCartLines(
         syncCartLinesWithProducts(prev, products, orgDefaultMaxDiscount),
         products,
@@ -564,6 +563,18 @@ export function useQuickSaleScreen() {
     [alert, cart, customerId, orgDefaultMaxDiscount, priceTableId, pricing, products],
   );
 
+  /** Define quantidade absoluta (0 remove o item). */
+  const setCartQty = useCallback(
+    (p: SaleProduct, qty: number): boolean => {
+      const currentQty = cart[p.id]?.qty ?? 0;
+      const target = Math.floor(qty);
+      if (!Number.isFinite(target)) return false;
+      if (target === currentQty) return true;
+      return bumpQty(p, target - currentQty);
+    },
+    [bumpQty, cart],
+  );
+
   const resolvePriceOptions = useCallback(
     async (productId: string): Promise<ProductPriceTableOption[]> => {
       if (!customerId) return [];
@@ -620,7 +631,15 @@ export function useQuickSaleScreen() {
       }
       // Já no carrinho: só altera quantidade (mantém tabela/preço escolhidos).
       if (cart[p.id]) {
-        bumpQty(p, qty);
+        const ok = bumpQty(p, qty);
+        if (ok) {
+          const next = (cart[p.id]?.qty ?? 0) + qty;
+          showToast({
+            message: `${p.name} · ${next} no carrinho`,
+            tone: "success",
+            durationMs: 1400,
+          });
+        }
         return;
       }
 
@@ -636,6 +655,11 @@ export function useQuickSaleScreen() {
           setPriceTablePicker(null);
           const ok = applyProductWithPriceOption(p, qty, options[0] ?? null);
           if (!ok) return;
+          showToast({
+            message: `${p.name} · adicionado`,
+            tone: "success",
+            durationMs: 1400,
+          });
           return;
         }
         setPriceTablePicker({
@@ -665,6 +689,7 @@ export function useQuickSaleScreen() {
       cart,
       customerId,
       resolvePriceOptions,
+      showToast,
     ],
   );
 
@@ -673,9 +698,16 @@ export function useQuickSaleScreen() {
       if (!priceTablePicker) return;
       const { product, qty } = priceTablePicker;
       setPriceTablePicker(null);
-      applyProductWithPriceOption(product, qty, option);
+      const ok = applyProductWithPriceOption(product, qty, option);
+      if (ok) {
+        showToast({
+          message: `${product.name} · adicionado`,
+          tone: "success",
+          durationMs: 1400,
+        });
+      }
     },
-    [applyProductWithPriceOption, priceTablePicker],
+    [applyProductWithPriceOption, priceTablePicker, showToast],
   );
 
   const closePriceTablePicker = useCallback(() => {
@@ -707,39 +739,38 @@ export function useQuickSaleScreen() {
     [beginAddProduct, customerId],
   );
 
-  const cycleDiscount = useCallback(
-    (productId: string) => {
-      setCart((prev) => {
-        const result = cycleCartLineDiscount(prev, productId);
-        const nextLine = result.cart[productId];
-        if (nextLine) {
-          const check = applySellerDiscountWithMinPrice({
-            catalogUnitPrice:
-              nextLine.catalogUnitPrice ?? nextLine.effectiveUnitPrice,
-            discountPercent: nextLine.discountPercent,
-            minPrice: nextLine.minPrice,
-          });
-          if (!check.ok) {
-            setErr(check.message);
-            void alert({
-              title: "Preço mínimo",
-              description: check.message,
-              tone: "danger",
-            });
-            return prev;
-          }
-        }
-        if (result.hitMax) {
-          showToast({
-            message: `Desconto máximo deste produto: ${result.maxPct}%`,
-            tone: "warning",
-          });
-        }
-        setErr(null);
-        return result.cart;
+  /** Aplica % de desconto manual (modal). 0 remove. Respeita máx. e preço mínimo. */
+  const applyLineDiscount = useCallback(
+    (productId: string, percent: number): boolean => {
+      const result = setCartLineDiscount(cart, productId, percent);
+      const nextLine = result.cart[productId];
+      if (!nextLine) return false;
+      if (result.exceededMax) {
+        showToast({
+          message: `Desconto máximo deste produto: ${result.maxPct}%`,
+          tone: "warning",
+        });
+      }
+      const check = applySellerDiscountWithMinPrice({
+        catalogUnitPrice:
+          nextLine.catalogUnitPrice ?? nextLine.effectiveUnitPrice,
+        discountPercent: result.appliedPercent,
+        minPrice: nextLine.minPrice,
       });
+      if (!check.ok) {
+        setErr(check.message);
+        void alert({
+          title: "Preço mínimo",
+          description: check.message,
+          tone: "danger",
+        });
+        return false;
+      }
+      setErr(null);
+      setCart(result.cart);
+      return true;
     },
-    [alert, showToast],
+    [alert, cart, showToast],
   );
 
   const onBarcode = useCallback(
@@ -786,6 +817,7 @@ export function useQuickSaleScreen() {
         id: line.productId,
         name: line.name,
         sku: line.sku ?? fromCatalog?.sku,
+        imageUrl: line.imageUrl ?? fromCatalog?.imageUrl,
         effectiveUnitPrice: line.effectiveUnitPrice,
         catalogUnitPrice: line.catalogUnitPrice,
         promotionLabel: line.promotionLabel,
@@ -1091,8 +1123,9 @@ export function useQuickSaleScreen() {
     canAccessFinalize,
     canFinalize,
     bumpQty,
+    setCartQty,
     scheduleProductTap,
-    cycleDiscount,
+    applyLineDiscount,
     priceTablePicker,
     confirmPriceTableOption,
     closePriceTablePicker,

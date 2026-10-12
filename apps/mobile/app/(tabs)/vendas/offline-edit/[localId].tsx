@@ -3,10 +3,10 @@ import { ThemedCard } from "@/components/atoms/ThemedCard";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { fmtMoney } from "@/components/atoms/formatMoney";
 import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
+import { QuantityStepper } from "@/components/molecules/QuantityStepper";
 import { useOfflineEditScreen } from "@/hooks/screens/useOfflineEditScreen";
 import { useTheme } from "@/lib/theme";
 import { useLocalSearchParams } from "expo-router";
-import { Minus, Plus } from "lucide-react-native";
 import {
   ActivityIndicator,
   Pressable,
@@ -68,37 +68,11 @@ export default function OfflineEditScreen() {
                       {" · "}Subtotal R$ {fmtMoney(lineTotal)}
                     </ThemedText>
                     <View style={styles.rowActions}>
-                      <View style={styles.qtyRow}>
-                        <Pressable
-                          hitSlop={8}
-                          style={styles.iconBtn}
-                          onPress={() =>
-                            s.setQty(line.productId, line.quantity - 1)
-                          }
-                        >
-                          <Minus
-                            size={20}
-                            color={colors.text}
-                            strokeWidth={2.5}
-                          />
-                        </Pressable>
-                        <ThemedText style={styles.qtyTxt}>
-                          {line.quantity}
-                        </ThemedText>
-                        <Pressable
-                          hitSlop={8}
-                          style={styles.iconBtn}
-                          onPress={() =>
-                            s.setQty(line.productId, line.quantity + 1)
-                          }
-                        >
-                          <Plus
-                            size={20}
-                            color={colors.text}
-                            strokeWidth={2.5}
-                          />
-                        </Pressable>
-                      </View>
+                      <QuantityStepper
+                        value={line.quantity}
+                        min={1}
+                        onChange={(qty) => s.setQty(line.productId, qty)}
+                      />
                       <Pressable
                         onPress={() => s.removeLine(line.productId)}
                         hitSlop={8}
@@ -144,19 +118,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-  },
-  qtyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  iconBtn: {
-    padding: 4,
-  },
-  qtyTxt: {
-    minWidth: 28,
-    textAlign: "center",
-    fontWeight: "700",
-    fontSize: 16,
   },
 });

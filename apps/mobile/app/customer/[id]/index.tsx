@@ -2,40 +2,38 @@ import { ThemedButton } from "@/components/atoms/ThemedButton";
 import { ThemedCard } from "@/components/atoms/ThemedCard";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
+import { DeliveryRecipientCard } from "@/components/molecules/DeliveryRecipientCard";
 import { QuickAction } from "@/components/molecules/QuickAction";
 import {
-  fetchSellerCustomer,
-  sellerOfflineStaleTime,
+    fetchSellerCustomer,
+    sellerOfflineStaleTime,
 } from "@/lib/seller-offline-queries";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import { radiiPx } from "@pedidos/design-tokens";
 import type { CustomerRecord } from "@pedidos/shared";
 import {
-  formatCepMask,
-  formatCnpjMask,
-  formatCpfMask,
-  formatStructuredAddress,
-  isStateRegistrationUnavailable,
+    formatCnpjMask,
+    formatCpfMask,
+    isStateRegistrationUnavailable,
 } from "@pedidos/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-  CreditCard,
-  Mail,
-  MapPin,
-  Pencil,
-  Phone,
-  ShoppingCart,
-  User,
+    CreditCard,
+    Mail,
+    Pencil,
+    Phone,
+    ShoppingCart,
+    User,
 } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
-  Linking,
-  Pressable,
-  StyleSheet,
-  View,
+    ActivityIndicator,
+    Linking,
+    Pressable,
+    StyleSheet,
+    View,
 } from "react-native";
 
 function formatDoc(c: CustomerRecord): string {
@@ -145,12 +143,6 @@ export default function CustomerHubScreen() {
     queryFn: () => fetchSellerCustomer(id!),
     enabled: !!id,
   });
-
-  const address =
-    customer != null
-      ? (formatStructuredAddress(customer) ??
-        ([customer.city, customer.state].filter(Boolean).join(" / ") || null))
-      : null;
 
   const ie =
     customer?.stateRegistration?.trim() &&
@@ -366,24 +358,17 @@ export default function CustomerHubScreen() {
             </Section>
           )}
 
-          {address || customer.addressNote ? (
-            <Section icon={MapPin} title="Endereço">
-              {address ? <InfoRow label="Local" value={address} /> : null}
-              {customer.addressNote ? (
-                <InfoRow label="Complemento" value={customer.addressNote} />
-              ) : null}
-              {customer.cep ? (
-                <InfoRow
-                  label="CEP"
-                  value={
-                    customer.cep.replace(/\D/g, "").length === 8
-                      ? formatCepMask(customer.cep)
-                      : customer.cep
-                  }
-                />
-              ) : null}
-            </Section>
-          ) : null}
+          <View style={styles.addressBlock}>
+            <DeliveryRecipientCard
+              customer={customer}
+              sectionTitle="Endereço"
+            />
+            {customer.addressNote?.trim() ? (
+              <ThemedText variant="bodySm" muted style={styles.addressNote}>
+                Complemento: {customer.addressNote.trim()}
+              </ThemedText>
+            ) : null}
+          </View>
 
           <Section icon={User} title="Cadastro">
             <InfoRow label={docLabel(customer)} value={formatDoc(customer)} />
@@ -495,4 +480,6 @@ const styles = StyleSheet.create({
   infoRow: { gap: 0 },
   quickLinks: { flexDirection: "row", gap: 10, marginTop: 4 },
   flex: { flex: 1 },
+  addressBlock: { gap: 8 },
+  addressNote: { paddingHorizontal: 2 },
 });

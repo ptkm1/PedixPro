@@ -1,25 +1,17 @@
-import { fmtMoney } from "@/components/atoms/formatMoney";
-import { ThemedButton } from "@/components/atoms/ThemedButton";
-import { ThemedCard } from "@/components/atoms/ThemedCard";
 import { ThemedText } from "@/components/atoms/ThemedText";
 import { MobileHeader, MobileScreen, SafeScreen } from "@/components/layout";
-import { MoneyLabel } from "@/components/molecules/MoneyLabel";
+import { SaleDetailPanel } from "@/components/molecules/SaleDetailPanel";
 import { useSaleDetailScreen } from "@/hooks/screens/useSaleDetailScreen";
 import { useTheme } from "@/lib/theme";
-import { formatBrazilPhoneDigits } from "@pedidos/shared";
+import { colorWithAlpha } from "@/lib/theme/colorAlpha";
+import { FileText, RotateCcw } from "lucide-react-native";
 import {
-  orderStatusBadgeLabel,
-  orderStatusDetailLabel,
-} from "@/lib/utils/order-status";
-import { FileText, RotateCcw, Share2 } from "lucide-react-native";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
-
-function orderCodeLabel(order: {
-  orderNumber?: number | null;
-}): string {
-  if (order.orderNumber != null) return String(order.orderNumber);
-  return "—";
-}
+    ActivityIndicator,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
 
 export default function SaleDetailScreen() {
   const { colors } = useTheme();
@@ -46,173 +38,140 @@ export default function SaleDetailScreen() {
           noBottomInset
           contentContainerStyle={styles.content}
         >
-          <View style={styles.hero}>
-            <ThemedText variant="title">{orderCodeLabel(order)}</ThemedText>
-            <View
-              style={[
-                styles.statusBadge,
-                {
-                  backgroundColor: colors.surfaceMuted,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <ThemedText variant="caption" style={{ fontWeight: "700" }}>
-                {orderStatusBadgeLabel(order.status, order.situation)}
-              </ThemedText>
-            </View>
-          </View>
-          <ThemedText variant="bodySm" muted>
-            {new Date(order.createdAt).toLocaleString("pt-BR")} ·{" "}
-            {orderStatusDetailLabel(order.status, order.situation)}
-          </ThemedText>
-
-          <ThemedCard style={styles.card}>
-            <ThemedText variant="caption" muted>
-              Etapa
-            </ThemedText>
-            <ThemedText variant="titleSm" style={{ marginTop: 4 }}>
-              {orderStatusDetailLabel(order.status, order.situation)}
-            </ThemedText>
-            <ThemedText
-              variant="caption"
-              muted
-              style={{ marginTop: 12 }}
-            >
-              Cliente
-            </ThemedText>
-            <ThemedText variant="titleSm" style={{ marginTop: 4 }}>
-              {order.customer?.name ?? "Sem cliente"}
-            </ThemedText>
-            {order.seller?.user.name ? (
-              <>
-                <ThemedText
-                  variant="caption"
-                  muted
-                  style={{ marginTop: 12 }}
-                >
-                  Vendedor
-                </ThemedText>
-                <ThemedText variant="titleSm" style={{ marginTop: 4 }}>
-                  {order.seller.user.name}
-                </ThemedText>
-                {order.seller.user.phone?.trim() ? (
-                  <ThemedText variant="bodySm" muted style={{ marginTop: 4 }}>
-                    {formatBrazilPhoneDigits(order.seller.user.phone)}
+          <SaleDetailPanel
+            order={order}
+            footer={
+              <View style={styles.actions}>
+                {pdfErr ? (
+                  <ThemedText
+                    variant="bodySm"
+                    style={{ color: colors.danger }}
+                  >
+                    {pdfErr}
                   </ThemedText>
                 ) : null}
-              </>
-            ) : null}
-            {order.notes ? (
-              <>
-                <ThemedText variant="caption" muted style={{ marginTop: 12 }}>
-                  Observações
-                </ThemedText>
-                <ThemedText variant="bodySm" style={{ marginTop: 4 }}>
-                  {order.notes}
-                </ThemedText>
-              </>
-            ) : null}
-          </ThemedCard>
 
-          {order.creditHoldReasons != null ? (
-            <ThemedCard
-              style={[
-                styles.card,
-                {
-                  borderColor: colors.warning,
-                  backgroundColor: colors.warningSurface,
-                },
-              ]}
-            >
-              <ThemedText
-                variant="bodySm"
-                style={{ color: colors.warning, fontWeight: "600" }}
-              >
-                Motivos de crédito
-              </ThemedText>
-              <ThemedText variant="bodySm" style={{ marginTop: 6 }}>
-                {typeof order.creditHoldReasons === "string"
-                  ? order.creditHoldReasons
-                  : JSON.stringify(order.creditHoldReasons)}
-              </ThemedText>
-            </ThemedCard>
-          ) : null}
-
-          <ThemedText variant="titleSm" style={{ marginTop: 4 }}>
-            Itens ({order.items.length})
-          </ThemedText>
-          {order.items.map((it) => {
-            const unit = Number(it.unitPrice);
-            const subtotal = unit * it.quantity;
-            return (
-              <ThemedCard key={it.id} style={styles.itemCard}>
-                <ThemedText variant="body" style={{ fontWeight: "600" }}>
-                  {it.productName}
-                </ThemedText>
-                <View style={styles.itemMeta}>
-                  <ThemedText variant="bodySm" muted>
-                    {it.quantity} × R$ {fmtMoney(unit)}
-                  </ThemedText>
-                  <MoneyLabel amount={subtotal} fontWeight="700" />
-                </View>
-              </ThemedCard>
-            );
-          })}
-
-          <ThemedCard style={[styles.card, styles.totalCard]}>
-            <ThemedText variant="titleSm">Total</ThemedText>
-            <MoneyLabel
-              amount={Number(order.totalAmount)}
-              fontSize={20}
-              fontWeight="800"
-            />
-          </ThemedCard>
-
-          {pdfErr ? (
-            <ThemedText variant="bodySm" style={{ color: colors.danger }}>
-              {pdfErr}
-            </ThemedText>
-          ) : null}
-
-          {canRepeatSale ? (
-            <ThemedButton
-              variant="outline"
-              style={styles.pdfBtn}
-              onPress={repeatThisSale}
-            >
-              <View style={styles.pdfBtnInner}>
-                <RotateCcw size={18} color={colors.primary} />
-                <ThemedText
-                  variant="body"
-                  style={{ color: colors.primary, fontWeight: "700" }}
+                <View
+                  style={[
+                    styles.actionsRow,
+                    !canRepeatSale && styles.actionsRowSingle,
+                  ]}
                 >
-                  Repetir esta venda
-                </ThemedText>
-              </View>
-            </ThemedButton>
-          ) : null}
+                  {canRepeatSale ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.actionTile,
+                        styles.actionTileSecondary,
+                        {
+                          borderColor: colorWithAlpha(colors.primary, 0.35),
+                          backgroundColor: colorWithAlpha(colors.primary, 0.08),
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                      onPress={repeatThisSale}
+                      accessibilityLabel="Repetir esta venda"
+                    >
+                      <View
+                        style={[
+                          styles.actionIcon,
+                          {
+                            backgroundColor: colorWithAlpha(
+                              colors.primary,
+                              0.14,
+                            ),
+                          },
+                        ]}
+                      >
+                        <RotateCcw
+                          size={20}
+                          color={colors.primary}
+                          strokeWidth={2.3}
+                        />
+                      </View>
+                      <Text
+                        style={[styles.actionTitle, { color: colors.text }]}
+                      >
+                        Repetir
+                      </Text>
+                      <Text
+                        style={[
+                          styles.actionHint,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Nova venda igual
+                      </Text>
+                    </Pressable>
+                  ) : null}
 
-          <ThemedButton
-            loading={pdfPending}
-            loadingLabel="Gerando PDF…"
-            style={styles.pdfBtn}
-            onPress={() => void shareOrderPdf()}
-          >
-            <View style={styles.pdfBtnInner}>
-              <Share2 size={18} color={colors.primaryForeground} />
-              <FileText size={18} color={colors.primaryForeground} />
-              <ThemedText
-                variant="body"
-                style={{
-                  color: colors.primaryForeground,
-                  fontWeight: "700",
-                }}
-              >
-                Imprimir / compartilhar PDF
-              </ThemedText>
-            </View>
-          </ThemedButton>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.actionTile,
+                      styles.actionTilePrimary,
+                      {
+                        backgroundColor: colors.primary,
+                        borderColor: colorWithAlpha(colors.primary, 0.7),
+                        opacity: pdfPending ? 0.7 : pressed ? 0.9 : 1,
+                        flex: canRepeatSale ? 1 : undefined,
+                        width: canRepeatSale ? undefined : "100%",
+                      },
+                    ]}
+                    disabled={pdfPending}
+                    onPress={() => void shareOrderPdf()}
+                    accessibilityLabel="Imprimir ou compartilhar PDF"
+                  >
+                    <View
+                      style={[
+                        styles.actionIcon,
+                        {
+                          backgroundColor: colorWithAlpha(
+                            colors.primaryForeground,
+                            0.18,
+                          ),
+                        },
+                      ]}
+                    >
+                      {pdfPending ? (
+                        <ActivityIndicator
+                          color={colors.primaryForeground}
+                          size="small"
+                        />
+                      ) : (
+                        <FileText
+                          size={20}
+                          color={colors.primaryForeground}
+                          strokeWidth={2.3}
+                        />
+                      )}
+                    </View>
+                    <Text
+                      style={[
+                        styles.actionTitle,
+                        { color: colors.primaryForeground },
+                      ]}
+                    >
+                      {pdfPending ? "Gerando…" : "PDF"}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionHint,
+                        {
+                          color: colorWithAlpha(
+                            colors.primaryForeground,
+                            0.78,
+                          ),
+                        },
+                      ]}
+                    >
+                      {pdfPending
+                        ? "Aguarde um instante"
+                        : "Imprimir ou compartilhar"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            }
+          />
         </MobileScreen>
       )}
     </SafeScreen>
@@ -222,37 +181,50 @@ export default function SaleDetailScreen() {
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   content: { gap: 12, paddingBottom: 32 },
-  hero: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+  actions: {
+    gap: 10,
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  card: { gap: 0 },
-  itemCard: { gap: 8 },
-  itemMeta: {
+  actionsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+    alignItems: "stretch",
+    gap: 10,
   },
-  totalCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 4,
+  actionsRowSingle: {
+    flexDirection: "column",
   },
-  pdfBtn: { marginTop: 8, minHeight: 52 },
-  pdfBtnInner: {
-    flexDirection: "row",
+  actionTile: {
+    flex: 1,
+    minHeight: 108,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 6,
+  },
+  actionTileSecondary: {},
+  actionTilePrimary: {
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  actionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  actionHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

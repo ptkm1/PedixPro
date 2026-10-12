@@ -11,9 +11,9 @@ import {
 } from "../services/audit-log.js";
 import { buildAdminMobileRankingDashboard, buildSellerCommissionDashboard } from "../services/commission-dashboard.js";
 import {
-  assertSellerInScope,
-  teamMemberSellerIds,
-  sellerScopeWhere,
+    assertSellerInScope,
+    teamMemberSellerIds,
+    sellerScopeWhere,
 } from "../auth/org-roles.js";
 import { buildSellerCustomerCreditSnapshot } from "../services/credit.js";
 import {
@@ -384,8 +384,23 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
         ...mobileOrderWhere(auth),
       },
       include: {
-        customer: true,
-        items: { include: { product: true } },
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            tradeName: true,
+            document: true,
+          },
+        },
+        paymentCondition: {
+          select: { id: true, code: true, name: true },
+        },
+        priceTable: { select: { id: true, name: true } },
+        items: {
+          include: {
+            product: { select: { id: true, imageUrl: true } },
+          },
+        },
         situation: {
           select: { id: true, code: true, name: true },
         },

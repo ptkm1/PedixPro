@@ -18,7 +18,13 @@ export type SellerOrderDetail = {
   createdAt: string;
   customerId?: string | null;
   paymentConditionId?: string | null;
-  customer: { name: string } | null;
+  customer: {
+    name: string;
+    tradeName?: string | null;
+    document?: string | null;
+  } | null;
+  paymentCondition?: { id: string; code: string; name: string } | null;
+  priceTable?: { id: string; name: string } | null;
   seller?: { user: { name: string; phone?: string | null } } | null;
   items: {
     id: string;
@@ -26,6 +32,8 @@ export type SellerOrderDetail = {
     productName: string;
     quantity: number;
     unitPrice: unknown;
+    priceOriginLabel?: string | null;
+    product?: { id?: string; imageUrl?: string | null } | null;
   }[];
 };
 

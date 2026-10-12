@@ -99,6 +99,12 @@ export function createQuickSaleStyles(c: AppColors) {
       backgroundColor: "transparent",
       // paddingVertical: 12,
     },
+    clearSearchBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 12,
+      justifyContent: "center",
+      alignItems: "center",
+    },
     filterBtn: {
       paddingHorizontal: 12,
       paddingVertical: 12,
