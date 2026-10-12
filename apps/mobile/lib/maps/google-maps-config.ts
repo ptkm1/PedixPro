@@ -21,6 +21,37 @@ export function isGoogleMapsConfigured(): boolean {
   return getGoogleMapsApiKey() != null;
 }
 
+/**
+ * URL do Google Static Maps (miniatura com pin).
+ * Funciona no Expo Go / web (só precisa da chave HTTP), ao contrário do MapView nativo.
+ */
+export function buildGoogleStaticMapUrl(params: {
+  latitude: number;
+  longitude: number;
+  /** Lado do quadrado em px lógicos (o scale=2 dobra a resolução). */
+  size?: number;
+  zoom?: number;
+  markerColor?: string;
+}): string | null {
+  const key = getGoogleMapsApiKey();
+  if (!key) return null;
+  const size = Math.max(64, Math.min(640, Math.round(params.size ?? 152)));
+  const zoom = params.zoom ?? 15;
+  const raw = (params.markerColor ?? "#02445C").replace(/^#/, "").trim();
+  const marker = /^[0-9a-fA-F]{6}$/.test(raw) ? `0x${raw}` : "red";
+  const { latitude, longitude } = params;
+  const q = new URLSearchParams({
+    center: `${latitude},${longitude}`,
+    zoom: String(zoom),
+    size: `${size}x${size}`,
+    scale: "2",
+    maptype: "roadmap",
+    markers: `color:${marker}|${latitude},${longitude}`,
+    key,
+  });
+  return `https://maps.googleapis.com/maps/api/staticmap?${q.toString()}`;
+}
+
 /** App genérico Expo Go — não leva o manifest Android com a tua chave Maps. */
 export function isExpoGo(): boolean {
   return Constants.appOwnership === "expo";

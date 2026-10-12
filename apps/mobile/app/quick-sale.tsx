@@ -8,6 +8,7 @@ import { CartBottomSheet } from "@/components/molecules/CartBottomSheet";
 import { CatalogFiltersModal } from "@/components/molecules/CatalogFiltersModal";
 import { CatalogViewModeToggle } from "@/components/molecules/CatalogViewModeToggle";
 import { DiscountSheet } from "@/components/molecules/DiscountSheet";
+import { DeliveryRecipientCard } from "@/components/molecules/DeliveryRecipientCard";
 import { OrderSummaryPanel } from "@/components/molecules/OrderSummaryPanel";
 import { CATALOG_SEARCH_PLACEHOLDER } from "@/lib/catalog-search";
 import type { CartLine, QuickSaleTab } from "@/lib/sale/types";
@@ -419,7 +420,13 @@ export default function QuickSaleScreen() {
                 <X size={22} color={colors.danger} />
               </Pressable>
             </View>
-            <View style={styles.formGrid}>
+
+            <DeliveryRecipientCard
+              customer={s.selectedCustomer}
+              variant="flat"
+            />
+
+            <View style={[styles.formGrid, { marginTop: 12 }]}>
               <View style={styles.formFieldHalf}>
                 <Text style={styles.fieldLabel}>Código</Text>
                 <Text style={styles.readonlyValue}>
@@ -430,30 +437,6 @@ export default function QuickSaleScreen() {
                 <Text style={styles.fieldLabel}>Documento</Text>
                 <Text style={styles.readonlyValue}>
                   {s.formatDoc(s.selectedCustomer)}
-                </Text>
-              </View>
-              <View style={styles.formFieldFull}>
-                <Text style={styles.fieldLabel}>Razão social</Text>
-                <Text style={styles.readonlyValue}>
-                  {s.selectedCustomer.legalName || s.selectedCustomer.name}
-                </Text>
-              </View>
-              <View style={styles.formFieldFull}>
-                <Text style={styles.fieldLabel}>Nome fantasia</Text>
-                <Text style={styles.readonlyValue}>
-                  {s.selectedCustomer.tradeName || s.selectedCustomer.name}
-                </Text>
-              </View>
-              <View style={styles.formFieldFull}>
-                <Text style={styles.fieldLabel}>Cidade/UF</Text>
-                <Text style={styles.readonlyValue}>
-                  {s.selectedCustomer.city
-                    ? `${s.selectedCustomer.city}${
-                        s.selectedCustomer.state
-                          ? `/${s.selectedCustomer.state}`
-                          : ""
-                      }`
-                    : "—"}
                 </Text>
               </View>
             </View>
@@ -649,6 +632,7 @@ export default function QuickSaleScreen() {
             : null
         }
         priceTableLabel={s.selectedPriceTable?.name ?? null}
+        deliveryCustomer={s.selectedCustomer}
         lines={s.cartLines}
         cartTotal={s.cartTotal}
         itemCount={cartItemCount}

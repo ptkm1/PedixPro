@@ -58,8 +58,15 @@ export type SaleCustomer = {
   cpf?: string | null;
   legalName?: string | null;
   tradeName?: string | null;
+  street?: string | null;
+  number?: string | null;
+  neighborhood?: string | null;
+  addressNote?: string | null;
   city?: string | null;
   state?: string | null;
+  cep?: string | null;
+  latitude?: unknown;
+  longitude?: unknown;
   regionId?: string | null;
   defaultPriceTableId?: string | null;
   approvalStatus?: "APPROVED" | "PENDING" | "REJECTED";

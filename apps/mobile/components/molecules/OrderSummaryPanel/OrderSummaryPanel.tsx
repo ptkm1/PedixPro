@@ -1,6 +1,10 @@
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
 import { GlassSurface } from "@/components/atoms/GlassSurface";
 import { fmtMoney } from "@/components/atoms/formatMoney";
+import {
+    DeliveryRecipientCard,
+    type DeliveryRecipientCustomer,
+} from "@/components/molecules/DeliveryRecipientCard";
 import { useTheme } from "@/lib/theme";
 import { colorWithAlpha } from "@/lib/theme/colorAlpha";
 import type { CartLine } from "@/lib/sale/types";
@@ -21,6 +25,8 @@ export type OrderSummaryPanelProps = {
   documentLabel: string | null;
   paymentLabel: string | null;
   priceTableLabel: string | null;
+  /** Cliente completo para o card de entrega (mapa + endereço). */
+  deliveryCustomer?: DeliveryRecipientCustomer | null;
   lines: CartLine[];
   cartTotal: number;
   itemCount: number;
@@ -75,6 +81,7 @@ export function OrderSummaryPanel({
   documentLabel,
   paymentLabel,
   priceTableLabel,
+  deliveryCustomer,
   lines,
   cartTotal,
   itemCount,
@@ -99,6 +106,10 @@ export function OrderSummaryPanel({
           Revise os dados antes de confirmar
         </Text>
       </View>
+
+      {deliveryCustomer ? (
+        <DeliveryRecipientCard customer={deliveryCustomer} />
+      ) : null}
 
       <GlassSurface padded={false} radius={18}>
         <View style={styles.heroInner}>
@@ -186,11 +197,13 @@ export function OrderSummaryPanel({
           <Text style={[styles.cardTitle, { color: colors.text }]}>
             Dados do pedido
           </Text>
-          <MetaRow
-            icon={UserRound}
-            label="Cliente"
-            value={customerName ?? "—"}
-          />
+          {!deliveryCustomer ? (
+            <MetaRow
+              icon={UserRound}
+              label="Cliente"
+              value={customerName ?? "—"}
+            />
+          ) : null}
           {documentLabel ? (
             <MetaRow
               icon={FileText}
