@@ -219,6 +219,9 @@ export default function RoutePlanScreen() {
           style={styles.map}
           region={s.region}
           followUser={s.myLat != null && s.myLng != null}
+          showsUserLocation={
+            s.perm === Location.PermissionStatus.GRANTED
+          }
           customers={s.filteredCustomers}
           activeVisitCustomerId={s.activeVisit?.customerId}
           polyCoords={s.polyCoords}

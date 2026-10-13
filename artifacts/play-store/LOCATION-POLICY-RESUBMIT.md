@@ -1,6 +1,6 @@
 # Checklist — reenvio Play Store (Localização)
 
-Após o build `1.0.1` / `versionCode` 5 (ou o valor auto-incrementado pelo EAS):
+Após o build `1.0.4` / `versionCode` 6 (ou o valor auto-incrementado pelo EAS):
 
 ## 1. Publicar política atualizada
 
