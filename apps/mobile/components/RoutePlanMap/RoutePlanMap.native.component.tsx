@@ -13,7 +13,16 @@ import {
 } from "./RoutePlanMap.native.styles";
 
 export const RoutePlanMap = forwardRef<RoutePlanMapRef, RoutePlanMapProps>(function RoutePlanMap(
-  { style, region, followUser, customers, polyCoords, activeVisitCustomerId, onMarkerPress },
+  {
+    style,
+    region,
+    followUser,
+    showsUserLocation = false,
+    customers,
+    polyCoords,
+    activeVisitCustomerId,
+    onMarkerPress,
+  },
   ref,
 ) {
   const { styles, routeStrokeColor } = useRoutePlanMapNativeStyles();
@@ -47,7 +56,7 @@ export const RoutePlanMap = forwardRef<RoutePlanMapRef, RoutePlanMapProps>(funct
         provider={useGoogleProvider ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
         region={followUser ? region : undefined}
-        showsUserLocation
+        showsUserLocation={showsUserLocation}
       >
         {customers.map((c) => {
           const isActive = c.id === activeVisitCustomerId;
