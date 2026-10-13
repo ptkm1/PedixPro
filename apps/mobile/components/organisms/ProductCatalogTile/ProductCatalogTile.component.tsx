@@ -136,6 +136,7 @@ export function ProductCatalogTile(props: {
               source={{ uri }}
               style={styles.img}
               resizeMode="cover"
+              resizeMethod="resize"
               accessibilityIgnoresInvertColors
             />
           ) : (
