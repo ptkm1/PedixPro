@@ -2,7 +2,7 @@
   "name": "@pedidos/mobile",
   "version": "1.0.3",
   "private": true,
-  "main": "expo-router/entry",
+  "main": "index.js",
   "scripts": {
     "start": "pnpm --dir ../.. build:shared && pnpm --dir ../.. build:design-tokens && expo start",
     "start:dev": "pnpm --dir ../.. build:shared && pnpm --dir ../.. build:design-tokens && expo start --dev-client",

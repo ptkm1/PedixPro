@@ -1,18 +1,51 @@
 {
   "cli": {
-    "version": ">= 18.1.0",
+    "version": ">= 16.0.0",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "node": "22.12.0",
+      "pnpm": "10.22.0",
+      "env": {
+        "EXPO_USE_LOCAL_CLI": "1"
+      },
+      "android": {
+        "buildType": "apk",
+        "config": "mobile-production-android.yml"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "node": "22.12.0",
+      "pnpm": "10.22.0",
+      "env": {
+        "EXPO_USE_LOCAL_CLI": "1",
+        "EXPO_PUBLIC_API_URL": "https://api.pedixpro.com.br"
+      },
+      "android": {
+        "buildType": "apk",
+        "config": "mobile-production-android.yml"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "node": "22.12.0",
+      "pnpm": "10.22.0",
+      "env": {
+        "EXPO_USE_LOCAL_CLI": "1",
+        "EXPO_PUBLIC_API_URL": "https://api.pedixpro.com.br",
+        "EAS_BUILD_PROFILE": "production"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "config": "mobile-production-android.yml"
+      },
+      "ios": {
+        "config": "mobile-production-ios.yml"
+      }
     }
   },
   "submit": {

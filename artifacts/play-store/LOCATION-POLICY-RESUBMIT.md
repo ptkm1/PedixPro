@@ -30,8 +30,12 @@ Após o build `1.0.1` / `versionCode` 5 (ou o valor auto-incrementado pelo EAS):
 
 ## 4. Build
 
+Sempre a partir de `apps/mobile` (não da raiz do monorepo):
+
 ```bash
 cd apps/mobile && eas build --platform android --profile production
 ```
+
+O profile `production` usa `.eas/build/production-android.yml` (prepare monorepo + entry `index.js` → expo-router).
 
 `eas.json` production tem `autoIncrement: true` — se o remote versionCode for maior que 5, o EAS prevalece.

@@ -17,6 +17,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.pedixpro.app",
       "buildNumber": "5",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

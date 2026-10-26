@@ -49,4 +49,16 @@ done
 link_pkg "@expo/cli"
 
 cd "${APP_DIR}"
+echo "==> package main=$(node -p "require('./package.json').main")"
+echo "==> cwd=$(pwd)"
 node -e "console.log('expo sdk', require('expo/package.json').version)"
+
+MAIN="$(node -p "require('./package.json').main")"
+case "${MAIN}" in
+  index.js|./index.js|expo-router/entry)
+    ;;
+  *)
+    echo "ERROR: apps/mobile/package.json main deve ser index.js ou expo-router/entry (agora: ${MAIN})" >&2
+    exit 1
+    ;;
+esac

@@ -19,7 +19,9 @@ build:
     - eas/configure_eas_update:
         inputs:
           throw_if_not_configured: false
-    - eas/install_pods
+    - run:
+        name: Install iOS Pods
+        command: cd ios && pod install
     - eas/resolve_apple_team_id_from_credentials
     - eas/configure_ios_credentials
     - eas/configure_ios_version

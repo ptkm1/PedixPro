@@ -30,8 +30,7 @@
         "config": "preview-android.yml"
       },
       "ios": {
-        "simulator": false,
-        "config": "preview-ios.yml"
+        "simulator": false
       }
     },
     "production": {
@@ -43,7 +42,8 @@
         "EXPO_PUBLIC_API_URL": "https://api.pedixpro.com.br"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "config": "production-android.yml"
       }
     }
   },

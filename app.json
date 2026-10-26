@@ -12,6 +12,9 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
+    },
+    "android": {
+      "package": "com.pedixpro.app"
     }
   }
 }
