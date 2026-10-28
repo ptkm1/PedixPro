@@ -4813,6 +4813,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/customers", async (req, reply) => {
     const auth = req.auth!;
+    if (
+      auth.role === "MANAGER" &&
+      !(await canWriteEffective(auth.organizationId, auth.role, "customers"))
+    ) {
+      return reply
+        .status(403)
+        .send({ error: "Sem permissão para criar clientes" });
+    }
     const body = customerBodySchema.safeParse(req.body);
     if (!body.success) {
         return sendZodError(reply, body.error, req);
@@ -4876,6 +4884,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch("/customers/:id", async (req, reply) => {
     const auth = req.auth!;
+    if (
+      auth.role === "MANAGER" &&
+      !(await canWriteEffective(auth.organizationId, auth.role, "customers"))
+    ) {
+      return reply
+        .status(403)
+        .send({ error: "Sem permissão para editar clientes" });
+    }
     const { id } = idParam.parse(req.params);
     const body = customerPatchSchema.safeParse(req.body);
     if (!body.success) {
@@ -5087,6 +5103,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.put("/customers/:id/special-prices", async (req, reply) => {
     const auth = req.auth!;
+    if (
+      auth.role === "MANAGER" &&
+      !(await canWriteEffective(auth.organizationId, auth.role, "customers"))
+    ) {
+      return reply
+        .status(403)
+        .send({ error: "Sem permissão para editar clientes" });
+    }
     const { id } = idParam.parse(req.params);
     const body = z
       .object({
@@ -5123,6 +5147,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete("/customers/:id", async (req, reply) => {
     const auth = req.auth!;
+    if (
+      auth.role === "MANAGER" &&
+      !(await canWriteEffective(auth.organizationId, auth.role, "customers"))
+    ) {
+      return reply
+        .status(403)
+        .send({ error: "Sem permissão para excluir clientes" });
+    }
     const { id } = idParam.parse(req.params);
     const existing = await prisma.customer.findFirst({
       where: { id, organizationId: auth.organizationId },

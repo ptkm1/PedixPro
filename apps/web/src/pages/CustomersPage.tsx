@@ -585,6 +585,7 @@ export function CustomersPage() {
   useScrollToFirstError(formErrors, { enabled: showValidation });
 
   function trySubmit() {
+    if (!canEditCustomers) return;
     const errors = validateCustomerForm(form);
     if (Object.keys(errors).length > 0) {
       setShowValidation(true);
@@ -614,16 +615,20 @@ export function CustomersPage() {
       <div className="flex items-start justify-between gap-4">
         <h1 className="text-2xl font-semibold">Clientes</h1>
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setImportOpen(true)}
-          >
-            Importar CSV
-          </Button>
-          <Button type="button" onClick={openCreate}>
-            Novo cliente
-          </Button>
+          {canEditCustomers ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setImportOpen(true)}
+              >
+                Importar CSV
+              </Button>
+              <Button type="button" onClick={openCreate}>
+                Novo cliente
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -736,7 +741,7 @@ export function CustomersPage() {
           if (!open) closeSheet();
           else setSheetOpen(true);
         }}
-        title={editing ? "Editar cliente" : "Pré-cadastro de cliente"}
+        title={editing ? "Editar cadastro" : "Pré-cadastro de cliente"}
         description="Dados cadastrais completos, localização no mapa e, na edição, crédito."
         footer={
           <FormSheetActions
@@ -744,6 +749,7 @@ export function CustomersPage() {
             onSubmit={trySubmit}
             submitLabel={editing ? "Salvar alterações" : "Cadastrar"}
             pending={savePending}
+            disabled={!canEditCustomers}
           />
         }
       >
@@ -1107,6 +1113,9 @@ export function CustomersPage() {
                   </TableHead>
                 ) : null}
                 <TableHead className="px-4">Nome</TableHead>
+                {canEditCustomers ? (
+                  <TableHead className="min-w-[11rem] px-4">Ações</TableHead>
+                ) : null}
                 <TableHead className="px-4">Documento</TableHead>
                 <TableHead className="px-4">Cidade/UF</TableHead>
                 <TableHead className="px-4">Telefone</TableHead>
@@ -1115,9 +1124,6 @@ export function CustomersPage() {
                 <TableHead className="px-4">Status</TableHead>
                 <TableHead className="px-4">Validação</TableHead>
                 <TableHead className="px-4">Crédito</TableHead>
-                <TableHead className="sticky right-0 z-10 min-w-[11rem] bg-card px-4 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)]">
-                  Ações
-                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1138,19 +1144,44 @@ export function CustomersPage() {
                         />
                       </TableCell>
                     ) : null}
-                    <TableCell className="px-4 py-3">
-                      {canEditCustomers ? (
-                        <button
-                          type="button"
-                          className="text-left font-medium text-foreground hover:text-primary hover:underline"
-                          onClick={() => openEdit(c)}
-                        >
-                          {c.name}
-                        </button>
-                      ) : (
-                        c.name
-                      )}
+                    <TableCell className="px-4 py-3 font-medium">
+                      {c.name}
                     </TableCell>
+                    {canEditCustomers ? (
+                      <TableCell className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEdit(c)}
+                            aria-label={`Editar cadastro de ${c.name}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Editar cadastro
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => {
+                              void confirm({
+                                title: "Excluir cliente?",
+                                description:
+                                  "O cliente será removido permanentemente do sistema.",
+                                confirmLabel: "Excluir",
+                                tone: "destructive",
+                              }).then((ok) => {
+                                if (ok) remove.mutate(c.id);
+                              });
+                            }}
+                          >
+                            Excluir
+                          </Button>
+                        </div>
+                      </TableCell>
+                    ) : null}
                     <TableCell className="px-4 py-3 font-mono text-xs">
                       {formatDocument(c)}
                     </TableCell>
@@ -1232,40 +1263,6 @@ export function CustomersPage() {
                           </span>
                         );
                       })()}
-                    </TableCell>
-                    <TableCell className="sticky right-0 z-10 bg-card px-4 py-3 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)]">
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEdit(c)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Editar cadastro
-                        </Button>
-                        {canEditCustomers ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => {
-                              void confirm({
-                                title: "Excluir cliente?",
-                                description:
-                                  "O cliente será removido permanentemente do sistema.",
-                                confirmLabel: "Excluir",
-                                tone: "destructive",
-                              }).then((ok) => {
-                                if (ok) remove.mutate(c.id);
-                              });
-                            }}
-                          >
-                            Excluir
-                          </Button>
-                        ) : null}
-                      </div>
                     </TableCell>
                   </TableRow>
                 );
