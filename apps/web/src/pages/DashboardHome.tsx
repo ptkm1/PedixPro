@@ -12,6 +12,7 @@ import {
   type HomeIndicatorKey,
 } from "@pedidos/shared";
 import { useQuery } from "@tanstack/react-query";
+import { ClipboardCheck } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
@@ -77,6 +78,14 @@ export function DashboardHome() {
     staleTime: 60_000,
   });
 
+  const { data: pendingRelease } = useQuery({
+    queryKey: ["admin", "pending-release-summary"],
+    queryFn: () =>
+      apiFetch<{ count: number }>("/admin/orders/pending-release-summary"),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
   const sideIndicatorKeys = useMemo(() => {
     const keys = parseHomeIndicators(homeConfig?.homeIndicators);
     if (!teamLeader) return keys;
@@ -84,9 +93,30 @@ export function DashboardHome() {
     return keys.filter((k) => !k.startsWith("profit_"));
   }, [homeConfig?.homeIndicators, teamLeader]);
 
+  const pendingCount = pendingRelease?.count ?? 0;
+
   const kpis = (
     <>
       <HomeSlot label="KPI 1" minHeightClassName="min-h-[6.5rem]">
+        <Link
+          to="/liberacao-pedidos"
+          className="flex flex-1 flex-col justify-center p-4 transition-colors hover:bg-muted/40"
+        >
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <ClipboardCheck className="size-3.5" />
+            Liberação de Pedidos
+          </p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {pendingCount}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {pendingCount === 1
+              ? "pedido aguardando liberação"
+              : "pedidos aguardando liberação"}
+          </p>
+        </Link>
+      </HomeSlot>
+      <HomeSlot label="KPI 2" minHeightClassName="min-h-[6.5rem]">
         <div className="flex flex-1 flex-col justify-center p-4">
           <p className="text-sm text-muted-foreground">Faturamento do mês</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
@@ -96,21 +126,11 @@ export function DashboardHome() {
           </p>
         </div>
       </HomeSlot>
-      <HomeSlot label="KPI 2" minHeightClassName="min-h-[6.5rem]">
+      <HomeSlot label="KPI 3" minHeightClassName="min-h-[6.5rem]">
         <div className="flex flex-1 flex-col justify-center p-4">
           <p className="text-sm text-muted-foreground">Pedidos confirmados</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
             {scorecardLoading ? "…" : String(scorecard?.totals.orderCount ?? 0)}
-          </p>
-        </div>
-      </HomeSlot>
-      <HomeSlot label="KPI 3" minHeightClassName="min-h-[6.5rem]">
-        <div className="flex flex-1 flex-col justify-center p-4">
-          <p className="text-sm text-muted-foreground">Ticket médio</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">
-            {scorecardLoading
-              ? "…"
-              : `R$ ${(scorecard?.totals.avgTicket ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
           </p>
           <Link
             to="/relatorios"

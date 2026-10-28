@@ -173,6 +173,10 @@ import {
     OrderStageError,
 } from "../services/order-stage.js";
 import {
+    OrderReleaseError,
+    releaseOrder,
+} from "../services/release-order.js";
+import {
     ensureDefaultOrderSituations,
     findOrgSituationId,
     normalizeSituationCode,
@@ -5607,6 +5611,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           .optional(),
         situationId: z.string().optional(),
         situationCode: z.string().optional(),
+        /**
+         * Inclui pedidos aguardando liberação na listagem principal.
+         * Por padrão ficam só em /liberacao-pedidos.
+         */
+        includePendingRelease: z
+          .enum(["0", "1", "true", "false"])
+          .optional(),
         /** Número do pedido (apenas dígitos; inteiro positivo). */
         orderNumber: z.string().optional(),
         /** Alias de orderNumber. */
@@ -5634,6 +5645,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           q.data.situationCode.trim().toUpperCase(),
         );
         if (sid) where.situationId = sid;
+      }
+
+      const includePending =
+        q.data.includePendingRelease === "1" ||
+        q.data.includePendingRelease === "true";
+      const filteringPending =
+        q.data.status === "PENDING_CREDIT_APPROVAL" ||
+        q.data.situationCode?.trim().toUpperCase() === "CREDIT";
+      if (!includePending && !filteringPending && !q.data.status) {
+        where.status = { not: "PENDING_CREDIT_APPROVAL" };
       }
 
       const codeRaw = (q.data.orderNumber ?? q.data.q)?.trim();
@@ -5733,6 +5754,94 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     return { count };
+  });
+
+  /** Alias amigável para o contador da Liberação de Pedidos. */
+  app.get("/orders/pending-release-summary", async (req) => {
+    const auth = req.auth!;
+    const count = await prisma.order.count({
+      where: {
+        ...orderScopeWhere(auth),
+        status: "PENDING_CREDIT_APPROVAL",
+      },
+    });
+    return { count };
+  });
+
+  app.post("/orders/:id/release", async (req, reply) => {
+    const auth = req.auth!;
+    const canWriteOrders = await canWriteEffectiveForUser(
+      auth.organizationId,
+      auth.sub,
+      auth.role,
+      "orders",
+    );
+    if (!canWriteOrders) {
+      return reply.status(403).send({ error: "Sem permissão para liberar pedidos" });
+    }
+    const { id } = idParam.parse(req.params);
+    const body = z
+      .object({
+        action: z.enum(["APPROVE", "REJECT", "HOLD"]),
+        note: z.string().trim().max(2000).optional().nullable(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return sendZodError(reply, body.error, req);
+    }
+
+    try {
+      return await releaseOrder({
+        organizationId: auth.organizationId,
+        orderId: id,
+        action: body.data.action,
+        note: body.data.note,
+        actorUserId: auth.sub,
+        auth,
+      });
+    } catch (e) {
+      if (e instanceof OrderReleaseError) {
+        return reply.status(e.httpStatus).send({ error: e.message });
+      }
+      if (e instanceof OrderStageError) {
+        return reply.status(e.httpStatus).send({ error: e.message });
+      }
+      if (e instanceof StockError)
+        return reply.status(400).send(stockErrorPayload(e));
+      throw e;
+    }
+  });
+
+  app.get("/orders/:id/release-history", async (req, reply) => {
+    const auth = req.auth!;
+    const { id } = idParam.parse(req.params);
+    const order = await prisma.order.findFirst({
+      where: { id, ...orderScopeWhere(auth) },
+      select: { id: true },
+    });
+    if (!order) return reply.status(404).send({ error: "Não encontrado" });
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        organizationId: auth.organizationId,
+        entityType: AUDIT_ENTITY.Order,
+        entityId: id,
+        action: AUDIT_ACTION.ORDER_RELEASE,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return logs.map((l) => ({
+      id: l.id,
+      createdAt: l.createdAt,
+      user: l.user,
+      userMatricula: l.userMatricula,
+      metadata: l.metadata,
+    }));
   });
 
   app.get("/orders/lookups", async (req) => {
@@ -6013,6 +6122,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           include: { user: { select: { name: true, email: true, phone: true } } },
         },
         createdByUser: { select: { id: true, name: true, email: true } },
+        releasedByUser: { select: { id: true, name: true, email: true } },
         customer: true,
         situation: {
           select: {

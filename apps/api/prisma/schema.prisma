@@ -622,6 +622,7 @@ model User {
   cancelledReceivables     Receivable[]      @relation("ReceivableCancelledBy")
   receivableEvents         ReceivableEvent[]
   ordersCreated            Order[]           @relation("OrderCreatedBy")
+  ordersReleased           Order[]           @relation("OrderReleasedBy")
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -1567,8 +1568,15 @@ model Order {
   notes          String?
   /// UUID gerado no cliente para vendas offline — replay idempotente (sem duplicar pedido).
   clientMutationId String? @unique
-  /// Motivos registrados quando o pedido ficou aguardando aprovação de crédito.
+  /// Motivos registrados quando o pedido ficou aguardando aprovação de crédito / liberação.
   creditHoldReasons Json?
+  /// Última decisão de liberação (APPROVE | REJECT | HOLD).
+  releaseDecision String?
+  /// Observação da última ação de liberação / manutenção em espera.
+  releaseNote     String?
+  releasedAt      DateTime?
+  releasedByUserId String?
+  releasedByUser   User?     @relation("OrderReleasedBy", fields: [releasedByUserId], references: [id], onDelete: SetNull)
   /// TODO futuro: número sequencial por org para filtro "Número entre" (hoje id=cuid). Pode ser removido ou implementado depois.
   orderNumber    Int?
   /// TODO futuro: flag de orçamento vs pedido real. Reservado; UI não filtra neste ciclo.
@@ -1589,9 +1597,11 @@ model Order {
   @@index([organizationId, createdAt])
   @@index([organizationId, sellerId])
   @@index([organizationId, createdByUserId])
+  @@index([organizationId, releasedByUserId])
   @@index([organizationId, paymentConditionId])
   @@index([organizationId, situationId])
   @@index([organizationId, establishmentId])
+  @@index([organizationId, status, createdAt])
   @@index([establishmentId])
   @@index([priceTableId])
 }

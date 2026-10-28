@@ -25,7 +25,6 @@ import {
 } from "./price-tables.js";
 import {
   applyStockOnStatusChange,
-  assertSufficientStock,
   StockError,
   stockErrorPayload,
 } from "./product-stock.js";
@@ -276,20 +275,12 @@ export async function createSaleOrder(params: CreateSaleOrderParams) {
         { creditDenied: true, violations: ev.violations },
       );
     }
-    if (ev.action === "APPROVAL") {
-      orderStatus = "PENDING_CREDIT_APPROVAL";
+    // Toda venda confirmada passa pela Liberação de Pedidos (escritório).
+    // Estoque só baixa ao liberar → etapa Separando (PICKING).
+    orderStatus = "PENDING_CREDIT_APPROVAL";
+    if (ev.violations.length > 0) {
       creditHoldPayload = violationsToJson(ev.violations);
     }
-  }
-
-  if (orderStatus === "CONFIRMED") {
-    await assertSufficientStock(
-      params.organizationId,
-      sale.lines.map((l) => ({
-        productId: l.productId,
-        quantity: l.quantity,
-      })),
-    );
   }
 
   const situationId = await situationIdForOrderStatus(

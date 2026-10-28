@@ -41,7 +41,7 @@ const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Rascunho",
   CONFIRMED: "Confirmado",
   CANCELLED: "Cancelado",
-  PENDING_CREDIT_APPROVAL: "Aguardando crédito",
+  PENDING_CREDIT_APPROVAL: "Aguardando liberação",
 };
 
 const ORDERS_TABLE: PdfTable = {

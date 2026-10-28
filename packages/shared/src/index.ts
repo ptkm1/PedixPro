@@ -63,7 +63,7 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   DRAFT: "Rascunho",
   CONFIRMED: "Confirmado",
   CANCELLED: "Cancelado",
-  PENDING_CREDIT_APPROVAL: "Aguardando crédito",
+  PENDING_CREDIT_APPROVAL: "Aguardando liberação",
 };
 
 export function orderStatusLabel(status: string): string {

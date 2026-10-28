@@ -76,7 +76,7 @@ export function expeditionSituationLabel(
     case undefined:
       return "Aguardando separação";
     case "PICKING":
-      return "Em separação";
+      return "Separando";
     case "PACKED":
       return "Separado";
     case "SENT":

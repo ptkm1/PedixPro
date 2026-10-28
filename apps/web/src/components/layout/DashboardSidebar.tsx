@@ -2,6 +2,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { CommerceProWordmark } from "@/components/brand/CommerceProBrand";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api";
 import {
     applyNavOrder,
     clearNavOrder,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/nav-order";
 import { staffRoleLabel, userInitials } from "@/lib/staff";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { LogOut, RotateCcw } from "lucide-react";
 import {
     useCallback,
@@ -122,6 +124,15 @@ export function DashboardSidebar({ onNavigate, className }: Props) {
 
   const SettingsIcon = settings?.icon;
 
+  const { data: pendingRelease } = useQuery({
+    queryKey: ["admin", "pending-release-summary"],
+    queryFn: () =>
+      apiFetch<{ count: number }>("/admin/orders/pending-release-summary"),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+  const pendingReleaseCount = pendingRelease?.count ?? 0;
+
   return (
     <aside
       className={cn(
@@ -175,6 +186,12 @@ export function DashboardSidebar({ onNavigate, className }: Props) {
               >
                 <Icon className="h-5 w-5 shrink-0" />
                 <span className="truncate">{item.label}</span>
+                {item.to === "/liberacao-pedidos" &&
+                pendingReleaseCount > 0 ? (
+                  <span className="ml-auto rounded-full bg-amber-600 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
+                    {pendingReleaseCount > 99 ? "99+" : pendingReleaseCount}
+                  </span>
+                ) : null}
               </NavLink>
             </div>
           );

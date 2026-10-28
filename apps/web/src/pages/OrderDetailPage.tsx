@@ -460,12 +460,35 @@ export function OrderDetailPage() {
 
         {showCreditHold ? (
           <div className="mx-6 mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-              Motivos de crédito
-            </p>
-            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-amber-950/80 dark:text-amber-100/80">
-              {JSON.stringify(order.creditHoldReasons, null, 2)}
-            </pre>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                Aguardando liberação — alertas financeiros
+              </p>
+              <Link
+                to={`/liberacao-pedidos?orderId=${order.id}`}
+                className="text-xs font-medium text-amber-900 underline dark:text-amber-200"
+              >
+                Abrir liberação
+              </Link>
+            </div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-950/90 dark:text-amber-100/90">
+              {Array.isArray(order.creditHoldReasons) &&
+              order.creditHoldReasons.length > 0 ? (
+                order.creditHoldReasons.map((r, i) => {
+                  const row =
+                    r && typeof r === "object"
+                      ? (r as { message?: string; code?: string })
+                      : null;
+                  return (
+                    <li key={i}>
+                      {row?.message || row?.code || String(r)}
+                    </li>
+                  );
+                })
+              ) : (
+                <li>Pedido na fila de liberação do escritório.</li>
+              )}
+            </ul>
           </div>
         ) : null}
       </div>

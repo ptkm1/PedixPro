@@ -49,6 +49,7 @@ import { LegalDocumentPage } from "./pages/LegalDocumentPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { OrderDetailPage } from "./pages/OrderDetailPage";
+import { OrderReleasePage } from "./pages/OrderReleasePage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { PaymentConditionsPage } from "./pages/PaymentConditionsPage";
 import { PriceTablesPage } from "./pages/PriceTablesPage";
@@ -534,6 +535,10 @@ function AppRoutes() {
             <Route path="rastreio" element={<SellerTrackingPage />} />
             <Route path="pedidos" element={<OrdersPage />} />
             <Route path="pedidos/:orderId" element={<OrderDetailPage />} />
+            <Route
+              path="liberacao-pedidos"
+              element={<OrderReleasePage />}
+            />
             <Route path="romaneio-rota" element={<RouteRomaneioPage />} />
             <Route path="expedicao" element={<ExpeditionQueuePage />} />
             <Route path="expedicao/:orderId" element={<ExpeditionPickPage />} />

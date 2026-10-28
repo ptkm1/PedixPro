@@ -18,7 +18,7 @@ export const DEFAULT_ORDER_SITUATIONS = [
   },
   {
     code: SYSTEM_SITUATION_CODES.CREDIT,
-    name: "Aguardando crédito",
+    name: "Aguardando liberação",
     sortOrder: 1,
     mapsToCancel: false,
   },
@@ -30,19 +30,19 @@ export const DEFAULT_ORDER_SITUATIONS = [
   },
   {
     code: SYSTEM_SITUATION_CODES.PICKING,
-    name: "Em separação",
+    name: "Separando",
     sortOrder: 3,
     mapsToCancel: false,
   },
   {
     code: SYSTEM_SITUATION_CODES.PACKED,
-    name: "Separado",
+    name: "Separação concluída",
     sortOrder: 4,
     mapsToCancel: false,
   },
   {
     code: SYSTEM_SITUATION_CODES.SENT,
-    name: "Enviado",
+    name: "Aguardando entrega",
     sortOrder: 5,
     mapsToCancel: false,
   },

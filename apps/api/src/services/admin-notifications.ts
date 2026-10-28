@@ -33,18 +33,18 @@ async function notifyAdminsCreditPendingEmail(params: {
   const total = decToNum(params.order.totalAmount);
   const cust = params.order.customer?.name ?? "Cliente sem nome";
   const seller = sellerDisplayName(params.order);
-  const subject = "[PedixPro] Pedido aguardando aprovação de crédito";
+  const subject = "[PedixPro] Pedido aguardando liberação";
   const webBase = (process.env.WEB_APP_ORIGIN ?? "").replace(/\/$/, "");
-  const detailPath = `/pedidos/${params.order.id}`;
+  const detailPath = `/liberacao-pedidos?orderId=${encodeURIComponent(params.order.id)}`;
   const detailLink =
     webBase.length > 0
-      ? `<p><a href="${escapeHtml(webBase + detailPath)}">Abrir pedido no painel</a></p>`
+      ? `<p><a href="${escapeHtml(webBase + detailPath)}">Abrir liberação no painel</a></p>`
       : `<p><small>ID do pedido (cole no painel): <code>${escapeHtml(params.order.id)}</code></small></p>`;
 
   const html = `
 <!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
   <p><strong>${escapeHtml(seller)}</strong> · ${escapeHtml(cust)} · <strong>R$ ${escapeHtml(total.toFixed(2))}</strong></p>
-  <p>Aprove ou recuse em <strong>Pedidos</strong> no painel admin.</p>
+  <p>Aprove ou recuse em <strong>Liberação de Pedidos</strong> no painel admin.</p>
   ${detailLink}
 </body></html>`.trim();
 
@@ -84,8 +84,8 @@ export async function notifyAdminsCreditPending(params: {
   const total = decToNum(params.order.totalAmount);
   const cust = params.order.customer?.name ?? "Cliente sem nome";
   const seller = sellerDisplayName(params.order);
-  const title = "Pedido aguardando crédito";
-  const body = `${seller} · ${cust} · R$ ${total.toFixed(2)} — aprove em Pedidos.`;
+  const title = "Pedido aguardando liberação";
+  const body = `${seller} · ${cust} · R$ ${total.toFixed(2)} — libere em Liberação de Pedidos.`;
 
   await notifyUsers({
     userIds,
@@ -95,7 +95,7 @@ export async function notifyAdminsCreditPending(params: {
     data: {
       orderId: params.order.id,
       sellerId: params.order.sellerId ?? undefined,
-      href: `/pedidos/${params.order.id}`,
+      href: `/liberacao-pedidos?orderId=${encodeURIComponent(params.order.id)}`,
     },
   });
 
@@ -108,6 +108,44 @@ export async function notifyAdminsCreditPending(params: {
   } catch (e) {
     console.warn("[email] Exceção ao enviar notificação de crédito:", e);
   }
+}
+
+/** Liberação resolvida → gestor do vendedor (+ admins). */
+export async function notifyCreditResolved(params: {
+  organizationId: string;
+  decision: "APPROVED" | "REJECTED";
+  order: OrderNotifyPayload;
+}): Promise<void> {
+  const admins = await prisma.user.findMany({
+    where: { organizationId: params.organizationId, role: "ADMIN" },
+    select: { id: true },
+  });
+  const managerId = params.order.seller?.managerUserId ?? null;
+  const userIds = [
+    ...admins.map((a) => a.id),
+    ...(managerId ? [managerId] : []),
+  ];
+  if (!userIds.length) return;
+
+  const total = decToNum(params.order.totalAmount);
+  const cust = params.order.customer?.name ?? "Cliente sem nome";
+  const seller = sellerDisplayName(params.order);
+  const approved = params.decision === "APPROVED";
+
+  await notifyUsers({
+    userIds,
+    title: approved ? "Pedido liberado" : "Pedido rejeitado na liberação",
+    body: `${seller} · ${cust} · R$ ${total.toFixed(2)}`,
+    type: "CREDIT_RESOLVED",
+    data: {
+      orderId: params.order.id,
+      sellerId: params.order.sellerId ?? undefined,
+      decision: params.decision,
+      href: approved
+        ? `/pedidos/${params.order.id}`
+        : `/liberacao-pedidos?orderId=${encodeURIComponent(params.order.id)}`,
+    },
+  });
 }
 
 /** Venda confirmada → gestor do vendedor (+ admins da org). */

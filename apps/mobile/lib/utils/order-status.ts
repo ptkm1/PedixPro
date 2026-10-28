@@ -14,7 +14,7 @@ export function orderStatusBadgeLabel(
   situation?: { name?: string; code?: string } | null,
 ): string {
   if (situation?.name) return situation.name;
-  if (status === "PENDING_CREDIT_APPROVAL") return "Crédito";
+  if (status === "PENDING_CREDIT_APPROVAL") return "Liberação";
   if (status === "CONFIRMED") return "OK";
   if (status === "DRAFT") return "Rascunho";
   if (status === "CANCELLED") return "Cancelado";
@@ -26,7 +26,7 @@ export function orderStatusDetailLabel(
   situation?: { name?: string; code?: string } | null,
 ): string {
   if (situation?.name) return situation.name;
-  if (status === "PENDING_CREDIT_APPROVAL") return "Aguardando crédito";
+  if (status === "PENDING_CREDIT_APPROVAL") return "Aguardando liberação";
   if (status === "CONFIRMED") return "Confirmada";
   if (status === "DRAFT") return "Rascunho";
   if (status === "CANCELLED") return "Cancelado";

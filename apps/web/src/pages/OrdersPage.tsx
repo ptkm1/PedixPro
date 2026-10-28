@@ -472,18 +472,8 @@ export function OrdersPage() {
         >
           Todas
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={pendingCreditSelected ? "default" : "outline"}
-          className={
-            pendingCreditSelected
-              ? "bg-amber-600 text-white hover:bg-amber-600/90"
-              : undefined
-          }
-          onClick={() => setFilter(SYSTEM_SITUATION_CODES.CREDIT)}
-        >
-          Aguardando crédito
+        <Button type="button" size="sm" variant="outline" asChild>
+          <Link to="/liberacao-pedidos">Liberação de Pedidos</Link>
         </Button>
       </div>
 
