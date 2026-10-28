@@ -17,7 +17,6 @@ import {
     FormSection,
 } from "@/components/forms";
 import { AppSelect } from "@/components/ui/app-select";
-import { useConfirm } from "@/components/confirm";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -114,7 +113,9 @@ export function ProductFormPage() {
     selectedSupplier,
     markupPercent,
     handleSubmit,
-    duplicateProduct,
+    openDuplicateForm,
+    isDuplicating,
+    duplicateSourceName,
     onCategoryChange,
     pending,
     priceTablePrices,
@@ -142,7 +143,6 @@ export function ProductFormPage() {
     removeCommissionTable,
     setCommissionTablePercent,
   } = useProductFormPage();
-  const { confirm } = useConfirm();
 
   useScrollToFirstError(
     Object.keys(fieldErrors).length > 0 ? fieldErrors : formError,
@@ -187,13 +187,17 @@ export function ProductFormPage() {
     setField("outboundOperationId", op.id);
   }
 
-  if (isEdit && isLoading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Link to="/produtos" className="text-sm text-primary hover:underline">
           ← Voltar para produtos
         </Link>
-        <p className="text-muted-foreground">Carregando produto…</p>
+        <p className="text-muted-foreground">
+          {isDuplicating
+            ? "Carregando dados para duplicar…"
+            : "Carregando produto…"}
+        </p>
       </div>
     );
   }
@@ -203,6 +207,21 @@ export function ProductFormPage() {
       loadError instanceof Error
         ? loadError.message
         : "Produto não encontrado.";
+    return (
+      <div className="space-y-4">
+        <Link to="/produtos" className="text-sm text-primary hover:underline">
+          ← Voltar para produtos
+        </Link>
+        <p className="text-destructive">{msg}</p>
+      </div>
+    );
+  }
+
+  if (isDuplicating && isError) {
+    const msg =
+      loadError instanceof Error
+        ? loadError.message
+        : "Produto de origem não encontrado.";
     return (
       <div className="space-y-4">
         <Link to="/produtos" className="text-sm text-primary hover:underline">
@@ -225,6 +244,18 @@ export function ProductFormPage() {
           </h1>
           {isEdit && product ? (
             <p className="mt-1 text-sm text-muted-foreground">{product.name}</p>
+          ) : isDuplicating ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cópia a partir de{" "}
+              {duplicateSourceName ? (
+                <span className="font-medium text-foreground">
+                  {duplicateSourceName}
+                </span>
+              ) : (
+                "outro produto"
+              )}
+              . Preencha nome, SKU e códigos únicos antes de salvar.
+            </p>
           ) : null}
         </div>
         {isEdit ? (
@@ -232,18 +263,9 @@ export function ProductFormPage() {
             type="button"
             variant="outline"
             disabled={pending}
-            onClick={() => {
-              void confirm({
-                title: "Duplicar produto?",
-                description:
-                  "Cria uma cópia com os dados já salvos, incluindo tributários, tabelas de preço e comissões. SKU, código de barras e estoque ficam vazios para você ajustar.",
-                confirmLabel: "Duplicar produto",
-              }).then((ok) => {
-                if (ok) duplicateProduct.mutate();
-              });
-            }}
+            onClick={openDuplicateForm}
           >
-            {duplicateProduct.isPending ? "Duplicando…" : "Duplicar produto"}
+            Duplicar produto
           </Button>
         ) : null}
       </div>
@@ -1291,9 +1313,7 @@ export function ProductFormPage() {
         <FormActions className="mt-6">
           <Button type="submit" disabled={pending}>
             {pending
-              ? duplicateProduct.isPending
-                ? "Duplicando…"
-                : "Salvando…"
+              ? "Salvando…"
               : isEdit
                 ? "Salvar alterações"
                 : "Criar produto"}
@@ -1303,16 +1323,7 @@ export function ProductFormPage() {
               type="button"
               variant="outline"
               disabled={pending}
-              onClick={() => {
-                void confirm({
-                  title: "Duplicar produto?",
-                  description:
-                    "Cria uma cópia com os dados já salvos, incluindo tributários, tabelas de preço e comissões. SKU, código de barras e estoque ficam vazios para você ajustar.",
-                  confirmLabel: "Duplicar produto",
-                }).then((ok) => {
-                  if (ok) duplicateProduct.mutate();
-                });
-              }}
+              onClick={openDuplicateForm}
             >
               Duplicar produto
             </Button>

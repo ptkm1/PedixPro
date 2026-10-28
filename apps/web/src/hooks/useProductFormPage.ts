@@ -8,6 +8,7 @@ import {
     computeMarkupPercent,
     emptyProductForm,
     formToProductPayload,
+    productToDuplicateForm,
     productToForm,
     validateProductForm,
     type ProductFormTab,
@@ -17,7 +18,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { AttributeFieldDef } from "../components/DynamicCategoryAttributes";
 
 export type CategoryBrief = {
@@ -69,11 +70,72 @@ type ProductSaveExtras = {
   }>;
 };
 
+function applyProductExtrasToState(
+  product: ProductRecord,
+  setPriceTablePrices: (map: Record<string, string>) => void,
+  setSellerCommissionPercents: (map: Record<string, string>) => void,
+  setSellerCommissionEnabled: (v: boolean) => void,
+  setPriceTableCommissionRows: (
+    rows: Array<{ priceTableId: string; percent: string }>,
+  ) => void,
+) {
+  const items =
+    (
+      product as ProductRecord & {
+        priceTableItems?: Array<{
+          priceTableId: string;
+          price: unknown;
+        }>;
+      }
+    ).priceTableItems ?? [];
+  const map: Record<string, string> = {};
+  for (const item of items) {
+    map[item.priceTableId] = String(Number(item.price));
+  }
+  setPriceTablePrices(map);
+
+  const sellerRows =
+    (
+      product as ProductRecord & {
+        sellerCommissions?: Array<{
+          sellerId: string;
+          commissionPercent: unknown;
+        }>;
+      }
+    ).sellerCommissions ?? [];
+  const sellerMap: Record<string, string> = {};
+  for (const row of sellerRows) {
+    sellerMap[row.sellerId] = String(Number(row.commissionPercent));
+  }
+  setSellerCommissionPercents(sellerMap);
+  setSellerCommissionEnabled(sellerRows.length > 0);
+
+  const tableRows =
+    (
+      product as ProductRecord & {
+        priceTableCommissions?: Array<{
+          priceTableId: string;
+          commissionPercent: unknown;
+        }>;
+      }
+    ).priceTableCommissions ?? [];
+  setPriceTableCommissionRows(
+    tableRows.map((row) => ({
+      priceTableId: row.priceTableId,
+      percent: String(Number(row.commissionPercent)),
+    })),
+  );
+}
+
 export function useProductFormPage() {
   const { productId } = useParams<{ productId?: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const isEdit = Boolean(productId);
+  const duplicateFromId = !isEdit
+    ? (searchParams.get("from") || searchParams.get("duplicarDe") || "").trim()
+    : "";
 
   const [activeTab, setActiveTab] = useState<ProductFormTab>("principal");
   const [values, setValues] = useState<ProductFormValues>(emptyProductForm);
@@ -176,6 +238,18 @@ export function useProductFormPage() {
     enabled: isEdit,
   });
 
+  const {
+    data: duplicateSource,
+    isLoading: isDuplicateSourceLoading,
+    isError: isDuplicateSourceError,
+    error: duplicateSourceError,
+  } = useQuery({
+    queryKey: ["admin", "product", duplicateFromId],
+    queryFn: () =>
+      apiFetch<ProductRecord>(`/admin/products/${duplicateFromId}`),
+    enabled: Boolean(duplicateFromId),
+  });
+
   useEffect(() => {
     if (product) {
       setValues(productToForm(product));
@@ -186,54 +260,34 @@ export function useProductFormPage() {
       setPendingImageFile(null);
       setImagePreviewUrl(null);
       setImageError(null);
-      const items =
-        (
-          product as ProductRecord & {
-            priceTableItems?: Array<{
-              priceTableId: string;
-              price: unknown;
-            }>;
-          }
-        ).priceTableItems ?? [];
-      const map: Record<string, string> = {};
-      for (const item of items) {
-        map[item.priceTableId] = String(Number(item.price));
-      }
-      setPriceTablePrices(map);
-
-      const sellerRows =
-        (
-          product as ProductRecord & {
-            sellerCommissions?: Array<{
-              sellerId: string;
-              commissionPercent: unknown;
-            }>;
-          }
-        ).sellerCommissions ?? [];
-      const sellerMap: Record<string, string> = {};
-      for (const row of sellerRows) {
-        sellerMap[row.sellerId] = String(Number(row.commissionPercent));
-      }
-      setSellerCommissionPercents(sellerMap);
-      setSellerCommissionEnabled(sellerRows.length > 0);
-
-      const tableRows =
-        (
-          product as ProductRecord & {
-            priceTableCommissions?: Array<{
-              priceTableId: string;
-              commissionPercent: unknown;
-            }>;
-          }
-        ).priceTableCommissions ?? [];
-      setPriceTableCommissionRows(
-        tableRows.map((row) => ({
-          priceTableId: row.priceTableId,
-          percent: String(Number(row.commissionPercent)),
-        })),
+      applyProductExtrasToState(
+        product,
+        setPriceTablePrices,
+        setSellerCommissionPercents,
+        setSellerCommissionEnabled,
+        setPriceTableCommissionRows,
       );
     }
   }, [product, categories]);
+
+  useEffect(() => {
+    if (!duplicateFromId || !duplicateSource) return;
+    setValues(productToDuplicateForm(duplicateSource));
+    const cat = categories.find((c) => c.id === duplicateSource.categoryId);
+    const defs = coerceDefs(cat?.attributeSchema);
+    const loaded = normalizeAttrsJson(duplicateSource.attributes);
+    setAttrs(defs.length > 0 ? pruneAttrs(loaded, defs) : loaded);
+    setPendingImageFile(null);
+    setImagePreviewUrl(null);
+    setImageError(null);
+    applyProductExtrasToState(
+      duplicateSource,
+      setPriceTablePrices,
+      setSellerCommissionPercents,
+      setSellerCommissionEnabled,
+      setPriceTableCommissionRows,
+    );
+  }, [categories, duplicateFromId, duplicateSource]);
 
   useEffect(() => {
     return () => {
@@ -316,26 +370,12 @@ export function useProductFormPage() {
     onError: (e: Error) => setFormError(e.message),
   });
 
-  const duplicateProduct = useMutation({
-    mutationFn: () => {
-      if (!productId) throw new Error("Produto inválido");
-      return apiFetch<ProductRecord>(`/admin/products/${productId}/duplicate`, {
-        method: "POST",
-      });
-    },
-    onSuccess: async (copy) => {
-      await qc.invalidateQueries({ queryKey: ["admin", "products"] });
-      await qc.invalidateQueries({ queryKey: ["admin", "price-tables"] });
-      navigate(`/produtos/${copy.id}/editar`);
-    },
-    onError: (e: Error) => setFormError(e.message),
-  });
+  const openDuplicateForm = useCallback(() => {
+    if (!productId) return;
+    navigate(`/produtos/novo?from=${encodeURIComponent(productId)}`);
+  }, [navigate, productId]);
 
-  const pending =
-    create.isPending ||
-    update.isPending ||
-    imageBusy ||
-    duplicateProduct.isPending;
+  const pending = create.isPending || update.isPending || imageBusy;
 
   const onImageFileChange = useCallback(
     async (file: File | null) => {
@@ -604,10 +644,13 @@ export function useProductFormPage() {
   return {
     productId,
     isEdit,
-    isLoading,
-    isError,
-    loadError: error,
+    isLoading: isLoading || (Boolean(duplicateFromId) && isDuplicateSourceLoading),
+    isError: isEdit ? isError : Boolean(duplicateFromId) && isDuplicateSourceError,
+    loadError: isEdit ? error : duplicateSourceError,
     product,
+    duplicateFromId,
+    duplicateSourceName: duplicateSource?.name ?? null,
+    isDuplicating: Boolean(duplicateFromId),
     activeTab,
     setActiveTab,
     values,
@@ -626,7 +669,7 @@ export function useProductFormPage() {
     selectedSupplier,
     markupPercent,
     handleSubmit,
-    duplicateProduct,
+    openDuplicateForm,
     onCategoryChange,
     pending,
     priceTablePrices,

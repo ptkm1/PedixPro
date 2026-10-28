@@ -534,6 +534,7 @@ export {
   PRODUCT_CLASSIFICATIONS,
   productClassificationLabel,
   productToForm,
+  productToDuplicateForm,
   PURCHASE_UNIT_CODE_MAX,
   PURCHASE_UNITS,
   validateProductForm,

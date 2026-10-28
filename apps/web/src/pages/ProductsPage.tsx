@@ -55,17 +55,6 @@ export function ProductsPage() {
       void qc.invalidateQueries({ queryKey: ["admin", "products"] }),
   });
 
-  const duplicate = useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<{ id: string }>(`/admin/products/${id}/duplicate`, {
-        method: "POST",
-      }),
-    onSuccess: (copy) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "products"] });
-      navigate(`/produtos/${copy.id}/editar`);
-    },
-  });
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -152,14 +141,6 @@ export function ProductsPage() {
         </FormField>
       </div>
 
-      {duplicate.isError ? (
-        <p className="text-sm text-destructive">
-          {duplicate.error instanceof Error
-            ? duplicate.error.message
-            : "Não foi possível duplicar o produto."}
-        </p>
-      ) : null}
-
       {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {Array.from({ length: 12 }).map((_, i) => (
@@ -184,14 +165,7 @@ export function ProductsPage() {
               key={p.id}
               product={p}
               onDuplicate={() => {
-                void confirm({
-                  title: "Duplicar produto?",
-                  description:
-                    "Cria uma cópia com os mesmos dados comerciais e tributários. SKU, código de barras e estoque ficam vazios para você ajustar.",
-                  confirmLabel: "Duplicar",
-                }).then((ok) => {
-                  if (ok) duplicate.mutate(p.id);
-                });
+                navigate(`/produtos/novo?from=${encodeURIComponent(p.id)}`);
               }}
               onDelete={() => {
                 void confirm({

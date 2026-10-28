@@ -308,6 +308,21 @@ export function productToForm(p: ProductRecord): ProductFormValues {
   };
 }
 
+/**
+ * Prefill de “Novo produto” a partir de outro: copia tributários, preços e
+ * cadastro comercial; limpa identificadores únicos e estoque.
+ */
+export function productToDuplicateForm(p: ProductRecord): ProductFormValues {
+  return {
+    ...productToForm(p),
+    name: "",
+    sku: "",
+    barcode: "",
+    fiscalGtin: "",
+    stockQty: "0",
+  };
+}
+
 export function normalizeNcm(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 8);
 }
