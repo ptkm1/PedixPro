@@ -11,10 +11,35 @@ export type ManualStockEntryInput = {
   productId: string;
   type: Extract<StockMovementType, "MANUAL_IN" | "MANUAL_OUT" | "ADJUST">;
   qty: number;
-  lotCode: string;
-  expiresAt: Date;
+  /** Vazio/omitido = movimentação sem lote (só saldo do produto). */
+  lotCode?: string | null;
+  /** Obrigatório quando há lote; ignorado sem lote. */
+  expiresAt?: Date | null;
   reason?: string;
 };
+
+/** Baixa FEFO em lotes existentes (sem criar movimento — o caller registra um só). */
+async function reduceLotsFefo(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  qty: number,
+): Promise<void> {
+  let remaining = qty;
+  if (remaining <= 0) return;
+  const lots = await tx.productLot.findMany({
+    where: { productId, qty: { gt: 0 } },
+    orderBy: { expiresAt: "asc" },
+  });
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const take = Math.min(lot.qty, remaining);
+    await tx.productLot.update({
+      where: { id: lot.id },
+      data: { qty: lot.qty - take },
+    });
+    remaining -= take;
+  }
+}
 
 const EXPIRING_DAYS = 30;
 
@@ -184,19 +209,21 @@ export async function applyManualStockEntry(
 ): Promise<{
   productId: string;
   stockQty: number;
-  lotId: string;
+  lotId: string | null;
   movementId: string;
 }> {
   if (!Number.isInteger(input.qty) || input.qty <= 0) {
     throw new StockError("Quantidade deve ser um inteiro positivo.");
   }
-  const lotCode = input.lotCode.trim();
-  if (!lotCode) throw new StockError("Informe o lote.");
-  if (
-    !(input.expiresAt instanceof Date) ||
-    Number.isNaN(input.expiresAt.getTime())
-  ) {
-    throw new StockError("Informe a validade.");
+  const lotCode = (input.lotCode ?? "").trim();
+  const hasLot = lotCode.length > 0;
+  const expiresAt =
+    input.expiresAt instanceof Date && !Number.isNaN(input.expiresAt.getTime())
+      ? input.expiresAt
+      : null;
+
+  if (hasLot && !expiresAt) {
+    throw new StockError("Informe a validade do lote.");
   }
 
   const product = await prisma.product.findFirst({
@@ -210,17 +237,93 @@ export async function applyManualStockEntry(
   );
 
   return prisma.$transaction(async (tx) => {
+    if (!hasLot) {
+      let qtyDelta: number;
+      let newProductQty: number;
+
+      if (input.type === "MANUAL_IN") {
+        qtyDelta = input.qty;
+        newProductQty = product.stockQty + input.qty;
+      } else if (input.type === "MANUAL_OUT") {
+        if (product.stockQty < input.qty) {
+          throw new StockError(
+            `Estoque insuficiente para "${product.name}" (disponível: ${product.stockQty}).`,
+          );
+        }
+        qtyDelta = -input.qty;
+        newProductQty = product.stockQty - input.qty;
+        await reduceLotsFefo(tx, input.productId, input.qty);
+      } else {
+        // ADJUST sem lote: define o saldo do produto
+        qtyDelta = input.qty - product.stockQty;
+        newProductQty = input.qty;
+        if (qtyDelta < 0) {
+          await reduceLotsFefo(tx, input.productId, -qtyDelta);
+        }
+      }
+
+      await tx.product.update({
+        where: { id: input.productId },
+        data: { stockQty: newProductQty },
+      });
+
+      const movement = await tx.stockMovement.create({
+        data: {
+          organizationId: input.organizationId,
+          productId: input.productId,
+          type: input.type,
+          qtyDelta,
+          balanceAfter: newProductQty,
+          lotId: null,
+          lotCode: null,
+          expiresAt: null,
+          userId: input.userId,
+          reason: input.reason?.trim() || null,
+        },
+      });
+
+      await writeAuditLog(
+        {
+          organizationId: input.organizationId,
+          userId: input.userId,
+          userMatricula: input.userMatricula,
+          action: AUDIT_ACTION.STOCK_ENTRY,
+          entityType: AUDIT_ENTITY.Product,
+          entityId: input.productId,
+          metadata: {
+            movementType: input.type,
+            movementId: movement.id,
+            lotId: null,
+            lotCode: null,
+            expiresAt: null,
+            qtyDelta,
+            balanceAfter: newProductQty,
+            reason: input.reason ?? null,
+            unitLabel: unitLabel ?? null,
+          },
+        },
+        tx,
+      );
+
+      return {
+        productId: input.productId,
+        stockQty: newProductQty,
+        lotId: null,
+        movementId: movement.id,
+      };
+    }
+
     let lot = await tx.productLot.findUnique({
       where: {
         productId_lotCode: { productId: input.productId, lotCode },
       },
     });
 
-    if (lot && lot.expiresAt.getTime() !== input.expiresAt.getTime()) {
+    if (lot && lot.expiresAt.getTime() !== expiresAt!.getTime()) {
       // Same lot code: keep earliest expiry consistency — update if different.
       lot = await tx.productLot.update({
         where: { id: lot.id },
-        data: { expiresAt: input.expiresAt },
+        data: { expiresAt: expiresAt! },
       });
     }
 
@@ -230,7 +333,7 @@ export async function applyManualStockEntry(
           organizationId: input.organizationId,
           productId: input.productId,
           lotCode,
-          expiresAt: input.expiresAt,
+          expiresAt: expiresAt!,
           qty: 0,
         },
       });
@@ -289,7 +392,7 @@ export async function applyManualStockEntry(
         balanceAfter: newProductQty,
         lotId: lot.id,
         lotCode,
-        expiresAt: input.expiresAt,
+        expiresAt: expiresAt!,
         userId: input.userId,
         reason: input.reason?.trim() || null,
       },
@@ -308,7 +411,7 @@ export async function applyManualStockEntry(
           movementId: movement.id,
           lotId: lot.id,
           lotCode,
-          expiresAt: input.expiresAt.toISOString(),
+          expiresAt: expiresAt!.toISOString(),
           qtyDelta,
           balanceAfter: newProductQty,
           reason: input.reason ?? null,

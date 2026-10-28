@@ -248,14 +248,22 @@ export function StockPage() {
       if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
         throw new Error("Quantidade inválida");
       }
+      const lot = lotCode.trim();
+      if (lot && !expiresAt) {
+        throw new Error("Informe a validade do lote.");
+      }
       return apiFetch("/admin/stock/entries", {
         method: "POST",
         body: JSON.stringify({
           productId: selectedProduct!.id,
           type: entryType,
           qty: qtyNum,
-          lotCode,
-          expiresAt: (parseIsoDate(expiresAt) ?? new Date(expiresAt)).toISOString(),
+          lotCode: lot || null,
+          expiresAt: lot
+            ? (
+                parseIsoDate(expiresAt) ?? new Date(expiresAt)
+              ).toISOString()
+            : null,
           reason: reason.trim() || undefined,
           password,
         }),
@@ -272,13 +280,33 @@ export function StockPage() {
     onError: (e: Error) => setFormError(e.message),
   });
 
+  const lotTrimmed = lotCode.trim();
+  const qtyNum = Number(qty);
+  const qtyValid = Number.isFinite(qtyNum) && qtyNum > 0;
+  const expiresRequiredOk = !lotTrimmed || Boolean(expiresAt);
+
+  const projectedBalance = useMemo(() => {
+    if (!selectedProduct || !qtyValid) return null;
+    const current = selectedProduct.stockQty;
+    if (entryType === "MANUAL_IN") return current + qtyNum;
+    if (entryType === "MANUAL_OUT") return current - qtyNum;
+    // ADJUST: com lote = saldo produto + (nova qtd lote − qtd atual do lote);
+    // sem lote = define o saldo do produto.
+    if (!lotTrimmed) return qtyNum;
+    const match = selectedProduct.lots.find(
+      (l) => l.lotCode.toLowerCase() === lotTrimmed.toLowerCase(),
+    );
+    const lotQty = match?.qty ?? 0;
+    return current + (qtyNum - lotQty);
+  }, [selectedProduct, qtyValid, qtyNum, entryType, lotTrimmed]);
+
   const canSubmit =
     Boolean(selectedProduct) &&
-    Number.isFinite(Number(qty)) &&
-    Number(qty) > 0 &&
-    lotCode.trim() &&
-    expiresAt &&
-    password.length > 0;
+    qtyValid &&
+    expiresRequiredOk &&
+    password.length > 0 &&
+    projectedBalance != null &&
+    projectedBalance >= 0;
 
   useScrollToFirstError(formError, { enabled: Boolean(formError) });
 
@@ -582,7 +610,10 @@ export function StockPage() {
               options={[
                 { value: "MANUAL_IN", label: "Entrada" },
                 { value: "MANUAL_OUT", label: "Saída" },
-                { value: "ADJUST", label: "Ajuste (definir qtd. do lote)" },
+                {
+                  value: "ADJUST",
+                  label: "Ajuste (definir quantidade)",
+                },
               ]}
             />
           </FormField>
@@ -596,7 +627,11 @@ export function StockPage() {
               onChange={(e) => setQty(e.target.value)}
             />
           </FormField>
-          <FormField label="Lote" htmlFor="stock-lot" required>
+          <FormField
+            label="Lote"
+            htmlFor="stock-lot"
+            hint="Opcional. Sem lote, a movimentação altera só o saldo do produto."
+          >
             <Input
               id="stock-lot"
               value={lotCode}
@@ -612,19 +647,53 @@ export function StockPage() {
                     parseIsoDate(match.expiresAt.slice(0, 10)) ??
                     new Date(match.expiresAt);
                   setExpiresAt(toIsoDate(parsed));
+                } else if (!next.trim()) {
+                  setExpiresAt("");
                 }
               }}
               placeholder="Ex.: L2026-01"
             />
           </FormField>
-          <FormField label="Validade" htmlFor="stock-expires" required>
+          <FormField
+            label="Validade"
+            htmlFor="stock-expires"
+            required={Boolean(lotTrimmed)}
+            hint={
+              lotTrimmed
+                ? "Obrigatória quando há lote."
+                : "Opcional sem lote (não será gravada)."
+            }
+          >
             <DatePicker
               id="stock-expires"
               value={expiresAt}
               onChange={setExpiresAt}
-              placeholder="Validade do lote"
+              placeholder={
+                lotTrimmed ? "Validade do lote" : "Opcional sem lote"
+              }
+              disabled={!lotTrimmed}
             />
           </FormField>
+          {selectedProduct && qtyValid && projectedBalance != null ? (
+            <div
+              className={cn(
+                "sm:col-span-2 rounded-lg border px-3 py-2.5 text-sm",
+                projectedBalance < 0
+                  ? "border-destructive/40 bg-destructive/5 text-destructive"
+                  : "border-border bg-muted/30 text-foreground",
+              )}
+            >
+              <p className="font-medium">Saldo após a movimentação</p>
+              <p className="mt-0.5 tabular-nums">
+                Atual: {selectedProduct.stockQty}
+                {" → "}
+                <span className="font-semibold">{projectedBalance}</span>
+                {projectedBalance < 0
+                  ? " (insuficiente — ajuste a quantidade)"
+                  : null}
+              </p>
+            </div>
+          ) : null}
           <FormField
             label="Motivo"
             htmlFor="stock-reason"

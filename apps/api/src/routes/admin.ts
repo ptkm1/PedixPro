@@ -1887,10 +1887,20 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         productId: z.string().min(1),
         type: z.enum(["MANUAL_IN", "MANUAL_OUT", "ADJUST"]),
         qty: z.number().int().positive(),
-        lotCode: z.string().min(1).max(80),
-        expiresAt: z.string().min(1),
+        lotCode: z.string().max(80).optional().nullable(),
+        expiresAt: z.string().optional().nullable(),
         reason: z.string().max(500).optional(),
         password: z.string().min(1),
+      })
+      .superRefine((data, ctx) => {
+        const lot = (data.lotCode ?? "").trim();
+        if (lot && !(data.expiresAt ?? "").trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Informe a validade do lote.",
+            path: ["expiresAt"],
+          });
+        }
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -1906,9 +1916,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const ok = await verifyPassword(body.data.password, user.passwordHash);
     if (!ok) return reply.status(401).send({ error: "Senha incorreta" });
 
-    const expiresAt = new Date(body.data.expiresAt);
-    if (Number.isNaN(expiresAt.getTime())) {
-      return reply.status(400).send({ error: "Validade inválida" });
+    const lotCode = (body.data.lotCode ?? "").trim();
+    let expiresAt: Date | null = null;
+    if (lotCode) {
+      expiresAt = new Date(body.data.expiresAt!);
+      if (Number.isNaN(expiresAt.getTime())) {
+        return reply.status(400).send({ error: "Validade inválida" });
+      }
     }
 
     try {
@@ -1919,7 +1933,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         productId: body.data.productId,
         type: body.data.type,
         qty: body.data.qty,
-        lotCode: body.data.lotCode,
+        lotCode: lotCode || null,
         expiresAt,
         reason: body.data.reason,
       });
