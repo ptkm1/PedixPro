@@ -429,8 +429,8 @@ export function OrdersPage() {
     : "Acompanhe o fluxo do pedido numa única etapa. Clique no card para abrir o pedido.";
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Pedidos</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -463,7 +463,7 @@ export function OrdersPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
@@ -477,7 +477,7 @@ export function OrdersPage() {
         </Button>
       </div>
 
-      <FilterBar className="p-4 lg:grid-cols-5">
+      <FilterBar className="shrink-0 p-4 lg:grid-cols-5">
         <FormField label="Nº do pedido" htmlFor="orders-filter-number">
           <Input
             id="orders-filter-number"
@@ -552,29 +552,31 @@ export function OrdersPage() {
       ) : null}
 
       {isKanban ? (
-        <OrdersKanbanBoard
-          orders={orders}
-          situations={situations}
-          isLoading={isLoading || situationsPending}
-          isError={isError}
-          canDrag={canWrite && !situationBusy}
-          movingId={
-            patchSituation.isPending
-              ? (patchSituation.variables?.orderId ?? null)
-              : null
-          }
-          onMove={(orderId, move) => {
-            const order = orders.find((o) => o.id === orderId);
-            void applyStageChange(
-              [orderId],
-              move.situationId,
-              order?.status,
-            );
-          }}
-        />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <OrdersKanbanBoard
+            orders={orders}
+            situations={situations}
+            isLoading={isLoading || situationsPending}
+            isError={isError}
+            canDrag={canWrite && !situationBusy}
+            movingId={
+              patchSituation.isPending
+                ? (patchSituation.variables?.orderId ?? null)
+                : null
+            }
+            onMove={(orderId, move) => {
+              const order = orders.find((o) => o.id === orderId);
+              void applyStageChange(
+                [orderId],
+                move.situationId,
+                order?.status,
+              );
+            }}
+          />
+        </div>
       ) : (
         <>
-      <div className="surface-card flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+      <div className="surface-card flex shrink-0 flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {hasSelection
             ? `${selectedOrders.length} pedido(s) selecionado(s)`
@@ -646,16 +648,16 @@ export function OrdersPage() {
       ) : null}
 
       {!isLoading && !isError && orders.length === 0 ? (
-        <div className="surface-card flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+        <div className="surface-card flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
           <ShoppingCart className="h-12 w-12 text-primary/40" />
           <p className="text-muted-foreground">Nenhum pedido encontrado.</p>
         </div>
       ) : null}
 
       {!isLoading && !isError && orders.length > 0 ? (
-        <div className="surface-card overflow-x-auto">
-          <Table>
-            <TableHeader>
+        <div className="surface-card min-h-0 min-w-0 flex-1 overflow-hidden">
+          <Table containerClassName="h-full min-h-0 overflow-auto">
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
               <TableRow>
                 <TableHead className="w-10 px-4">
                   <Checkbox

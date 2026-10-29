@@ -1,3 +1,4 @@
+import { copyProductName } from "@pedidos/shared";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 
@@ -9,11 +10,6 @@ export class DuplicateProductError extends Error {
     super(message);
     this.name = "DuplicateProductError";
   }
-}
-
-function copyName(name: string): string {
-  const base = name.trim() || "Produto";
-  return base.endsWith("(cópia)") ? `${base} 2` : `${base} (cópia)`;
 }
 
 /**
@@ -35,7 +31,7 @@ export async function duplicateProduct(organizationId: string, sourceId: string)
   return prisma.product.create({
     data: {
       organizationId,
-      name: copyName(src.name),
+      name: copyProductName(src.name),
       sku: null,
       barcode: null,
       description: src.description,

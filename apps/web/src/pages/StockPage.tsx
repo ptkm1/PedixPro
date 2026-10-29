@@ -617,7 +617,12 @@ export function StockPage() {
               ]}
             />
           </FormField>
-          <FormField label="Quantidade" htmlFor="stock-qty" required>
+          <FormField
+            label="Quantidade"
+            htmlFor="stock-qty"
+            required
+            className="sm:col-span-2"
+          >
             <Input
               id="stock-qty"
               type="number"
@@ -627,6 +632,31 @@ export function StockPage() {
               onChange={(e) => setQty(e.target.value)}
             />
           </FormField>
+          {selectedProduct && qtyValid && projectedBalance != null ? (
+            <div
+              className={cn(
+                "sm:col-span-2 rounded-lg border px-3 py-2.5 text-sm",
+                projectedBalance < 0
+                  ? "border-destructive/40 bg-destructive/5 text-destructive"
+                  : "border-border bg-muted/30 text-foreground",
+              )}
+            >
+              <p className="font-medium">Saldo após movimentação</p>
+              <p className="mt-0.5 tabular-nums">
+                Atual: {selectedProduct.stockQty}
+                {entryType === "MANUAL_IN"
+                  ? ` + ${qtyNum}`
+                  : entryType === "MANUAL_OUT"
+                    ? ` − ${qtyNum}`
+                    : null}
+                {" → "}
+                <span className="font-semibold">{projectedBalance}</span>
+                {projectedBalance < 0
+                  ? " (insuficiente — ajuste a quantidade)"
+                  : null}
+              </p>
+            </div>
+          ) : null}
           <FormField
             label="Lote"
             htmlFor="stock-lot"
@@ -674,26 +704,6 @@ export function StockPage() {
               disabled={!lotTrimmed}
             />
           </FormField>
-          {selectedProduct && qtyValid && projectedBalance != null ? (
-            <div
-              className={cn(
-                "sm:col-span-2 rounded-lg border px-3 py-2.5 text-sm",
-                projectedBalance < 0
-                  ? "border-destructive/40 bg-destructive/5 text-destructive"
-                  : "border-border bg-muted/30 text-foreground",
-              )}
-            >
-              <p className="font-medium">Saldo após a movimentação</p>
-              <p className="mt-0.5 tabular-nums">
-                Atual: {selectedProduct.stockQty}
-                {" → "}
-                <span className="font-semibold">{projectedBalance}</span>
-                {projectedBalance < 0
-                  ? " (insuficiente — ajuste a quantidade)"
-                  : null}
-              </p>
-            </div>
-          ) : null}
           <FormField
             label="Motivo"
             htmlFor="stock-reason"

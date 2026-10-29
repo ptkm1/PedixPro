@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import {
   DIRECT_SALE_LABEL,
   DIRECT_SALE_OPTION_LABEL,
+  canOverrideOrderUnitPrice,
   ORDER_SELLER_FILTER_DIRECT,
   SYSTEM_SITUATION_CODES,
   canRead,
@@ -175,7 +176,8 @@ export function OrderDetailPage() {
     EDITABLE_SELLER_STATUSES.has(order.status ?? "");
 
   const canEditItems =
-    canWriteStage &&
+    canWriteOrders &&
+    canOverrideOrderUnitPrice(user?.role) &&
     Boolean(order) &&
     EDITABLE_ITEM_STATUSES.has(order?.status ?? "");
 

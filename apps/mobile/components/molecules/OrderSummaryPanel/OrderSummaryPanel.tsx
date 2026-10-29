@@ -318,7 +318,11 @@ export function OrderSummaryPanel({
                   >
                     R$ {fmtMoney(line.effectiveUnitPrice)}
                     {hasDiscount ? ` · −${line.discountPercent}%` : ""}
-                    {line.priceOriginLabel ? ` · ${line.priceOriginLabel}` : ""}
+                    {line.priceOverridden
+                      ? " · Preço ajustado"
+                      : line.priceOriginLabel
+                        ? ` · ${line.priceOriginLabel}`
+                        : ""}
                   </Text>
                   {hasDiscount ? (
                     <View style={styles.discountTag}>

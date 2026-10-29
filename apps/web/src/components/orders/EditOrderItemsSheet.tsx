@@ -273,7 +273,7 @@ export function EditOrderItemsSheet({
       open={open}
       onOpenChange={onOpenChange}
       title="Editar itens do pedido"
-      description="Altere quantidade, preço unitário, inclua ou remova itens. Totais são recalculados ao salvar."
+      description="Altere quantidade, preço unitário, inclua ou remova itens. Totais e comissões são recalculados ao salvar."
       contentClassName="sm:max-h-[92vh]"
       footer={
         <>
@@ -295,7 +295,7 @@ export function EditOrderItemsSheet({
 
       <FormSection
         title="Itens"
-        description="Preço unitário pode ser ajustado pelo administrador (override da tabela)."
+        description="Preço unitário pode ser ajustado por administrador ou gestor (substitui a tabela)."
       >
         {fieldErrors.items ? (
           <p className="mb-2 text-xs text-destructive" data-error="true">

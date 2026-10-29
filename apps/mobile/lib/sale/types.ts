@@ -110,6 +110,8 @@ export type CartLine = {
   priceTableName?: string | null;
   priceOriginLabel?: string | null;
   minPrice?: number | null;
+  /** ADM/Gestor informou preço unitário diferente da tabela. */
+  priceOverridden?: boolean;
 };
 
 export type ProductPriceTableOption = {

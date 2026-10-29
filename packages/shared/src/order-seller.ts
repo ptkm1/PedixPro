@@ -20,3 +20,14 @@ export function orderSellerDisplayName(
   const n = sellerName?.trim();
   return n ? n : DIRECT_SALE_LABEL;
 }
+
+/**
+ * ADM e gestores (staff) podem informar preço unitário no lançamento.
+ * Sem permissão dedicada na matriz — reutiliza o mesmo conjunto de papéis
+ * de venda no escritório (`ADMIN` | `MANAGER`).
+ */
+export function canOverrideOrderUnitPrice(
+  role: "ADMIN" | "SELLER" | "SUPERVISOR" | "MANAGER" | null | undefined,
+): boolean {
+  return role === "ADMIN" || role === "MANAGER";
+}

@@ -11,6 +11,7 @@ import {
     persistHomeIndicatorsError,
     PRODUCT_IMAGE_MAX_BYTES,
     uniqueIdsPreserveOrder,
+    canOverrideOrderUnitPrice,
     type HomeChartIndicatorKey,
     type HomeIndicatorKey,
 } from "@pedidos/shared";
@@ -147,9 +148,11 @@ import {
 } from "../services/order-pricing.js";
 import {
     createSaleOrder,
+    hasUnauthorizedUnitPriceOverride,
     orgAllowedProductIds,
     replySaleCreateError,
     sellerAllowedProductIds,
+    UNIT_PRICE_OVERRIDE_FORBIDDEN,
 } from "../services/create-sale-order.js";
 import { reassignOrderSeller } from "../services/reassign-order-seller.js";
 import { updateSaleOrderItems } from "../services/update-sale-order-items.js";
@@ -5869,6 +5872,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           tradeName: true,
           legalName: true,
           city: true,
+          code: true,
+          cnpj: true,
+          cpf: true,
           sellerId: true,
           regionId: true,
           defaultPriceTableId: true,
@@ -6028,7 +6034,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     ) {
       return reply.status(403).send({ error: "Sem permissão para criar pedidos" });
     }
-    const allowUnitPriceOverride = auth.role === "ADMIN";
+    const allowUnitPriceOverride = canOverrideOrderUnitPrice(auth.role);
     const body = z
       .object({
         sellerId: z.string().min(1).nullable().optional(),
@@ -6048,13 +6054,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .safeParse(req.body);
     if (!body.success) return sendZodError(reply, body.error, req);
 
-    if (
-      !allowUnitPriceOverride &&
-      body.data.items.some((i) => i.unitPrice != null)
-    ) {
-      return reply
-        .status(403)
-        .send({ error: "Somente administradores podem informar preço unitário" });
+    if (hasUnauthorizedUnitPriceOverride(auth.role, body.data.items)) {
+      return reply.status(403).send({ error: UNIT_PRICE_OVERRIDE_FORBIDDEN });
     }
 
     const sellerId = body.data.sellerId?.trim() || null;
@@ -6307,6 +6308,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
               productId: z.string(),
               quantity: z.number().int().positive(),
               discountPercent: z.number().min(0).max(100).optional(),
+              unitPrice: z.number().nonnegative().optional(),
             }),
           )
           .min(1),
@@ -6316,6 +6318,11 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return sendZodError(reply, body.error, req);
     }
 
+    if (hasUnauthorizedUnitPriceOverride(auth.role, body.data.items)) {
+      return reply.status(403).send({ error: UNIT_PRICE_OVERRIDE_FORBIDDEN });
+    }
+
+    const allowUnitPriceOverride = canOverrideOrderUnitPrice(auth.role);
     const sellerId = body.data.sellerId?.trim() || null;
     if (sellerId) {
       const seller = await prisma.seller.findFirst({
@@ -6361,6 +6368,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           productId: i.productId,
           quantity: i.quantity,
           discountPercent: i.discountPercent,
+          ...(allowUnitPriceOverride && i.unitPrice != null
+            ? { unitPrice: i.unitPrice }
+            : {}),
         })),
         notes: body.data.notes,
         status: body.data.status,
@@ -6376,7 +6386,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch("/orders/:id/items", async (req, reply) => {
     const auth = req.auth!;
-    if (!requireAdmin(reply, auth)) return;
+    if (!canOverrideOrderUnitPrice(auth.role)) {
+      return reply.status(403).send({ error: UNIT_PRICE_OVERRIDE_FORBIDDEN });
+    }
     if (
       !(await canWriteEffectiveForUser(
         auth.organizationId,

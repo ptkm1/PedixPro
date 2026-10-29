@@ -23,6 +23,7 @@ export type OfflineSaleQueuePayload = {
     quantity: number;
     discountPercent?: number;
     priceTableId?: string;
+    unitPrice?: number;
   }>;
   snapshot?: OfflineSaleSnapshot;
 };

@@ -7,6 +7,7 @@ import {
   FormSection,
   FormSheet,
 } from "@/components/forms";
+import { CustomerCombobox } from "@/components/CustomerCombobox";
 import { ProductCombobox } from "@/components/ProductCombobox";
 import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/confirm";
 import {
   DIRECT_SALE_OPTION_LABEL,
+  canOverrideOrderUnitPrice,
   isPriceTableUsable,
   ORDER_SELLER_FILTER_DIRECT,
   pickDefaultPriceTableId,
@@ -48,6 +50,9 @@ type LookupCustomer = {
   tradeName?: string | null;
   legalName?: string | null;
   city?: string | null;
+  code?: number | null;
+  cnpj?: string | null;
+  cpf?: string | null;
   sellerId?: string | null;
   regionId?: string | null;
   defaultPriceTableId?: string | null;
@@ -129,20 +134,29 @@ type DraftLine = {
   productId: string;
   quantity: string;
   discountPercent: string;
+  unitPrice: string;
+  priceDirty: boolean;
 };
 
 let lineSeq = 0;
 function newLine(): DraftLine {
   lineSeq += 1;
-  return { key: `l-${lineSeq}`, productId: "", quantity: "1", discountPercent: "" };
+  return {
+    key: `l-${lineSeq}`,
+    productId: "",
+    quantity: "1",
+    discountPercent: "",
+    unitPrice: "",
+    priceDirty: false,
+  };
 }
 
-function customerLabel(c: LookupCustomer): string {
-  const title = c.tradeName?.trim() || c.name;
-  const extra = [c.legalName?.trim() && c.legalName !== title ? c.legalName : null, c.city?.trim()]
-    .filter(Boolean)
-    .join(" · ");
-  return extra ? `${title} — ${extra}` : title;
+function parseMoneyInput(raw: string): number | null {
+  const normalized = raw.trim().replace(",", ".");
+  if (!normalized) return null;
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
 }
 
 function useDebouncedValue<T>(value: T, delayMs = 300): T {
@@ -162,12 +176,12 @@ type Props = Readonly<{
 
 export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
   const { user } = useAuth();
+  const canEditUnitPrice = canOverrideOrderUnitPrice(user?.role);
   const { confirm } = useConfirm();
   const { activeEstablishmentId, activeEstablishment } =
     useActiveEstablishment();
   const [sellerId, setSellerId] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [customerQuery, setCustomerQuery] = useState("");
   const [paymentConditionId, setPaymentConditionId] = useState("");
   const [priceTableId, setPriceTableId] = useState("");
   const [notes, setNotes] = useState("");
@@ -286,13 +300,20 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
   const payloadItems = useMemo(
     () =>
       lines
-        .map((l) => ({
-          productId: l.productId,
-          quantity: Number.parseInt(l.quantity, 10),
-          discountPercent: l.discountPercent.trim()
-            ? Number(l.discountPercent)
-            : undefined,
-        }))
+        .map((l) => {
+          const override =
+            canEditUnitPrice && l.priceDirty
+              ? parseMoneyInput(l.unitPrice)
+              : undefined;
+          return {
+            productId: l.productId,
+            quantity: Number.parseInt(l.quantity, 10),
+            discountPercent: l.discountPercent.trim()
+              ? Number(l.discountPercent)
+              : undefined,
+            ...(override != null ? { unitPrice: override } : {}),
+          };
+        })
         .filter(
           (l) =>
             l.productId &&
@@ -303,7 +324,7 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
                 l.discountPercent >= 0 &&
                 l.discountPercent <= 100)),
         ),
-    [lines],
+    [lines, canEditUnitPrice],
   );
   const debouncedItems = useDebouncedValue(payloadItems);
 
@@ -362,7 +383,6 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
   function resetForm() {
     setSellerId("");
     setCustomerId("");
-    setCustomerQuery("");
     setPaymentConditionId("");
     setPriceTableId("");
     setNotes("");
@@ -408,24 +428,6 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
     }
     createOrder.mutate(status);
   }
-
-  const filteredCustomers = useMemo(() => {
-    const q = customerQuery.trim().toLowerCase();
-    const list = !q
-      ? customers
-      : customers.filter((c) => {
-          const hay = [c.name, c.tradeName, c.legalName, c.city]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return hay.includes(q);
-        });
-    const selected = customers.find((c) => c.id === customerId);
-    if (selected && !list.some((c) => c.id === selected.id)) {
-      return [selected, ...list];
-    }
-    return list;
-  }, [customers, customerQuery, customerId]);
 
   const previewByProduct = useMemo(() => {
     const map = new Map<string, PreviewLine>();
@@ -505,23 +507,14 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
           required
           error={fieldErrors.customerId}
         >
-          <Input
-            id="new-order-customer-search"
-            placeholder="Buscar cliente…"
-            value={customerQuery}
-            onChange={(e) => setCustomerQuery(e.target.value)}
-            className="mb-2"
-          />
-          <AppSelect
+          <CustomerCombobox
             id="new-order-customer"
             value={customerId}
             onValueChange={setCustomerId}
-            placeholder="Selecione o cliente"
+            customers={customers}
+            placeholder="Buscar cliente…"
             invalid={Boolean(fieldErrors.customerId)}
-            options={filteredCustomers.map((c) => ({
-              value: c.id,
-              label: customerLabel(c),
-            }))}
+            disabled={lookupsQ.isLoading}
           />
         </FormField>
         <FormField
@@ -536,7 +529,12 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
             onValueChange={(id) => {
               setSellerId(id);
               setLines((prev) =>
-                prev.map((l) => ({ ...l, productId: "" })),
+                prev.map((l) => ({
+                  ...l,
+                  productId: "",
+                  unitPrice: "",
+                  priceDirty: false,
+                })),
               );
             }}
             placeholder="Venda Direta"
@@ -634,7 +632,9 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
         description={
           sellerId && products.length === 0 && !catalogQ.isPending
             ? "Este vendedor não tem produtos no catálogo. Associe produtos em Vendedores."
-            : "Quantidade e preço efetivo (tabela / promoção). Desconto extra é opcional."
+            : canEditUnitPrice
+              ? "Quantidade, desconto extra e preço unitário (tabela por padrão; administradores e gestores podem ajustar)."
+              : "Quantidade e preço efetivo (tabela / promoção). Desconto extra é opcional."
         }
         className="mt-6"
       >
@@ -651,13 +651,46 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
             const previewLine =
               previewByProduct.get(`${line.productId}:${qty}`) ??
               previewQ.data?.lines.find((l) => l.productId === line.productId);
-            const unit =
-              previewLine?.unitPrice ?? product?.effectiveUnitPrice ?? null;
+            const tableUnit = product?.effectiveUnitPrice ?? null;
+            const overrideUnit = line.priceDirty
+              ? parseMoneyInput(line.unitPrice)
+              : null;
+            const catalogUnit = overrideUnit ?? tableUnit;
+            const displayUnit =
+              overrideUnit ??
+              previewLine?.unitPrice ??
+              tableUnit;
+            const disc = line.discountPercent.trim()
+              ? Number(line.discountPercent)
+              : 0;
+            const applyLocalDisc =
+              line.priceDirty || previewLine?.unitPrice == null;
+            const liveLineTotal =
+              catalogUnit != null &&
+              qty > 0 &&
+              Number.isFinite(disc) &&
+              disc >= 0 &&
+              disc <= 100
+                ? Math.round(
+                    (applyLocalDisc
+                      ? catalogUnit * (1 - (Number.isFinite(disc) ? disc : 0) / 100)
+                      : (previewLine?.unitPrice ?? catalogUnit)) *
+                      qty *
+                      100,
+                  ) / 100
+                : null;
             const maxDisc = product?.maxSellerDiscountPercentEffective ?? 0;
+            const priceLabel = line.priceDirty
+              ? "Editado"
+              : previewLine?.priceOriginLabel
+                ? previewLine.priceOriginLabel
+                : product?.promotionLabel
+                  ? product.promotionLabel
+                  : null;
             return (
               <div
                 key={line.key}
-                className="grid gap-3 rounded-lg border border-border p-3 pb-5 sm:grid-cols-[minmax(0,1.6fr)_5.5rem_5.5rem_minmax(0,7rem)_auto] sm:items-start"
+                className="grid gap-3 rounded-lg border border-border p-3 pb-5 sm:grid-cols-[minmax(0,1.6fr)_5.5rem_5.5rem_minmax(0,7.5rem)_auto] sm:items-start"
               >
                 <FormField label="Produto" htmlFor={`item-prod-${line.key}`}>
                   <ProductCombobox
@@ -666,7 +699,14 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
                     onValueChange={(productId) =>
                       setLines((prev) =>
                         prev.map((l) =>
-                          l.key === line.key ? { ...l, productId } : l,
+                          l.key === line.key
+                            ? {
+                                ...l,
+                                productId,
+                                unitPrice: "",
+                                priceDirty: false,
+                              }
+                            : l,
                         ),
                       )
                     }
@@ -724,23 +764,64 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
                     }
                   />
                 </FormField>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-foreground">
-                    Preço
-                  </span>
-                  <p className="flex h-9 items-center text-sm text-muted-foreground">
-                    {unit != null ? formatOrderMoney(unit) : "—"}
-                    {previewLine?.priceOriginLabel ? (
-                      <span className="ml-1 truncate text-xs">
-                        {previewLine.priceOriginLabel}
-                      </span>
-                    ) : product?.promotionLabel ? (
-                      <span className="ml-1 truncate text-xs">
-                        {product.promotionLabel}
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
+                {canEditUnitPrice ? (
+                  <FormField
+                    label="Preço"
+                    htmlFor={`item-price-${line.key}`}
+                    hint={
+                      priceLabel
+                        ? liveLineTotal != null
+                          ? `${priceLabel} · ${formatOrderMoney(liveLineTotal)}`
+                          : priceLabel
+                        : liveLineTotal != null
+                          ? formatOrderMoney(liveLineTotal)
+                          : undefined
+                    }
+                    hintOverlay
+                  >
+                    <Input
+                      id={`item-price-${line.key}`}
+                      inputMode="decimal"
+                      value={
+                        line.priceDirty
+                          ? line.unitPrice
+                          : displayUnit != null
+                            ? String(displayUnit)
+                            : ""
+                      }
+                      placeholder="Tabela"
+                      onChange={(e) =>
+                        setLines((prev) =>
+                          prev.map((l) =>
+                            l.key === line.key
+                              ? {
+                                  ...l,
+                                  unitPrice: e.target.value,
+                                  priceDirty: true,
+                                }
+                              : l,
+                          ),
+                        )
+                      }
+                    />
+                  </FormField>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-sm font-medium text-foreground">
+                      Preço
+                    </span>
+                    <p className="flex h-9 items-center text-sm text-muted-foreground">
+                      {displayUnit != null
+                        ? formatOrderMoney(displayUnit)
+                        : "—"}
+                      {priceLabel ? (
+                        <span className="ml-1 truncate text-xs">
+                          {priceLabel}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -775,23 +856,43 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
         </Button>
       </FormSection>
 
-      {previewQ.data ? (
+      {previewQ.data || payloadItems.length > 0 ? (
         <div className="mt-4 space-y-1 rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Subtotal</span>
-            <span>{formatOrderMoney(previewQ.data.grossLinesTotal)}</span>
+            <span>
+              {formatOrderMoney(
+                previewQ.data?.grossLinesTotal ??
+                  payloadItems.reduce((s, l) => {
+                    const product = products.find((p) => p.id === l.productId);
+                    const unit = l.unitPrice ?? product?.effectiveUnitPrice ?? 0;
+                    const disc = l.discountPercent ?? 0;
+                    return s + unit * l.quantity * (1 - disc / 100);
+                  }, 0),
+              )}
+            </span>
           </div>
-          {previewQ.data.comboDiscountTotal > 0 ? (
+          {(previewQ.data?.comboDiscountTotal ?? 0) > 0 ? (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Desconto de combo</span>
               <span>
-                − {formatOrderMoney(previewQ.data.comboDiscountTotal)}
+                − {formatOrderMoney(previewQ.data!.comboDiscountTotal)}
               </span>
             </div>
           ) : null}
           <div className="flex justify-between font-medium">
             <span>Total</span>
-            <span>{formatOrderMoney(previewQ.data.netTotal)}</span>
+            <span>
+              {formatOrderMoney(
+                previewQ.data?.netTotal ??
+                  payloadItems.reduce((s, l) => {
+                    const product = products.find((p) => p.id === l.productId);
+                    const unit = l.unitPrice ?? product?.effectiveUnitPrice ?? 0;
+                    const disc = l.discountPercent ?? 0;
+                    return s + unit * l.quantity * (1 - disc / 100);
+                  }, 0),
+              )}
+            </span>
           </div>
         </div>
       ) : null}

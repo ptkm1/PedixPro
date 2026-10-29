@@ -1,3 +1,4 @@
+import { canOverrideOrderUnitPrice } from "@pedidos/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,6 +15,7 @@ import {
   sellerOfflineStaleTime,
 } from "../../lib/seller-offline-queries";
 import { useOfflineOutboxCounts } from "../../lib/useOfflineOutboxCounts";
+import { useAuth } from "../../context/AuthContext";
 import { useOrderSyncMode } from "../useOrderSyncMode";
 
 export type EditableQueueLine = {
@@ -22,6 +24,7 @@ export type EditableQueueLine = {
   quantity: number;
   discountPercent: number;
   unitPrice: number;
+  priceOverridden?: boolean;
 };
 
 function parseNameFromSummary(summary: string | undefined, fallback: string) {
@@ -53,6 +56,8 @@ function navigateAwayFromOfflineEdit(router: ReturnType<typeof useRouter>) {
 
 export function useOfflineEditScreen(localId: string) {
   const router = useRouter();
+  const { user } = useAuth();
+  const canOverrideUnitPrice = canOverrideOrderUnitPrice(user?.role);
   const { alert } = useConfirm();
   const { settings, isLoading: settingsLoading } = useOrderSyncMode();
   const canEditQueued = settings?.sellerCanEditQueuedSales === true;
@@ -163,8 +168,11 @@ export function useOfflineEditScreen(localId: string) {
             const name =
               cached?.name ??
               parseNameFromSummary(summary, item.productId);
-            const unitPrice =
-              cached?.unitPrice && cached.unitPrice > 0
+            const overridden =
+              typeof item.unitPrice === "number" && item.unitPrice >= 0;
+            const unitPrice = overridden
+              ? item.unitPrice!
+              : cached?.unitPrice && cached.unitPrice > 0
                 ? cached.unitPrice
                 : parseUnitPriceFromSummary(summary, item.quantity);
             return {
@@ -173,6 +181,7 @@ export function useOfflineEditScreen(localId: string) {
               quantity: item.quantity,
               discountPercent: item.discountPercent ?? 0,
               unitPrice,
+              priceOverridden: overridden,
             };
           }),
         );
@@ -197,7 +206,9 @@ export function useOfflineEditScreen(localId: string) {
           ...line,
           name: cached.name || line.name,
           unitPrice:
-            cached.unitPrice > 0 ? cached.unitPrice : line.unitPrice,
+            line.priceOverridden || !(cached.unitPrice > 0)
+              ? line.unitPrice
+              : cached.unitPrice,
         };
       }),
     );
@@ -226,6 +237,18 @@ export function useOfflineEditScreen(localId: string) {
     setLines((prev) => prev.filter((l) => l.productId !== productId));
   }, []);
 
+  const setUnitPrice = useCallback((productId: string, unitPrice: number) => {
+    const next = Math.round(Math.max(0, unitPrice) * 100) / 100;
+    if (!Number.isFinite(next)) return;
+    setLines((prev) =>
+      prev.map((l) =>
+        l.productId === productId
+          ? { ...l, unitPrice: next, priceOverridden: true }
+          : l,
+      ),
+    );
+  }, []);
+
   const save = useCallback(async () => {
     if (!basePayload) return;
     if (lines.length === 0) {
@@ -247,6 +270,9 @@ export function useOfflineEditScreen(localId: string) {
           quantity: l.quantity,
           ...(disc > 0 ? { discountPercent: disc } : {}),
           ...(prev?.priceTableId ? { priceTableId: prev.priceTableId } : {}),
+          ...(canOverrideUnitPrice && l.priceOverridden
+            ? { unitPrice: l.unitPrice }
+            : {}),
         };
       });
       const lineSummaries = lines.map((l) => {
@@ -284,6 +310,7 @@ export function useOfflineEditScreen(localId: string) {
     productById,
     alert,
     basePayload,
+    canOverrideUnitPrice,
     lines,
     customerLabel,
     paymentConditionLabel,
@@ -301,6 +328,8 @@ export function useOfflineEditScreen(localId: string) {
     customerLabel,
     cartTotal,
     setQty,
+    setUnitPrice,
+    canOverrideUnitPrice,
     removeLine,
     save,
     goBack: () => router.back(),

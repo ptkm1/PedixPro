@@ -1,4 +1,5 @@
-import type { OrderStatus } from "@prisma/client";
+import { canOverrideOrderUnitPrice } from "@pedidos/shared";
+import type { OrderStatus, Role } from "@prisma/client";
 import type { FastifyReply } from "fastify";
 import { prisma } from "../db.js";
 import { situationIdForOrderStatus } from "./order-situations.js";
@@ -114,6 +115,19 @@ export type CreateSaleOrderParams = {
   actorRole?: import("@prisma/client").Role;
   allowedEstablishmentIds?: unknown;
 };
+
+export const UNIT_PRICE_OVERRIDE_FORBIDDEN =
+  "Somente administradores e gestores podem informar o preço unitário.";
+
+export function hasUnauthorizedUnitPriceOverride(
+  role: Role | undefined,
+  items: Array<{ unitPrice?: number | null }>,
+): boolean {
+  return (
+    !canOverrideOrderUnitPrice(role) &&
+    items.some((i) => i.unitPrice != null)
+  );
+}
 
 /** Envia 400/403 se for erro de venda conhecido. */
 export function replySaleCreateError(reply: FastifyReply, err: unknown): boolean {

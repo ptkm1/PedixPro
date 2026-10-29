@@ -137,11 +137,14 @@ export function matchesProductSearch(p: ProductSearchable, q: string): boolean {
   return scoreProductSearch(p, s) > 0;
 }
 
-export function filterCustomersByName<T extends { name: string }>(
-  customers: T[],
-  q: string,
-): T[] {
-  const s = foldSearchText(q);
+export function filterCustomersByName<
+  T extends { name: string; tradeName?: string | null; legalName?: string | null; city?: string | null },
+>(customers: T[], q: string): T[] {
+  const s = q.trim();
   if (!s) return customers;
-  return customers.filter((c) => foldSearchText(c.name).includes(s));
+  return customers.filter((c) =>
+    [c.name, c.tradeName, c.legalName, c.city].some(
+      (part) => part && foldSearchText(part).includes(foldSearchText(s)),
+    ),
+  );
 }

@@ -136,7 +136,8 @@ html.theme-glass.dark {
   --foreground: #f4fbff;
   --card: rgb(255 255 255 / 0.06);
   --card-foreground: #f4fbff;
-  --popover: rgb(255 255 255 / 0.08);
+  /* Near-solid so open selects/comboboxes stay readable over the form */
+  --popover: rgb(8 16 24 / 0.96);
   --popover-foreground: #f4fbff;
   --secondary: rgb(255 255 255 / 0.08);
   --secondary-foreground: #f4fbff;
@@ -395,14 +396,22 @@ html.theme-glass.dark {
   }
 
   html.theme-glass [data-slot="card"],
-  html.theme-glass [data-slot="popover-content"],
-  html.theme-glass [data-slot="dropdown-menu-content"],
-  html.theme-glass [data-slot="dropdown-menu-sub-content"],
-  html.theme-glass [data-slot="select-content"],
   html.theme-glass [data-slot="dialog-content"],
   html.theme-glass [data-slot="sheet-content"] {
     border-color: var(--glass-border) !important;
     background: var(--glass-fill) !important;
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  }
+
+  /* Floating lists: --popover (opaque in dark) instead of glassy --glass-fill */
+  html.theme-glass [data-slot="popover-content"],
+  html.theme-glass [data-slot="dropdown-menu-content"],
+  html.theme-glass [data-slot="dropdown-menu-sub-content"],
+  html.theme-glass [data-slot="select-content"] {
+    border-color: var(--glass-border) !important;
+    background: var(--popover) !important;
     box-shadow: var(--glass-shadow);
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
     backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
