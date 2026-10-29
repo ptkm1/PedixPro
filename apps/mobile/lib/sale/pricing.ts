@@ -127,25 +127,37 @@ export function repriceCartLines(
       priced.tableMinPrice,
       priced.minSaleUnitPrice != null ? Number(priced.minSaleUnitPrice) : null,
     );
+    const catalogUnit = line.priceOverridden
+      ? line.effectiveUnitPrice
+      : priced.effectiveUnitPrice;
     const discCheck = applySellerDiscountWithMinPrice({
-      catalogUnitPrice: priced.effectiveUnitPrice,
+      catalogUnitPrice: catalogUnit,
       discountPercent: line.discountPercent,
       minPrice,
     });
     const discountPercent = discCheck.ok ? line.discountPercent : 0;
+    const nextUnit = line.priceOverridden
+      ? line.effectiveUnitPrice
+      : priced.effectiveUnitPrice;
+    const nextCatalog = line.priceOverridden
+      ? line.catalogUnitPrice
+      : priced.catalogUnitPrice;
+    const nextOrigin = line.priceOverridden
+      ? (line.priceOriginLabel ?? "Preço ajustado")
+      : (priced.priceOriginLabel ?? null);
     if (
-      line.effectiveUnitPrice !== priced.effectiveUnitPrice ||
-      line.catalogUnitPrice !== priced.catalogUnitPrice ||
-      line.priceOriginLabel !== (priced.priceOriginLabel ?? null) ||
+      line.effectiveUnitPrice !== nextUnit ||
+      line.catalogUnitPrice !== nextCatalog ||
+      line.priceOriginLabel !== nextOrigin ||
       line.minPrice !== minPrice ||
       line.discountPercent !== discountPercent
     ) {
       next[id] = {
         ...line,
-        effectiveUnitPrice: priced.effectiveUnitPrice,
-        catalogUnitPrice: priced.catalogUnitPrice,
+        effectiveUnitPrice: nextUnit,
+        catalogUnitPrice: nextCatalog,
         promotionLabel: priced.promotionLabel ?? line.promotionLabel,
-        priceOriginLabel: priced.priceOriginLabel ?? null,
+        priceOriginLabel: nextOrigin,
         minPrice,
         discountPercent,
       };

@@ -17,7 +17,7 @@ import {
 } from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { AttributeFieldDef } from "../components/DynamicCategoryAttributes";
 
@@ -178,7 +178,7 @@ export function useProductFormPage() {
     [],
   );
 
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [], isFetched: categoriesFetched } = useQuery({
     queryKey: ["admin", "product-categories"],
     queryFn: () => apiFetch<CategoryBrief[]>("/admin/product-categories"),
   });
@@ -250,44 +250,60 @@ export function useProductFormPage() {
     enabled: Boolean(duplicateFromId),
   });
 
+  const hydratedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (product) {
-      setValues(productToForm(product));
-      const cat = categories.find((c) => c.id === product.categoryId);
+    hydratedKeyRef.current = null;
+  }, [productId, duplicateFromId]);
+
+  useEffect(() => {
+    if (!categoriesFetched) return;
+
+    const applyLoadedProduct = (
+      record: ProductRecord,
+      asDuplicate: boolean,
+    ) => {
+      setValues(
+        asDuplicate ? productToDuplicateForm(record) : productToForm(record),
+      );
+      const cat = categories.find((c) => c.id === record.categoryId);
       const defs = coerceDefs(cat?.attributeSchema);
-      const loaded = normalizeAttrsJson(product.attributes);
+      const loaded = normalizeAttrsJson(record.attributes);
       setAttrs(defs.length > 0 ? pruneAttrs(loaded, defs) : loaded);
       setPendingImageFile(null);
       setImagePreviewUrl(null);
       setImageError(null);
       applyProductExtrasToState(
-        product,
+        record,
         setPriceTablePrices,
         setSellerCommissionPercents,
         setSellerCommissionEnabled,
         setPriceTableCommissionRows,
       );
-    }
-  }, [product, categories]);
+    };
 
-  useEffect(() => {
+    if (isEdit) {
+      if (!product) return;
+      const key = `edit:${product.id}`;
+      if (hydratedKeyRef.current === key) return;
+      hydratedKeyRef.current = key;
+      applyLoadedProduct(product, false);
+      return;
+    }
+
     if (!duplicateFromId || !duplicateSource) return;
-    setValues(productToDuplicateForm(duplicateSource));
-    const cat = categories.find((c) => c.id === duplicateSource.categoryId);
-    const defs = coerceDefs(cat?.attributeSchema);
-    const loaded = normalizeAttrsJson(duplicateSource.attributes);
-    setAttrs(defs.length > 0 ? pruneAttrs(loaded, defs) : loaded);
-    setPendingImageFile(null);
-    setImagePreviewUrl(null);
-    setImageError(null);
-    applyProductExtrasToState(
-      duplicateSource,
-      setPriceTablePrices,
-      setSellerCommissionPercents,
-      setSellerCommissionEnabled,
-      setPriceTableCommissionRows,
-    );
-  }, [categories, duplicateFromId, duplicateSource]);
+    const key = `dup:${duplicateSource.id}`;
+    if (hydratedKeyRef.current === key) return;
+    hydratedKeyRef.current = key;
+    applyLoadedProduct(duplicateSource, true);
+  }, [
+    categories,
+    categoriesFetched,
+    duplicateFromId,
+    duplicateSource,
+    isEdit,
+    product,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -644,7 +660,10 @@ export function useProductFormPage() {
   return {
     productId,
     isEdit,
-    isLoading: isLoading || (Boolean(duplicateFromId) && isDuplicateSourceLoading),
+    isLoading:
+      isLoading ||
+      ((isEdit || Boolean(duplicateFromId)) && !categoriesFetched) ||
+      (Boolean(duplicateFromId) && isDuplicateSourceLoading),
     isError: isEdit ? isError : Boolean(duplicateFromId) && isDuplicateSourceError,
     loadError: isEdit ? error : duplicateSourceError,
     product,

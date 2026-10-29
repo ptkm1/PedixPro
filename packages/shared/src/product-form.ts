@@ -308,6 +308,12 @@ export function productToForm(p: ProductRecord): ProductFormValues {
   };
 }
 
+/** Sufixo de cópia usado no cadastro (web prefill e API). */
+export function copyProductName(name: string): string {
+  const base = name.trim() || "Produto";
+  return base.endsWith("(cópia)") ? `${base} 2` : `${base} (cópia)`;
+}
+
 /**
  * Prefill de “Novo produto” a partir de outro: copia tributários, preços e
  * cadastro comercial; limpa identificadores únicos e estoque.
@@ -315,7 +321,7 @@ export function productToForm(p: ProductRecord): ProductFormValues {
 export function productToDuplicateForm(p: ProductRecord): ProductFormValues {
   return {
     ...productToForm(p),
-    name: "",
+    name: copyProductName(p.name),
     sku: "",
     barcode: "",
     fiscalGtin: "",

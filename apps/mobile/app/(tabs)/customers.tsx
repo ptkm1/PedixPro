@@ -15,6 +15,7 @@ import {
     formatCnpjMask,
     formatCpfMask,
     formatStructuredAddress,
+    matchesCustomerQuery,
 } from "@pedidos/shared";
 import { Search, UserPlus } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -73,17 +74,9 @@ export default function CustomersScreen() {
   } = useCustomersScreen();
 
   const filtered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
+    const q = debouncedSearch.trim();
     if (!q) return customers;
-    return customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.email?.toLowerCase().includes(q) ?? false) ||
-        (c.phone?.includes(q) ?? false) ||
-        (c.city?.toLowerCase().includes(q) ?? false) ||
-        (c.cnpj?.includes(q) ?? false) ||
-        (c.cpf?.includes(q) ?? false),
-    );
+    return customers.filter((c) => matchesCustomerQuery(c, q));
   }, [customers, debouncedSearch]);
 
   const sections = useMemo<CustomerSection[]>(() => {

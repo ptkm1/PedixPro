@@ -25,8 +25,9 @@ export type SaleLineInput = {
   quantity: number;
   discountPercent?: number;
   /**
-   * Override explícito do unitário (ADM ao editar pedido).
-   * Quando informado, ignora desconto % e usa este valor (ainda respeita minSale se houver).
+   * Override explícito do unitário (ADM/Gestor no lançamento ou edição).
+   * Substitui o preço de tabela/promoção e ainda aplica desconto % (máx. do produto)
+   * e o mínimo de venda.
    */
   unitPrice?: number;
   /** Tabela escolhida para esta linha (opcional; senão usa a do pedido). */
@@ -155,7 +156,7 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
         ? Math.max(tableMin, productMin)
         : (tableMin ?? productMin);
 
-    let unitPrice: number;
+    let catalogUnit = priced.effectiveUnitPrice;
     let priceOrigin: string | null = priced.origin;
     let priceOriginLabel: string | null = priced.originLabel;
 
@@ -166,35 +167,30 @@ export async function computeSaleOrder(params: ComputeSaleOrderParams): Promise<
           `Preço unitário inválido para «${prod.name}».`,
         );
       }
-      if (minSale != null && override + 1e-9 < minSale) {
-        throw new OrderPricingError(
-          `Preço unitário de «${prod.name}» abaixo do mínimo permitido (${minSale.toFixed(2)}).`,
-        );
-      }
-      unitPrice = override;
+      catalogUnit = override;
       priceOrigin = "ADMIN_OVERRIDE";
-      priceOriginLabel = "Ajuste administrador";
-    } else {
-      const maxSellerDisc =
-        prod.maxSellerDiscountPercent != null
-          ? decToNum(prod.maxSellerDiscountPercent)
-          : orgDefaultMaxDisc;
-      const requestedDisc = Math.min(100, Math.max(0, input.discountPercent ?? 0));
-      if (requestedDisc > maxSellerDisc + 1e-9) {
-        throw new OrderPricingError(
-          `Desconto de ${requestedDisc}% acima do máximo permitido (${maxSellerDisc}%) para «${prod.name}».`,
-        );
-      }
-      const afterDisc = applySellerDiscountWithMinPrice({
-        catalogUnitPrice: priced.effectiveUnitPrice,
-        discountPercent: requestedDisc,
-        minPrice: minSale,
-      });
-      if (!afterDisc.ok) {
-        throw new OrderPricingError(afterDisc.message);
-      }
-      unitPrice = afterDisc.unitPrice;
+      priceOriginLabel = "Preço ajustado";
     }
+
+    const maxSellerDisc =
+      prod.maxSellerDiscountPercent != null
+        ? decToNum(prod.maxSellerDiscountPercent)
+        : orgDefaultMaxDisc;
+    const requestedDisc = Math.min(100, Math.max(0, input.discountPercent ?? 0));
+    if (requestedDisc > maxSellerDisc + 1e-9) {
+      throw new OrderPricingError(
+        `Desconto de ${requestedDisc}% acima do máximo permitido (${maxSellerDisc}%) para «${prod.name}».`,
+      );
+    }
+    const afterDisc = applySellerDiscountWithMinPrice({
+      catalogUnitPrice: catalogUnit,
+      discountPercent: requestedDisc,
+      minPrice: minSale,
+    });
+    if (!afterDisc.ok) {
+      throw new OrderPricingError(afterDisc.message);
+    }
+    const unitPrice = afterDisc.unitPrice;
 
     const resolvedCommission = params.sellerId
       ? await resolveCommission(

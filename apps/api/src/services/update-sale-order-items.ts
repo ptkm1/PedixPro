@@ -61,7 +61,7 @@ export type UpdateSaleOrderItemsParams = {
 };
 
 /**
- * Substitui os itens de um pedido existente (somente ADM via rota).
+ * Substitui os itens de um pedido existente (ADM/Gestor via rota).
  * Recalcula preços/comissões/totais; ajusta estoque se CONFIRMED.
  */
 export async function updateSaleOrderItems(params: UpdateSaleOrderItemsParams) {

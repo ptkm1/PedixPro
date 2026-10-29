@@ -806,6 +806,10 @@ export default function QuickSaleScreen() {
           }
           onOpenDiscount={(line) => setDiscountLine(line)}
           onRemoveLine={(line) => s.setCartQty(s.cartProductStub(line), 0)}
+          canOverrideUnitPrice={s.canOverrideUnitPrice}
+          onUnitPriceChange={(line, unitPrice) =>
+            s.setLineUnitPrice(line.productId, unitPrice)
+          }
         />
 
         <DiscountSheet

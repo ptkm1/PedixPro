@@ -3,6 +3,7 @@ import { ThemedText } from "@/components/atoms/ThemedText";
 import { ThemedTextInput } from "@/components/atoms/ThemedTextInput";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useTheme } from "@/lib/theme";
+import { matchesCustomerQuery } from "@pedidos/shared";
 import { Check, ChevronDown, ChevronUp, Circle, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -149,9 +150,9 @@ export function CatalogFiltersModal({
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return [];
-    const q = debouncedCustomerSearch.trim().toLowerCase();
+    const q = debouncedCustomerSearch.trim();
     if (!q) return customers;
-    return customers.filter((c) => c.name.toLowerCase().includes(q));
+    return customers.filter((c) => matchesCustomerQuery(c, q));
   }, [customers, debouncedCustomerSearch]);
 
   const allCategoriesSelected = draftCategoryIds.length === 0;

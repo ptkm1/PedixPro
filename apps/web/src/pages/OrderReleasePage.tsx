@@ -18,9 +18,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { formatOrderCode } from "@/lib/order-code";
-import { isWebAdmin } from "@/lib/staff";
 import { cn } from "@/lib/utils";
-import { DIRECT_SALE_LABEL, canWrite as canWritePermission } from "@pedidos/shared";
+import {
+  DIRECT_SALE_LABEL,
+  canOverrideOrderUnitPrice,
+  canWrite as canWritePermission,
+} from "@pedidos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -168,7 +171,7 @@ export function OrderReleasePage() {
     Boolean(user) &&
     (user!.role === "ADMIN" || user!.role === "MANAGER") &&
     canWritePermission(user!.role, "orders", user!.permissions);
-  const canEditItems = isWebAdmin(user?.role) && canWrite;
+  const canEditItems = canWrite && canOverrideOrderUnitPrice(user?.role);
 
   const listQs = useMemo(() => {
     const p = new URLSearchParams();

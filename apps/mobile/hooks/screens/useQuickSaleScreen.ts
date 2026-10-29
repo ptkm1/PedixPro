@@ -1,6 +1,9 @@
 import {
     applySellerDiscountWithMinPrice,
+    canOverrideOrderUnitPrice,
+    matchesCustomerFieldSearch,
     pickDefaultPriceTableId,
+    toCustomerSearchParams,
 } from "@pedidos/shared";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,6 +29,7 @@ import {
     LAST_CUSTOMER_STORAGE_KEY,
     PRODUCT_DOUBLE_TAP_MS,
     setCartLineDiscount,
+    setCartLineUnitPrice,
     syncCartLinesWithProducts,
     type BumpCartQtyOptions,
 } from "../../lib/sale/cart";
@@ -64,6 +68,7 @@ import {
 } from "../../lib/seller-offline-queries";
 import { findProductByBarcode } from "../../lib/utils/barcode";
 import { computeCatalogTileWidths } from "../../lib/utils/catalog-layout";
+import { useDebouncedValue } from "../useDebouncedValue";
 import { useNetInfoOnline } from "../useNetInfoOnline";
 import { useOrderSyncMode } from "../useOrderSyncMode";
 import { useSellerProductCatalog } from "../useSellerProductCatalog";
@@ -118,6 +123,7 @@ export function useQuickSaleScreen() {
   const layout = computeCatalogTileWidths(useWindowDimensions().width);
 
   const canPickSeller = Boolean(user?.role && canAssignSaleSeller(user.role));
+  const canOverrideUnitPrice = canOverrideOrderUnitPrice(user?.role);
   const [assignedSellerId, setAssignedSellerId] = useState<string>(
     ORDER_SELLER_FILTER_DIRECT,
   );
@@ -269,20 +275,28 @@ export function useQuickSaleScreen() {
     queryFn: () => fetchSellerCustomers() as Promise<SaleCustomer[]>,
   });
 
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch, 300);
+  const searchForApi =
+    submittedCustomerSearch &&
+    submittedCustomerSearch.code === customerSearch.code &&
+    submittedCustomerSearch.document === customerSearch.document &&
+    submittedCustomerSearch.legalName === customerSearch.legalName &&
+    submittedCustomerSearch.tradeName === customerSearch.tradeName &&
+    submittedCustomerSearch.city === customerSearch.city
+      ? submittedCustomerSearch
+      : debouncedCustomerSearch;
+  const customerSearchParams = toCustomerSearchParams(searchForApi);
+  const customerSearchQs = customerSearchParams.toString();
+
   const {
     data: searchedCustomers = [],
     isFetching: customerSearchLoading,
     error: customerSearchError,
   } = useQuery({
-    queryKey: ["seller", "customers", "search", submittedCustomerSearch],
-    enabled: submittedCustomerSearch !== null,
-    queryFn: () => {
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(submittedCustomerSearch ?? {})) {
-        if (value.trim()) params.set(key, value.trim());
-      }
-      return apiFetch<SaleCustomer[]>(`/seller/customers?${params.toString()}`);
-    },
+    queryKey: ["seller", "customers", "search", customerSearchQs],
+    enabled: customerSearchQs.length > 0,
+    queryFn: () =>
+      apiFetch<SaleCustomer[]>(`/seller/customers?${customerSearchQs}`),
   });
 
   useEffect(() => {
@@ -436,12 +450,25 @@ export function useQuickSaleScreen() {
     return c;
   }, [customers, lastCustomerId]);
 
-  const filteredCustomers = useMemo(
-    () => (submittedCustomerSearch ? searchedCustomers : customers).filter(
-      (customer) => !customer.approvalStatus || customer.approvalStatus === "APPROVED",
-    ),
-    [customers, searchedCustomers, submittedCustomerSearch],
-  );
+  const filteredCustomers = useMemo(() => {
+    const approved = (customer: SaleCustomer) =>
+      !customer.approvalStatus || customer.approvalStatus === "APPROVED";
+    const matches = (customer: SaleCustomer) =>
+      approved(customer) &&
+      matchesCustomerFieldSearch(customer, customerSearch);
+    const byId = new Map<string, SaleCustomer>();
+    for (const customer of customers) {
+      if (matches(customer)) byId.set(customer.id, customer);
+    }
+    if (customerSearchQs.length > 0) {
+      for (const customer of searchedCustomers) {
+        if (matches(customer) && !byId.has(customer.id)) {
+          byId.set(customer.id, customer);
+        }
+      }
+    }
+    return [...byId.values()];
+  }, [customers, searchedCustomers, customerSearch, customerSearchQs]);
 
   const cartQtyByProductId = useMemo(() => {
     const o: Record<string, number> = {};
@@ -773,6 +800,32 @@ export function useQuickSaleScreen() {
     [alert, cart, showToast],
   );
 
+  const setLineUnitPrice = useCallback(
+    (productId: string, unitPrice: number): boolean => {
+      if (!canOverrideUnitPrice) return false;
+      const line = cart[productId];
+      if (!line) return false;
+      const check = applySellerDiscountWithMinPrice({
+        catalogUnitPrice: unitPrice,
+        discountPercent: line.discountPercent,
+        minPrice: line.minPrice,
+      });
+      if (!check.ok) {
+        setErr(check.message);
+        void alert({
+          title: "Preço mínimo",
+          description: check.message,
+          tone: "danger",
+        });
+        return false;
+      }
+      setErr(null);
+      setCart((prev) => setCartLineUnitPrice(prev, productId, unitPrice));
+      return true;
+    },
+    [alert, canOverrideUnitPrice, cart],
+  );
+
   const onBarcode = useCallback(
     (raw: string) => {
       if (!customerId) {
@@ -863,6 +916,9 @@ export function useQuickSaleScreen() {
             ? { discountPercent: l.discountPercent }
             : {}),
           ...(l.priceTableId ? { priceTableId: l.priceTableId } : {}),
+          ...(canOverrideUnitPrice && l.priceOverridden
+            ? { unitPrice: l.effectiveUnitPrice }
+            : {}),
         })),
         clientMutationId,
       };
@@ -1033,7 +1089,8 @@ export function useQuickSaleScreen() {
   }, [setCustomerId]);
 
   const searchCustomers = useCallback(() => {
-    setSubmittedCustomerSearch({ ...customerSearch });
+    const hasTerm = Object.values(customerSearch).some((value) => value.trim());
+    setSubmittedCustomerSearch(hasTerm ? { ...customerSearch } : null);
   }, [customerSearch]);
 
   const goTab = useCallback(
@@ -1098,6 +1155,7 @@ export function useQuickSaleScreen() {
     paymentPickerOpen,
     setPaymentPickerOpen,
     canPickSeller,
+    canOverrideUnitPrice,
     saleSellers,
     assignedSellerId,
     setAssignedSellerId,
@@ -1126,6 +1184,7 @@ export function useQuickSaleScreen() {
     setCartQty,
     scheduleProductTap,
     applyLineDiscount,
+    setLineUnitPrice,
     priceTablePicker,
     confirmPriceTableOption,
     closePriceTablePicker,

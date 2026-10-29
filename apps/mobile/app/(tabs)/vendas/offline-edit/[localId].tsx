@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 
@@ -60,13 +61,45 @@ export default function OfflineEditScreen() {
                     >
                       {line.name}
                     </ThemedText>
-                    <ThemedText variant="caption" muted>
-                      R$ {fmtMoney(line.unitPrice)}
-                      {line.discountPercent > 0
-                        ? ` · −${line.discountPercent}%`
-                        : ""}
-                      {" · "}Subtotal R$ {fmtMoney(lineTotal)}
-                    </ThemedText>
+                    {s.canOverrideUnitPrice ? (
+                      <View style={styles.priceRow}>
+                        <ThemedText variant="caption" muted>
+                          Unit. R$
+                        </ThemedText>
+                        <TextInput
+                          defaultValue={String(line.unitPrice).replace(".", ",")}
+                          keyboardType="decimal-pad"
+                          onEndEditing={(e) => {
+                            const n = Number(
+                              e.nativeEvent.text.trim().replace(",", "."),
+                            );
+                            if (Number.isFinite(n) && n >= 0) {
+                              s.setUnitPrice(line.productId, n);
+                            }
+                          }}
+                          style={[
+                            styles.priceInput,
+                            {
+                              color: colors.text,
+                              borderColor: colors.border,
+                              backgroundColor: colors.surfaceMuted,
+                            },
+                          ]}
+                        />
+                        <ThemedText variant="caption" muted>
+                          {line.priceOverridden ? "ajustado · " : ""}
+                          Sub R$ {fmtMoney(lineTotal)}
+                        </ThemedText>
+                      </View>
+                    ) : (
+                      <ThemedText variant="caption" muted>
+                        R$ {fmtMoney(line.unitPrice)}
+                        {line.discountPercent > 0
+                          ? ` · −${line.discountPercent}%`
+                          : ""}
+                        {" · "}Subtotal R$ {fmtMoney(lineTotal)}
+                      </ThemedText>
+                    )}
                     <View style={styles.rowActions}>
                       <QuantityStepper
                         value={line.quantity}
@@ -118,5 +151,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+  },
+  priceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  priceInput: {
+    minWidth: 88,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

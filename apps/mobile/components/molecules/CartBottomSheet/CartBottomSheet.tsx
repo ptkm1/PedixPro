@@ -3,6 +3,7 @@ import { fmtMoney } from "@/components/atoms/formatMoney";
 import { useTheme } from "@/lib/theme";
 import type { CartLine } from "@/lib/sale/types";
 import { Trash2 } from "lucide-react-native";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -11,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -27,7 +29,62 @@ export type CartBottomSheetProps = {
   onQtyChange: (line: CartLine, qty: number) => void;
   onOpenDiscount: (line: CartLine) => void;
   onRemoveLine: (line: CartLine) => void;
+  canOverrideUnitPrice?: boolean;
+  onUnitPriceChange?: (line: CartLine, unitPrice: number) => void;
 };
+
+function formatUnitDraft(n: number): string {
+  return n.toFixed(2).replace(".", ",");
+}
+
+function parseUnitDraft(raw: string): number | null {
+  const n = Number(raw.trim().replace(/\s/g, "").replace(",", "."));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function CartLinePriceInput({
+  line,
+  onCommit,
+}: {
+  line: CartLine;
+  onCommit: (unitPrice: number) => void;
+}) {
+  const { colors } = useTheme();
+  const [text, setText] = useState(formatUnitDraft(line.effectiveUnitPrice));
+  useEffect(() => {
+    setText(formatUnitDraft(line.effectiveUnitPrice));
+  }, [line.effectiveUnitPrice, line.productId]);
+
+  return (
+    <View style={styles.priceRow}>
+      <Text style={[styles.meta, { color: colors.textSecondary }]}>Unit. R$</Text>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        onEndEditing={() => {
+          const parsed = parseUnitDraft(text);
+          if (parsed == null) {
+            setText(formatUnitDraft(line.effectiveUnitPrice));
+            return;
+          }
+          onCommit(parsed);
+        }}
+        keyboardType="decimal-pad"
+        inputMode="decimal"
+        accessibilityLabel={`Preço unitário de ${line.name}`}
+        style={[
+          styles.priceInput,
+          {
+            color: colors.text,
+            borderColor: colors.border,
+            backgroundColor: colors.surfaceMuted,
+          },
+        ]}
+      />
+    </View>
+  );
+}
 
 /**
  * Bottom sheet do carrinho expandido: itens editáveis + finalizar.
@@ -44,6 +101,8 @@ export function CartBottomSheet({
   onQtyChange,
   onOpenDiscount,
   onRemoveLine,
+  canOverrideUnitPrice,
+  onUnitPriceChange,
 }: CartBottomSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -113,12 +172,22 @@ export function CartBottomSheet({
                   >
                     {line.name}
                   </Text>
+                  {canOverrideUnitPrice && onUnitPriceChange ? (
+                    <CartLinePriceInput
+                      line={line}
+                      onCommit={(n) => onUnitPriceChange(line, n)}
+                    />
+                  ) : (
+                    <Text style={[styles.meta, { color: colors.textSecondary }]}>
+                      Unit. R$ {fmtMoney(line.effectiveUnitPrice)}
+                    </Text>
+                  )}
                   <Text style={[styles.meta, { color: colors.textSecondary }]}>
-                    Unit. R$ {fmtMoney(line.effectiveUnitPrice)}
+                    {line.priceOverridden ? "Preço ajustado · " : ""}
                     {line.discountPercent > 0
-                      ? ` · −${line.discountPercent}%`
+                      ? `−${line.discountPercent}% · `
                       : ""}
-                    {" · "}Sub R$ {fmtMoney(lineTotal(line))}
+                    Sub R$ {fmtMoney(lineTotal(line))}
                   </Text>
                   {line.priceTableName ? (
                     <Text
@@ -228,6 +297,21 @@ const styles = StyleSheet.create({
   rowMain: { gap: 4 },
   name: { fontSize: 14, fontWeight: "700" },
   meta: { fontSize: 12, fontWeight: "600" },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  priceInput: {
+    minWidth: 88,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 13,
+    fontWeight: "700",
+  },
   rowActions: {
     flexDirection: "row",
     alignItems: "center",

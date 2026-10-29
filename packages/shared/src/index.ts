@@ -40,6 +40,7 @@ export {
   DIRECT_SALE_LABEL,
   DIRECT_SALE_OPTION_LABEL,
   ORDER_SELLER_FILTER_DIRECT,
+  canOverrideOrderUnitPrice,
   isDirectSaleSellerId,
   orderSellerDisplayName,
 } from "./order-seller.js";
@@ -344,6 +345,18 @@ export type {
   CustomerStatus,
 } from "./customer-form.js";
 export {
+  customerFieldSearchIsEmpty,
+  digitsOnly,
+  foldSearchText,
+  matchesCustomerFieldSearch,
+  matchesCustomerQuery,
+  toCustomerSearchParams,
+} from "./customer-search.js";
+export type {
+  CustomerFieldSearch,
+  CustomerSearchable,
+} from "./customer-search.js";
+export {
   FISCAL_INVOICE_STATUS_LABELS,
   FISCAL_MANIFESTATION_LABELS,
   FISCAL_TAX_REGIME_LABELS,
@@ -525,6 +538,7 @@ export {
 } from "./product-display.js";
 export {
   computeMarkupPercent,
+  copyProductName,
   DEFAULT_PURCHASE_UNITS,
   emptyProductForm,
   formToProductPayload,

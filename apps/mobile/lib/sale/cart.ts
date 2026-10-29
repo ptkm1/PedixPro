@@ -66,7 +66,7 @@ export function syncCartLinesWithProducts(
     const p = products.find((x) => x.id === id);
     if (!p) continue;
     const line = next[id];
-    const keepTablePrice = Boolean(line.priceTableId);
+    const keepTablePrice = Boolean(line.priceTableId) || Boolean(line.priceOverridden);
     const nu =
       keepTablePrice || typeof p.effectiveUnitPrice !== "number"
         ? line.effectiveUnitPrice
@@ -169,6 +169,28 @@ export function bumpCartQty(
           p.tableMinPrice,
           p.minSaleUnitPrice != null ? Number(p.minSaleUnitPrice) : null,
         ) ?? cur?.minPrice ?? null,
+      priceOverridden: isNewOrReprice ? false : Boolean(cur?.priceOverridden),
+    },
+  };
+}
+
+export function setCartLineUnitPrice(
+  cart: Record<string, CartLine>,
+  productId: string,
+  unitPrice: number,
+): Record<string, CartLine> {
+  const line = cart[productId];
+  if (!line) return cart;
+  const next = Math.round(Math.max(0, unitPrice) * 100) / 100;
+  if (!Number.isFinite(next)) return cart;
+  return {
+    ...cart,
+    [productId]: {
+      ...line,
+      effectiveUnitPrice: next,
+      catalogUnitPrice: next,
+      priceOverridden: true,
+      priceOriginLabel: "Preço ajustado",
     },
   };
 }

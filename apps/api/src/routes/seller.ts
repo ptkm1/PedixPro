@@ -1,3 +1,4 @@
+import { canOverrideOrderUnitPrice } from "@pedidos/shared";
 import type { AccessPayload } from "../auth/jwt.js";
 import { Prisma } from "@prisma/client";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
@@ -19,9 +20,11 @@ import { buildSellerCustomerCreditSnapshot } from "../services/credit.js";
 import {
     createSaleOrder,
     findIdempotentSale,
+    hasUnauthorizedUnitPriceOverride,
     orgAllowedProductIds,
     replySaleCreateError,
     sellerAllowedProductIds,
+    UNIT_PRICE_OVERRIDE_FORBIDDEN,
 } from "../services/create-sale-order.js";
 import {
     customerBodySchema,
@@ -61,6 +64,10 @@ import {
     sellerCustomerSellableWhere,
     mobileCustomerSellableWhere,
 } from "../services/seller-customer-access.js";
+import {
+    customerListSearchAnd,
+    customerListSearchQuerySchema,
+} from "../services/customer-list-search.js";
 import { recordSellerLocation } from "../services/seller-location-write.js";
 import { decToNum } from "../util/money.js";
 import {
@@ -501,6 +508,8 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
               discountPercent: z.number().min(0).max(100).optional(),
               /** Tabela escolhida no lançamento do item (escopo comercial validado no servidor). */
               priceTableId: z.string().min(1).optional(),
+              /** Preço unitário informado (somente ADM/Gestor). */
+              unitPrice: z.number().nonnegative().optional(),
             }),
           )
           .min(1),
@@ -509,6 +518,11 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
     if (!body.success) {
       return sendZodError(reply, body.error, req);
     }
+
+    if (hasUnauthorizedUnitPriceOverride(auth.role, body.data.items)) {
+      return reply.status(403).send({ error: UNIT_PRICE_OVERRIDE_FORBIDDEN });
+    }
+    const allowUnitPriceOverride = canOverrideOrderUnitPrice(auth.role);
 
     const resolved = resolveSaleSellerId(auth, body.data.sellerId, reply);
     if (!resolved.ok) return;
@@ -638,6 +652,9 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
           quantity: i.quantity,
           discountPercent: i.discountPercent,
           priceTableId: i.priceTableId,
+          ...(allowUnitPriceOverride && i.unitPrice != null
+            ? { unitPrice: i.unitPrice }
+            : {}),
         })),
         notes: body.data.notes,
         status: body.data.status,
@@ -1008,22 +1025,20 @@ export const sellerRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/customers", async (req) => {
     const auth = req.auth!;
-    if (auth.role === "ADMIN") {
-      return prisma.customer.findMany({
-        where: { organizationId: auth.organizationId },
-        include: { specialPrices: true },
-        orderBy: { name: "asc" },
-      });
-    }
-    const showUnassigned = await getSellerShowUnassignedCustomers(
-      auth.organizationId,
-    );
+    const search = customerListSearchQuerySchema.safeParse(req.query);
+    const searchAnd = search.success ? customerListSearchAnd(search.data) : [];
+    const scope: Prisma.CustomerWhereInput =
+      auth.role === "ADMIN"
+        ? { organizationId: auth.organizationId }
+        : sellerCustomerListWhere(
+            auth.organizationId,
+            auth.sellerId!,
+            await getSellerShowUnassignedCustomers(auth.organizationId),
+          );
+    const where: Prisma.CustomerWhereInput =
+      searchAnd.length > 0 ? { AND: [scope, ...searchAnd] } : scope;
     return prisma.customer.findMany({
-      where: sellerCustomerListWhere(
-        auth.organizationId,
-        auth.sellerId!,
-        showUnassigned,
-      ),
+      where,
       include: { specialPrices: true },
       orderBy: { name: "asc" },
     });

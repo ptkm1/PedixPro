@@ -12,7 +12,7 @@ export function DashboardLayout() {
     <EstablishmentProvider>
       <div
         className={cn(
-          "relative min-h-dvh",
+          "relative flex h-dvh flex-col overflow-hidden",
           glassEnabled ? "bg-transparent" : "bg-background",
         )}
       >
@@ -20,9 +20,11 @@ export function DashboardLayout() {
         <div className="fixed inset-y-0 left-0 z-40 w-64 max-lg:hidden">
           <DashboardSidebar className="h-dvh" />
         </div>
-        <div className="min-w-0 lg:pl-64">
-          <DashboardTopBar />
-          <main className="p-4 md:p-6 lg:p-8">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-64">
+          <div className="shrink-0">
+            <DashboardTopBar />
+          </div>
+          <main className="flex min-h-0 flex-1 flex-col overflow-auto p-4 md:p-6 lg:p-8">
             <Outlet />
           </main>
         </div>
