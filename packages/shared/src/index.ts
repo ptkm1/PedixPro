@@ -152,6 +152,7 @@ export function situationImpliesCancel(
 }
 
 export {
+  BRAZIL_UFS,
   cepDigitsOnly,
   formatCepMask,
   formatStructuredAddress,
