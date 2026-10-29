@@ -94,26 +94,21 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get("/ibge/ufs", async (_req, reply) => {
-    try {
-      return await fetchIbgeUfs();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Falha ao listar UFs.";
-      return reply.status(502).send({ error: msg });
-    }
-  });
+  app.get(
+    "/ibge/ufs",
+    { config: { rateLimit: false } },
+    async () => fetchIbgeUfs(),
+  );
 
-  app.get("/ibge/municipios/:uf", async (req, reply) => {
-    const parsed = ufParam.safeParse(req.params);
-    if (!parsed.success) {
-      return sendZodError(reply, parsed.error, req, "UF inválida");
-    }
-    try {
-      return await fetchIbgeMunicipios(parsed.data.uf);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Falha ao listar municípios.";
-      return reply.status(502).send({ error: msg });
-    }
-  });
+  app.get(
+    "/ibge/municipios/:uf",
+    { config: { rateLimit: false } },
+    async (req, reply) => {
+      const parsed = ufParam.safeParse(req.params);
+      if (!parsed.success) {
+        return sendZodError(reply, parsed.error, req, "UF inválida");
+      }
+      return fetchIbgeMunicipios(parsed.data.uf);
+    },
+  );
 };

@@ -175,6 +175,32 @@ export function CustomerFormWizard({
     )?.nome ??
     form.city;
 
+  const ufOptions = (() => {
+    const opts = ufs.map((u) => ({
+      value: u.sigla,
+      label: `${u.sigla} — ${u.nome}`,
+    }));
+    const uf = form.state.trim().toUpperCase();
+    if (uf && !opts.some((o) => o.value === uf)) {
+      opts.unshift({ value: uf, label: uf });
+    }
+    return opts;
+  })();
+
+  const cityOptions = (() => {
+    const opts = municipios.map((m) => ({ value: m.nome, label: m.nome }));
+    const city = form.city.trim();
+    if (
+      city &&
+      !opts.some(
+        (o) => o.value.localeCompare(city, "pt", { sensitivity: "base" }) === 0,
+      )
+    ) {
+      opts.unshift({ value: city, label: city });
+    }
+    return opts;
+  })();
+
   const hasCoords = latitude != null && longitude != null;
 
   if (step === 0) {
@@ -384,11 +410,8 @@ export function CustomerFormWizard({
           <View style={styles.flex}>
             <FormSelectField
               label="UF *"
-              value={form.state}
-              options={ufs.map((u) => ({
-                value: u.sigla,
-                label: `${u.sigla} — ${u.nome}`,
-              }))}
+              value={form.state.trim().toUpperCase()}
+              options={ufOptions}
               onChange={(uf) =>
                 onChange({ state: uf, city: "", cityIbgeCode: "" })
               }
@@ -407,15 +430,23 @@ export function CustomerFormWizard({
                     : "Selecione"
                   : "UF primeiro"
               }
-              options={municipios.map((m) => ({
-                value: m.nome,
-                label: m.nome,
-              }))}
+              options={cityOptions}
               onChange={(cityName) => {
-                const m = municipios.find((x) => x.nome === cityName);
+                const m = municipios.find(
+                  (x) =>
+                    x.nome.localeCompare(cityName, "pt", {
+                      sensitivity: "base",
+                    }) === 0,
+                );
+                const keepCode =
+                  cityName.localeCompare(form.city, "pt", {
+                    sensitivity: "base",
+                  }) === 0
+                    ? form.cityIbgeCode
+                    : "";
                 onChange({
                   city: cityName,
-                  cityIbgeCode: m ? String(m.id) : "",
+                  cityIbgeCode: m ? String(m.id) : keepCode,
                 });
               }}
             />

@@ -68,10 +68,17 @@ export function AddressFieldsGroup({
   }
 
   function onCityChange(cityName: string) {
-    const m = municipios.find((x) => x.nome === cityName);
+    const m = municipios.find(
+      (x) =>
+        x.nome.localeCompare(cityName, "pt", { sensitivity: "base" }) === 0,
+    );
+    const keepCode =
+      cityName.localeCompare(values.city, "pt", { sensitivity: "base" }) === 0
+        ? values.cityIbgeCode
+        : "";
     onChange({
       city: cityName,
-      cityIbgeCode: m ? String(m.id) : "",
+      cityIbgeCode: m ? String(m.id) : keepCode,
     });
   }
 
@@ -95,6 +102,32 @@ export function AddressFieldsGroup({
         m.nome.localeCompare(values.city, "pt", { sensitivity: "base" }) === 0,
     )?.nome ??
     values.city;
+
+  const ufOptions = (() => {
+    const opts = ufs.map((u) => ({
+      value: u.sigla,
+      label: `${u.sigla} — ${u.nome}`,
+    }));
+    const uf = values.state.trim().toUpperCase();
+    if (uf && !opts.some((o) => o.value === uf)) {
+      opts.unshift({ value: uf, label: uf });
+    }
+    return opts;
+  })();
+
+  const cityOptions = (() => {
+    const opts = municipios.map((m) => ({ value: m.nome, label: m.nome }));
+    const city = values.city.trim();
+    if (
+      city &&
+      !opts.some(
+        (o) => o.value.localeCompare(city, "pt", { sensitivity: "base" }) === 0,
+      )
+    ) {
+      opts.unshift({ value: city, label: city });
+    }
+    return opts;
+  })();
 
   return (
     <div className="space-y-4">
@@ -237,13 +270,10 @@ export function AddressFieldsGroup({
         <FormField label="UF" htmlFor="cust-uf" required error={errors.state}>
           <AppSelect
             id="cust-uf"
-            value={values.state}
+            value={values.state.trim().toUpperCase()}
             emptyLabel="Selecione"
             placeholder={ufsLoading ? "Carregando…" : "Selecione"}
-            options={ufs.map((u) => ({
-              value: u.sigla,
-              label: `${u.sigla} — ${u.nome}`,
-            }))}
+            options={ufOptions}
             onValueChange={onStateChange}
           />
         </FormField>
@@ -265,7 +295,7 @@ export function AddressFieldsGroup({
                   ? "Carregando…"
                   : "Selecione"
             }
-            options={municipios.map((m) => ({ value: m.nome, label: m.nome }))}
+            options={cityOptions}
             onValueChange={onCityChange}
           />
         </FormField>
