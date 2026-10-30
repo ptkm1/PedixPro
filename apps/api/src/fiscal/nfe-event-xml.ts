@@ -15,6 +15,7 @@ export function buildCancelamentoEvento(input: {
 }) {
   const chNFe = onlyDigits(input.accessKey);
   const cnpj = onlyDigits(input.cnpj).padStart(14, "0").slice(0, 14);
+  const nProt = onlyDigits(input.protocol);
   const cOrgao = sefazOrgaoForEvent(input.uf, input.tpEmis);
   const tpAmb = input.homologation ? "2" : "1";
   const nSeq = String(input.seqEvento ?? 1).padStart(2, "0");
@@ -23,7 +24,7 @@ export function buildCancelamentoEvento(input: {
   const dhEvento = formatNfeDateTime(new Date());
   const xJust = escapeXml(input.justification.trim());
 
-  const infEvento = `<infEvento Id="${id}"><cOrgao>${cOrgao}</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${input.seqEvento ?? 1}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>${escapeXml(input.protocol)}</nProt><xJust>${xJust}</xJust></detEvento></infEvento>`;
+  const infEvento = `<infEvento Id="${id}"><cOrgao>${cOrgao}</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${input.seqEvento ?? 1}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>${nProt}</nProt><xJust>${xJust}</xJust></detEvento></infEvento>`;
 
   return { infEvento, idLote: "1" };
 }
