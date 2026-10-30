@@ -1,9 +1,11 @@
 import { AuditLogPanel } from "@/components/AuditLogPanel";
+import { EstablishmentFiscalConfigSheet } from "@/components/EstablishmentFiscalConfigSheet";
 import { FormField, FormGrid, FormSection } from "@/components/forms";
 import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Settings2 } from "lucide-react";
 import { fieldControlClass } from "@/lib/field-styles";
 import { formatOrderCode } from "@/lib/order-code";
 import { cn } from "@/lib/utils";
@@ -16,7 +18,10 @@ import {
   FISCAL_INVOICE_STATUS_LABELS,
   nfeTpEmisLabel,
 } from "@pedidos/shared";
-import { useActiveEstablishment } from "@/auth/EstablishmentContext";
+import {
+  formatCnpjShort,
+  useActiveEstablishment,
+} from "@/auth/EstablishmentContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -230,6 +235,7 @@ export function FaturamentoPage() {
     total: number;
   } | null>(null);
   const [detailInvoiceId, setDetailInvoiceId] = useState<string | null>(null);
+  const [fiscalConfigOpen, setFiscalConfigOpen] = useState(false);
   const [inutForm, setInutForm] = useState({
     numberStart: "",
     numberEnd: "",
@@ -827,6 +833,15 @@ export function FaturamentoPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <h1 className="text-2xl font-semibold">Faturamento</h1>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setFiscalConfigOpen(true)}
+          disabled={!activeEstablishmentId}
+        >
+          <Settings2 className="mr-1 h-4 w-4" />
+          Configuração fiscal
+        </Button>
       </div>
 
       {certBanner && (
@@ -1945,26 +1960,21 @@ export function FaturamentoPage() {
 
       {tab === "config" && (
         <div className="space-y-6">
-          <FormSection title="Emitente, certificado e logo">
+          <FormSection title="Configuração fiscal do emitente">
             <p className="text-sm text-muted-foreground">
-              A configuração do emitente (CNPJ, endereço, regime, ambiente NF-e,
-              série), certificado A1 e logo do DANFE é feita por estabelecimento
-              em{" "}
-              <Link
-                to="/configuracoes/estabelecimentos"
-                className="font-medium text-primary underline"
-              >
-                Configurações → Estabelecimentos
-              </Link>
-              . Cada CNPJ precisa do seu certificado e dados fiscais para emitir
-              NF-e.
+              CNPJ, endereço, regime, ambiente, série, certificado A1, logo do
+              DANFE e informações complementares (texto fixo em todas as NF-e)
+              deste estabelecimento.
             </p>
-            {activeEstablishmentId ? (
-              <p className="mt-2 text-sm text-muted-foreground">
-                O CNPJ ativo no header é usado para alertas de certificado e
-                opções de entrada nesta página.
-              </p>
-            ) : null}
+            <Button
+              type="button"
+              className="mt-3"
+              onClick={() => setFiscalConfigOpen(true)}
+              disabled={!activeEstablishmentId}
+            >
+              <Settings2 className="mr-1 h-4 w-4" />
+              Abrir configuração fiscal
+            </Button>
           </FormSection>
 
           <FormSection title="Inutilizar numeração NF-e">
@@ -2026,6 +2036,15 @@ export function FaturamentoPage() {
           </FormSection>
         </div>
       )}
+
+      <EstablishmentFiscalConfigSheet
+        establishmentId={activeEstablishmentId}
+        establishmentLabel={
+          settings?.cnpj ? formatCnpjShort(settings.cnpj) : undefined
+        }
+        open={fiscalConfigOpen}
+        onOpenChange={setFiscalConfigOpen}
+      />
     </div>
   );
 }

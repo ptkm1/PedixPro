@@ -180,6 +180,10 @@ export function parseSefazAuthorizationResponse(xml: string): {
   };
 }
 
+/**
+ * Resultado do evento (cancelamento / CC-e) fica em `retEvento/infEvento`.
+ * O cStat 128 do lote só significa “lote processado”, não é rejeição.
+ */
 export function parseSefazEventResponse(xml: string): {
   success: boolean;
   cStat?: string;
@@ -187,11 +191,20 @@ export function parseSefazEventResponse(xml: string): {
   nProt?: string;
   chNFe?: string;
 } {
-  const cStat = tag(xml, "cStat");
-  const xMotivo = tag(xml, "xMotivo");
-  const nProt = tag(xml, "nProt");
-  const chNFe = tag(xml, "chNFe");
-  const success = cStat === "135" || cStat === "155" || cStat === "101";
+  const retEvento = /<retEvento[\s>][\s\S]*?<\/retEvento>/i.exec(xml)?.[0];
+  const infEvento = retEvento
+    ? /<infEvento[\s>][\s\S]*?<\/infEvento>/i.exec(retEvento)?.[0]
+    : null;
+  const scope = infEvento ?? retEvento ?? xml;
+  const cStat = tag(scope, "cStat");
+  const xMotivo = tag(scope, "xMotivo");
+  const nProt = tag(scope, "nProt") ?? tag(xml, "nProt");
+  const chNFe = tag(scope, "chNFe") ?? tag(xml, "chNFe");
+  const success =
+    cStat === "135" ||
+    cStat === "155" ||
+    cStat === "101" ||
+    cStat === "573";
   return {
     success,
     cStat: cStat ?? undefined,
