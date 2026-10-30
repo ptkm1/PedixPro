@@ -345,7 +345,11 @@ function buildInfNFe(input: {
   const totals = sumTaxSnapshots(invoice.items);
   const vNF = totals.vProd + freight + totals.vIPI;
   const natOp = normalizeNfeNature(input.nature);
-  const emitIe = nfeFilled(config.stateRegistration, "ISENTO");
+  const emitIeRaw = nfeFilled(config.stateRegistration, "ISENTO");
+  const emitIe =
+    emitIeRaw.toUpperCase() === "ISENTO"
+      ? "ISENTO"
+      : emitIeRaw.replace(/\D/g, "") || "ISENTO";
   const destIeRaw = (recipient.stateRegistration ?? "").trim();
 
   const det = invoice.items
@@ -420,6 +424,7 @@ function buildInfNFe(input: {
     <finNFe>1</finNFe>
     <indFinal>0</indFinal>
     <indPres>1</indPres>
+    <indIntermed>0</indIntermed>
     <procEmi>0</procEmi>
     <verProc>PEDIDOS-1.0</verProc>${
       isSvcTpEmis(tpEmis)
@@ -505,11 +510,9 @@ export type NfePaymentInfo = {
 
 function buildPagXml(total: number, payment?: NfePaymentInfo): string {
   const days = payment?.days ?? 0;
-  // indPag: 0=à vista, 1=a prazo
-  const indPag = days > 0 ? "1" : "0";
   // tPag: 01=Dinheiro; 15=Boleto Bancário; 99=Outros
   const tPag = payment?.tPag ?? (days > 0 ? "15" : "01");
-  return `<pag><detPag><indPag>${indPag}</indPag><tPag>${tPag}</tPag><vPag>${formatNfeDecimal(total)}</vPag></detPag></pag>`;
+  return `<pag><detPag><tPag>${tPag}</tPag><vPag>${formatNfeDecimal(total)}</vPag></detPag></pag>`;
 }
 
 export function wrapEnviNFe(signedNFeXml: string, idLote = "1"): string {
