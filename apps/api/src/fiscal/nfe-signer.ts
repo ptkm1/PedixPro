@@ -180,6 +180,26 @@ export function parseSefazAuthorizationResponse(xml: string): {
   };
 }
 
+function xmlBlock(xml: string, name: string): string | null {
+  const re = new RegExp(
+    `<(?:[\\w.-]+:)?${name}(?:\\s[^>]*)?>[\\s\\S]*?</(?:[\\w.-]+:)?${name}>`,
+    "i",
+  );
+  return re.exec(xml)?.[0] ?? null;
+}
+
+function allTags(xml: string, name: string): string[] {
+  const re = new RegExp(
+    `<(?:[\\w.-]+:)?${name}(?:\\s[^>]*)?>([^<]*)</(?:[\\w.-]+:)?${name}>`,
+    "gi",
+  );
+  return [...xml.matchAll(re)].map((m) => m[1].trim());
+}
+
+/**
+ * Resultado do evento (cancelamento / CC-e) fica em `retEvento/infEvento`.
+ * O cStat 128 do lote só significa “lote processado”, não é rejeição.
+ */
 export function parseSefazEventResponse(xml: string): {
   success: boolean;
   cStat?: string;
@@ -187,11 +207,65 @@ export function parseSefazEventResponse(xml: string): {
   nProt?: string;
   chNFe?: string;
 } {
-  const cStat = tag(xml, "cStat");
-  const xMotivo = tag(xml, "xMotivo");
+  const retEvento = xmlBlock(xml, "retEvento");
+  const infEvento = retEvento ? xmlBlock(retEvento, "infEvento") : null;
+  const scope = infEvento ?? retEvento;
+  let cStat = scope ? tag(scope, "cStat") : null;
+  let xMotivo = scope ? tag(scope, "xMotivo") : null;
+  if (!cStat || cStat === "128") {
+    const stats = allTags(xml, "cStat");
+    const motivos = allTags(xml, "xMotivo");
+    const i = stats.findIndex((s) => s !== "128");
+    if (i >= 0) {
+      cStat = stats[i];
+      xMotivo = motivos[i] ?? xMotivo;
+    }
+  }
+  const nProt = (scope ? tag(scope, "nProt") : null) ?? tag(xml, "nProt");
+  const chNFe = (scope ? tag(scope, "chNFe") : null) ?? tag(xml, "chNFe");
+  const success =
+    cStat === "135" ||
+    cStat === "155" ||
+    cStat === "101" ||
+    cStat === "218" ||
+    cStat === "573";
+  return {
+    success,
+    cStat: cStat ?? undefined,
+    xMotivo: xMotivo ?? undefined,
+    nProt: nProt ?? undefined,
+    chNFe: chNFe ?? undefined,
+  };
+}
+
+/** Situação da NF-e: cStat de `retConsSitNFe`, sem infProt/retEvento aninhados. */
+export function parseSefazConsultaSitResponse(xml: string): {
+  success: boolean;
+  cStat?: string;
+  xMotivo?: string;
+  nProt?: string;
+  chNFe?: string;
+} {
+  const ret = xmlBlock(xml, "retConsSitNFe") ?? xml;
+  const head = ret
+    .replace(
+      /<(?:[\w.-]+:)?protNFe[\s\S]*?<\/(?:[\w.-]+:)?protNFe>/gi,
+      "",
+    )
+    .replace(
+      /<(?:[\w.-]+:)?procEventoNFe[\s\S]*?<\/(?:[\w.-]+:)?procEventoNFe>/gi,
+      "",
+    );
+  const cStat = tag(head, "cStat");
+  const xMotivo = tag(head, "xMotivo");
   const nProt = tag(xml, "nProt");
   const chNFe = tag(xml, "chNFe");
-  const success = cStat === "135" || cStat === "155" || cStat === "101";
+  const success =
+    cStat === "100" ||
+    cStat === "101" ||
+    cStat === "110" ||
+    cStat === "150" ||
+    cStat === "151";
   return {
     success,
     cStat: cStat ?? undefined,
@@ -202,7 +276,10 @@ export function parseSefazEventResponse(xml: string): {
 }
 
 function tag(xml: string, name: string): string | null {
-  const re = new RegExp(`<${name}>([^<]*)</${name}>`, "i");
+  const re = new RegExp(
+    `<(?:[\\w.-]+:)?${name}(?:\\s[^>]*)?>([^<]*)</(?:[\\w.-]+:)?${name}>`,
+    "i",
+  );
   return re.exec(xml)?.[1]?.trim() ?? null;
 }
 

@@ -13,6 +13,26 @@ export type SefazRejectionHint = {
 };
 
 const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
+  "128": {
+    title: "Lote de evento processado",
+    howToFix:
+      "128 não é rejeição: a SEFAZ processou o lote. O resultado do cancelamento está no evento (135, 501, 577…). Consulte a situação da NF-e.",
+  },
+  "218": {
+    title: "NF-e já cancelada na SEFAZ",
+    howToFix:
+      "A nota já está cancelada na SEFAZ. Consulte a situação para sincronizar o status no Pedix.",
+  },
+  "501": {
+    title: "Prazo de cancelamento expirado",
+    howToFix:
+      "Passou o prazo legal para cancelar esta NF-e (em geral 24 horas após a autorização). A SEFAZ não aceita mais o evento 110111.",
+  },
+  "577": {
+    title: "Protocolo de autorização divergente",
+    howToFix:
+      "O nProt do cancelamento não bate com o da autorização. Consulte a situação da NF-e e use o protocolo devolvido pela SEFAZ.",
+  },
   "696": {
     title: "Não contribuinte deve ser consumidor final",
     howToFix:

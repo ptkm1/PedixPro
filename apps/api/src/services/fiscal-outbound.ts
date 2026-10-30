@@ -33,7 +33,11 @@ import {
   sendNfeInutilizacao,
   type SefazAuthResult,
 } from "../fiscal/sefaz-client.js";
-import { rebuildAccessKeyWithTpEmis } from "../fiscal/nfe-access-key.js";
+import {
+  nfeTpEmisFromAccessKey,
+  onlyDigits,
+  rebuildAccessKeyWithTpEmis,
+} from "../fiscal/nfe-access-key.js";
 import { getAutorizacaoUrl } from "../fiscal/sefaz-endpoints.js";
 import {
   isSvcDisabledByOrigin,
@@ -64,6 +68,12 @@ import {
   validateProductFiscal,
 } from "../fiscal/validation.js";
 
+function invoiceSefazTpEmis(invoice: {
+  accessKey: string | null;
+  tpEmis: string | null;
+}): string {
+  return nfeTpEmisFromAccessKey(invoice.accessKey) ?? invoice.tpEmis ?? TP_EMIS_NORMAL;
+}
 
 async function resolveEmitenteForOrg(
   organizationId: string,
@@ -781,14 +791,20 @@ export async function cancelOutboundInvoice(
     return { ok: false as const, error: "Certificado A1 não disponível" };
 
   const homolog = config!.nfeEnvironment === "HOMOLOGATION";
+  const tpEmis = invoiceSefazTpEmis(invoice);
+  const nProt = onlyDigits(invoice.protocol);
+  if (nProt.length < 15) {
+    return { ok: false as const, error: "Protocolo de autorização inválido" };
+  }
+  const uf = config!.uf ?? "SP";
   const { infEvento } = buildCancelamentoEvento({
     accessKey: invoice.accessKey,
     cnpj: config!.cnpj ?? "",
-    uf: config!.uf ?? "SP",
+    uf,
     homologation: homolog,
-    protocol: invoice.protocol,
+    protocol: nProt,
     justification,
-    tpEmis: invoice.tpEmis,
+    tpEmis,
   });
   const signedEvento = signInfEvento(
     infEvento,
@@ -798,13 +814,28 @@ export async function cancelOutboundInvoice(
   const envEvento = wrapEnvEvento(signedEvento);
 
   const sefaz = await sendNfeEvento({
-    uf: config!.uf ?? "SP",
+    uf,
     homologation: homolog,
     envEventoXml: envEvento,
     pfx: cert.pfx,
     password: cert.password,
-    tpEmis: invoice.tpEmis,
+    tpEmis,
   });
+
+  let cancelled = sefaz.ok;
+  let situationCstat: string | undefined;
+  if (!cancelled) {
+    const situation = await consultNfeProtocolo({
+      uf,
+      homologation: homolog,
+      accessKey: invoice.accessKey,
+      pfx: cert.pfx,
+      password: cert.password,
+      tpEmis,
+    });
+    situationCstat = situation.parsed.cStat;
+    if (situation.parsed.cStat === "101") cancelled = true;
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.fiscalInvoiceEvent.create({
@@ -816,11 +847,11 @@ export async function cancelOutboundInvoice(
           0,
           50000,
         ),
-        success: sefaz.ok,
+        success: cancelled,
       },
     });
 
-    if (!sefaz.ok) {
+    if (!cancelled) {
       return tx.fiscalInvoice.findUniqueOrThrow({
         where: { id: invoice.id },
         include: { items: true, order: true },
@@ -834,10 +865,18 @@ export async function cancelOutboundInvoice(
     });
   });
 
-  if (!sefaz.ok) {
+  if (!cancelled) {
+    const explained = explainSefazRejection(
+      sefaz.error ?? sefaz.parsed.xMotivo,
+      sefaz.parsed.cStat,
+    );
+    const extra =
+      situationCstat && situationCstat !== sefaz.parsed.cStat
+        ? ` Consulta: ${situationCstat}.`
+        : "";
     return {
       ok: false as const,
-      error: sefaz.error ?? "Cancelamento rejeitado pela SEFAZ",
+      error: `${explained.userMessage}${extra}`,
       invoice: updated,
     };
   }
@@ -893,7 +932,7 @@ export async function sendCartaCorrecao(
       homologation: homolog,
       correctionText,
       seqEvento,
-      tpEmis: invoice.tpEmis,
+      tpEmis: invoiceSefazTpEmis(invoice),
     });
   } catch (e) {
     return {
@@ -914,7 +953,7 @@ export async function sendCartaCorrecao(
     envEventoXml: envEvento,
     pfx: cert.pfx,
     password: cert.password,
-    tpEmis: invoice.tpEmis,
+    tpEmis: invoiceSefazTpEmis(invoice),
   });
 
   await prisma.fiscalInvoiceEvent.create({
@@ -964,7 +1003,7 @@ export async function consultOutboundInvoiceSituation(
     accessKey: invoice.accessKey,
     pfx: cert.pfx,
     password: cert.password,
-    tpEmis: invoice.tpEmis,
+    tpEmis: invoiceSefazTpEmis(invoice),
   });
 
   await prisma.fiscalInvoiceEvent.create({
