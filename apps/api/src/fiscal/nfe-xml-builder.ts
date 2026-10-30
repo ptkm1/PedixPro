@@ -50,6 +50,17 @@ function nfeFilled(raw: string | null | undefined, fallback: string): string {
   return t || fallback;
 }
 
+/** CNPJ da SEFAZ-BA para autXML quando o emitente não tem escritório de contabilidade. */
+export const SEFAZ_BA_AUTXML_CNPJ = "13937075000156";
+
+function buildAutXml(uf: string): string {
+  if (uf !== "BA") return "";
+  return `
+  <autXML>
+    <CNPJ>${SEFAZ_BA_AUTXML_CNPJ}</CNPJ>
+  </autXML>`;
+}
+
 function nfeIbge(raw: string | null | undefined, fallback: string): string {
   const d = (raw ?? "").replace(/\D/g, "");
   return d.length === 7 ? d : fallback;
@@ -474,7 +485,7 @@ function buildInfNFe(input: {
     <IE>${escapeXml(destIeRaw.replace(/\D/g, "") || destIeRaw)}</IE>`
         : `<indIEDest>9</indIEDest>`
     }
-  </dest>${det}
+  </dest>${buildAutXml(uf)}${det}
   <total>
     <ICMSTot>
       <vBC>${formatNfeDecimal(totals.vBC)}</vBC>

@@ -13,6 +13,11 @@ export type SefazRejectionHint = {
 };
 
 const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
+  "486": {
+    title: "Grupo autXML obrigatório na Bahia",
+    howToFix:
+      "A SEFAZ-BA exige o escritório de contabilidade no XML. Sem CNPJ do contador, o Pedix informa o CNPJ da SEFAZ-BA (13.937.075/0001-56). Retransmita a mesma nota.",
+  },
   "703": {
     title: "Data-hora de emissão posterior ao horário de recebimento",
     howToFix:
