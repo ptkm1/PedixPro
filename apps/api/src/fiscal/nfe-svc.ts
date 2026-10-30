@@ -102,7 +102,7 @@ export function isSvcRsDisabledByOrigin(
   const cStat = result.parsed?.cStat?.trim();
   if (cStat === "114") return true;
   const text = `${result.error ?? ""} ${result.parsed?.xMotivo ?? ""}`;
-  return /\b114\b/.test(text) && /SVC-RS/i.test(text);
+  return /\b114\b/.test(text);
 }
 
 export function shouldFallbackToSvc(result: SefazUnavailableInput): boolean {

@@ -161,12 +161,13 @@ export function parseSefazAuthorizationResponse(xml: string): {
   chNFe?: string;
   nRec?: string;
 } {
-  const cStat = tag(xml, "cStat");
-  const xMotivo = tag(xml, "xMotivo");
+  const prot = /<infProt[\s\S]*?<\/infProt>/i.exec(xml)?.[0];
+  const cStat = (prot ? tag(prot, "cStat") : null) ?? tag(xml, "cStat");
+  const xMotivo = (prot ? tag(prot, "xMotivo") : null) ?? tag(xml, "xMotivo");
   const nProt = tag(xml, "nProt");
   const chNFe = tag(xml, "chNFe");
   const nRec = tag(xml, "nRec");
-  const success = cStat === "100" || cStat === "104";
+  const success = cStat === "100";
   const pending = cStat === "103";
   return {
     success,
