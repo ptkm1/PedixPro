@@ -1107,8 +1107,13 @@ async function logNfeAttempt(input: {
   });
 }
 
+type NfePackageBase = Omit<
+  Parameters<typeof buildSignedNfePackage>[0],
+  "invoice" | "accessKey" | "issuedAt"
+>;
+
 function rebuildSignedForTpEmis(input: {
-  packageOpts: Parameters<typeof buildSignedNfePackage>[0];
+  packageOpts: NfePackageBase;
   workingInvoice: Parameters<typeof buildSignedNfePackage>[0]["invoice"];
   cert: { privateKeyPem: string; certPem: string };
   accessKey: string;
