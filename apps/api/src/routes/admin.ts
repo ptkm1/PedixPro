@@ -6402,6 +6402,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const { id } = idParam.parse(req.params);
     const body = z
       .object({
+        customerId: z.string().min(1).optional(),
+        paymentConditionId: z.string().min(1).optional(),
+        notes: z.string().trim().max(4000).optional().nullable(),
         items: z
           .array(
             z.object({
@@ -6427,6 +6430,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         organizationId: auth.organizationId,
         orderId: id,
         actorUserId: auth.sub,
+        customerId: body.data.customerId,
+        paymentConditionId: body.data.paymentConditionId,
+        notes: body.data.notes,
         items: body.data.items.map((i) => ({
           productId: i.productId,
           quantity: i.quantity,

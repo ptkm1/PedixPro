@@ -58,6 +58,9 @@ export type UpdateSaleOrderItemsParams = {
   orderId: string;
   actorUserId: string;
   items: SaleLineInput[];
+  customerId?: string;
+  paymentConditionId?: string;
+  notes?: string | null;
 };
 
 /**
@@ -93,9 +96,55 @@ export async function updateSaleOrderItems(params: UpdateSaleOrderItemsParams) {
       400,
     );
   }
-  if (!order.customerId) {
+  let nextCustomerId = params.customerId ?? order.customerId;
+  if (!nextCustomerId) {
     throw new SaleCreateError("Pedido sem cliente não pode ser editado", 400);
   }
+
+  if (params.customerId && params.customerId !== order.customerId) {
+    const customer = await prisma.customer.findFirst({
+      where: {
+        id: params.customerId,
+        organizationId: params.organizationId,
+      },
+      select: { id: true, approvalStatus: true },
+    });
+    if (!customer) throw new SaleCreateError("Cliente inválido", 400);
+    if (customer.approvalStatus === "PENDING") {
+      throw new SaleCreateError(
+        "Cliente aguardando validação do escritório",
+        400,
+      );
+    }
+    if (customer.approvalStatus === "REJECTED") {
+      throw new SaleCreateError("Cadastro do cliente foi rejeitado", 400);
+    }
+    if (customer.approvalStatus !== "APPROVED") {
+      throw new SaleCreateError("Cliente inválido", 400);
+    }
+    nextCustomerId = customer.id;
+  }
+
+  let nextPaymentConditionId = order.paymentConditionId;
+  if (params.paymentConditionId) {
+    const pay = await prisma.paymentCondition.findFirst({
+      where: {
+        id: params.paymentConditionId,
+        organizationId: params.organizationId,
+      },
+      select: { id: true, active: true },
+    });
+    if (!pay) {
+      throw new SaleCreateError("Condição de pagamento inválida", 400);
+    }
+    if (!pay.active && pay.id !== order.paymentConditionId) {
+      throw new SaleCreateError("Condição de pagamento inválida", 400);
+    }
+    nextPaymentConditionId = pay.id;
+  }
+
+  const nextNotes =
+    params.notes !== undefined ? params.notes : order.notes;
 
   // ADM pode incluir qualquer produto da org (não fica limitado ao catálogo do vendedor).
   const allowedProductIds = await orgAllowedProductIds(params.organizationId);
@@ -103,7 +152,7 @@ export async function updateSaleOrderItems(params: UpdateSaleOrderItemsParams) {
   const sale = await computeSaleOrder({
     organizationId: params.organizationId,
     sellerId: order.sellerId,
-    customerId: order.customerId,
+    customerId: nextCustomerId,
     priceTableId: order.priceTableId,
     items: params.items,
     allowedProductIds,
@@ -114,7 +163,7 @@ export async function updateSaleOrderItems(params: UpdateSaleOrderItemsParams) {
   if (order.status === "PENDING_CREDIT_APPROVAL") {
     const ev = await evaluateOrderCredit({
       organizationId: params.organizationId,
-      customerId: order.customerId,
+      customerId: nextCustomerId,
       proposedOrderTotal: sale.netTotal,
     });
     if (ev.action === "BLOCK") {
@@ -175,6 +224,9 @@ export async function updateSaleOrderItems(params: UpdateSaleOrderItemsParams) {
       await tx.order.update({
         where: { id: order.id },
         data: {
+          customerId: nextCustomerId,
+          paymentConditionId: nextPaymentConditionId,
+          notes: nextNotes,
           totalAmount: sale.netTotal,
           comboDiscountTotal: sale.comboDiscountTotal,
           ...(creditHoldPayload !== undefined
@@ -225,11 +277,18 @@ export async function updateSaleOrderItems(params: UpdateSaleOrderItemsParams) {
       entityType: AUDIT_ENTITY.Order,
       entityId: order.id,
       metadata: {
-        kind: "items",
+        kind:
+          params.customerId || params.paymentConditionId || params.notes !== undefined
+            ? "order"
+            : "items",
         previousItemCount: order.items.length,
         itemCount: updated.items.length,
         totalAmount: Number(updated.totalAmount),
         previousTotalAmount: Number(order.totalAmount),
+        previousCustomerId: order.customerId,
+        customerId: updated.customerId,
+        previousPaymentConditionId: order.paymentConditionId,
+        paymentConditionId: updated.paymentConditionId,
         status: updated.status,
       },
     },

@@ -640,6 +640,10 @@ export default function QuickSaleScreen() {
         notes={s.notes}
         onNotesChange={s.setNotes}
         creditSlot={creditBlock}
+        canOverrideUnitPrice={s.canOverrideUnitPrice}
+        onUnitPriceChange={(line, unitPrice) =>
+          s.setLineUnitPrice(line.productId, unitPrice)
+        }
       />
       <View style={{ height: 120 }} />
     </ScrollView>

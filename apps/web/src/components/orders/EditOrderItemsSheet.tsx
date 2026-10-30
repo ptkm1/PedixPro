@@ -1,12 +1,16 @@
 import {
   FormErrorBanner,
   FormField,
+  FormGrid,
   FormSection,
   FormSheet,
 } from "@/components/forms";
+import { CustomerCombobox } from "@/components/CustomerCombobox";
 import { ProductCombobox } from "@/components/ProductCombobox";
+import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useScrollToFirstError } from "@/hooks/useScrollToFirstError";
 import { apiFetch } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
@@ -43,11 +47,38 @@ type OrderItemSeed = {
   };
 };
 
+type LookupCustomer = {
+  id: string;
+  name: string;
+  tradeName?: string | null;
+  legalName?: string | null;
+  city?: string | null;
+  code?: number | null;
+  cnpj?: string | null;
+  cpf?: string | null;
+};
+
+type LookupPayment = {
+  id: string;
+  code: string;
+  name: string;
+  days: number;
+};
+
 type OrderSeed = {
   id: string;
   sellerId?: string | null;
   customerId?: string | null;
-  customer?: { id?: string; name: string } | null;
+  customer?: {
+    id?: string;
+    name: string;
+    tradeName?: string | null;
+    legalName?: string | null;
+    city?: string | null;
+  } | null;
+  paymentConditionId?: string | null;
+  paymentCondition?: { id: string; name: string; days: number } | null;
+  notes?: string | null;
   priceTableId?: string | null;
   items: OrderItemSeed[];
 };
@@ -106,6 +137,8 @@ type Props = Readonly<{
   onOpenChange: (open: boolean) => void;
   order: OrderSeed;
   onSaved: () => void;
+  /** Cabeçalho + itens (cliente, condição, valores). Default: só itens. */
+  mode?: "items" | "order";
 }>;
 
 export function EditOrderItemsSheet({
@@ -113,13 +146,27 @@ export function EditOrderItemsSheet({
   onOpenChange,
   order,
   onSaved,
+  mode = "items",
 }: Props) {
+  const fullEdit = mode === "order";
   const [lines, setLines] = useState<DraftLine[]>([newLine()]);
   const [showValidation, setShowValidation] = useState(false);
+  const [customerId, setCustomerId] = useState(
+    order.customerId ?? order.customer?.id ?? "",
+  );
+  const [paymentConditionId, setPaymentConditionId] = useState(
+    order.paymentConditionId ?? order.paymentCondition?.id ?? "",
+  );
+  const [notes, setNotes] = useState(order.notes ?? "");
 
   useEffect(() => {
     if (!open) return;
     setShowValidation(false);
+    setCustomerId(order.customerId ?? order.customer?.id ?? "");
+    setPaymentConditionId(
+      order.paymentConditionId ?? order.paymentCondition?.id ?? "",
+    );
+    setNotes(order.notes ?? "");
     setLines(
       order.items.length > 0
         ? order.items.map((it) =>
@@ -133,6 +180,53 @@ export function EditOrderItemsSheet({
     );
   }, [open, order.id, order.items]);
 
+  const lookupsQ = useQuery({
+    queryKey: ["admin", "orders", "lookups", "edit-order"],
+    queryFn: () =>
+      apiFetch<{
+        customers: LookupCustomer[];
+        paymentConditions: LookupPayment[];
+      }>("/admin/orders/lookups"),
+    enabled: open && fullEdit,
+  });
+
+  const customers = useMemo(() => {
+    const list = lookupsQ.data?.customers ?? [];
+    const current = order.customer;
+    const currentId = order.customerId ?? current?.id;
+    if (!currentId || list.some((c) => c.id === currentId)) return list;
+    return [
+      {
+        id: currentId,
+        name: current?.name ?? "Cliente atual",
+        tradeName: current?.tradeName,
+        legalName: current?.legalName,
+        city: current?.city,
+      },
+      ...list,
+    ];
+  }, [lookupsQ.data?.customers, order.customer, order.customerId]);
+
+  const paymentConditions = useMemo(() => {
+    const list = lookupsQ.data?.paymentConditions ?? [];
+    const current = order.paymentCondition;
+    const currentId = order.paymentConditionId ?? current?.id;
+    if (!currentId || list.some((p) => p.id === currentId)) return list;
+    return [
+      {
+        id: currentId,
+        code: "",
+        name: current?.name ?? "Condição atual",
+        days: current?.days ?? 0,
+      },
+      ...list,
+    ];
+  }, [
+    lookupsQ.data?.paymentConditions,
+    order.paymentCondition,
+    order.paymentConditionId,
+  ]);
+
   const catalogQ = useQuery({
     queryKey: [
       "admin",
@@ -141,13 +235,12 @@ export function EditOrderItemsSheet({
       "edit-items",
       order.id,
       order.sellerId ?? "direct",
-      order.customerId ?? order.customer?.id ?? "",
+      customerId,
       order.priceTableId ?? "",
     ],
     queryFn: () => {
       const qs = new URLSearchParams();
       // Sem sellerId → catálogo completo da org (ADM pode adicionar qualquer produto).
-      const customerId = order.customerId ?? order.customer?.id;
       if (customerId) qs.set("customerId", customerId);
       if (order.priceTableId) qs.set("priceTableId", order.priceTableId);
       return apiFetch<{ products: CatalogProduct[] }>(
@@ -198,8 +291,6 @@ export function EditOrderItemsSheet({
   );
   const debouncedItems = useDebouncedValue(payloadItems);
 
-  const customerId = order.customerId ?? order.customer?.id ?? "";
-
   const previewQ = useQuery({
     queryKey: [
       "admin",
@@ -229,11 +320,21 @@ export function EditOrderItemsSheet({
   const fieldErrors = useMemo(() => {
     if (!showValidation) return {} as Record<string, string>;
     const err: Record<string, string> = {};
+    if (fullEdit && !customerId) err.customerId = "Selecione o cliente.";
+    if (fullEdit && !paymentConditionId) {
+      err.paymentConditionId = "Selecione a condição de pagamento.";
+    }
     if (payloadItems.length === 0) {
       err.items = "Inclua ao menos um produto com quantidade e preço unitário.";
     }
     return err;
-  }, [showValidation, payloadItems.length]);
+  }, [
+    showValidation,
+    payloadItems.length,
+    fullEdit,
+    customerId,
+    paymentConditionId,
+  ]);
 
   useScrollToFirstError(fieldErrors, { enabled: showValidation && open });
 
@@ -241,7 +342,16 @@ export function EditOrderItemsSheet({
     mutationFn: () =>
       apiFetch(`/admin/orders/${order.id}/items`, {
         method: "PATCH",
-        body: JSON.stringify({ items: payloadItems }),
+        body: JSON.stringify({
+          items: payloadItems,
+          ...(fullEdit
+            ? {
+                customerId,
+                paymentConditionId,
+                notes: notes.trim() || null,
+              }
+            : {}),
+        }),
       }),
     onSuccess: () => {
       onSaved();
@@ -251,6 +361,7 @@ export function EditOrderItemsSheet({
 
   function submit() {
     setShowValidation(true);
+    if (fullEdit && (!customerId || !paymentConditionId)) return;
     if (payloadItems.length === 0) return;
     saveMutation.mutate();
   }
@@ -272,8 +383,12 @@ export function EditOrderItemsSheet({
     <FormSheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Editar itens do pedido"
-      description="Altere quantidade, preço unitário, inclua ou remova itens. Totais e comissões são recalculados ao salvar."
+      title={fullEdit ? "Editar pedido" : "Editar itens do pedido"}
+      description={
+        fullEdit
+          ? "Altere cliente, condição de pagamento, itens e valores. Totais e crédito são recalculados ao salvar."
+          : "Altere quantidade, preço unitário, inclua ou remova itens. Totais e comissões são recalculados ao salvar."
+      }
       contentClassName="sm:max-h-[92vh]"
       footer={
         <>
@@ -292,6 +407,58 @@ export function EditOrderItemsSheet({
       }
     >
       <FormErrorBanner message={formError} />
+
+      {fullEdit ? (
+        <FormGrid cols={2} className="mb-6">
+          <FormField
+            label="Cliente"
+            htmlFor="edit-order-customer"
+            required
+            error={fieldErrors.customerId}
+          >
+            <CustomerCombobox
+              id="edit-order-customer"
+              value={customerId}
+              onValueChange={setCustomerId}
+              customers={customers}
+              placeholder="Buscar cliente…"
+              invalid={Boolean(fieldErrors.customerId)}
+              disabled={lookupsQ.isLoading}
+            />
+          </FormField>
+          <FormField
+            label="Condição de pagamento"
+            htmlFor="edit-order-pay"
+            required
+            error={fieldErrors.paymentConditionId}
+          >
+            <AppSelect
+              id="edit-order-pay"
+              value={paymentConditionId}
+              onValueChange={setPaymentConditionId}
+              placeholder={
+                paymentConditions.length
+                  ? "Selecione"
+                  : "Nenhuma condição cadastrada"
+              }
+              invalid={Boolean(fieldErrors.paymentConditionId)}
+              options={paymentConditions.map((p) => ({
+                value: p.id,
+                label: p.code ? `${p.code} · ${p.name}` : p.name,
+              }))}
+            />
+          </FormField>
+          <FormField label="Observação" htmlFor="edit-order-notes">
+            <Textarea
+              id="edit-order-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Opcional"
+              rows={2}
+            />
+          </FormField>
+        </FormGrid>
+      ) : null}
 
       <FormSection
         title="Itens"
@@ -365,20 +532,29 @@ export function EditOrderItemsSheet({
                   label="Preço unit."
                   htmlFor={`edit-price-${line.key}`}
                 >
-                  <Input
-                    id={`edit-price-${line.key}`}
-                    inputMode="decimal"
-                    value={line.unitPrice}
-                    onChange={(e) =>
-                      setLines((prev) =>
-                        prev.map((l) =>
-                          l.key === line.key
-                            ? { ...l, unitPrice: e.target.value }
-                            : l,
-                        ),
-                      )
-                    }
-                  />
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs font-medium text-muted-foreground">
+                      R$
+                    </span>
+                    <Input
+                      id={`edit-price-${line.key}`}
+                      className="pl-9 tabular-nums"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      aria-label="Preço unitário editável"
+                      value={line.unitPrice}
+                      placeholder="0,00"
+                      onChange={(e) =>
+                        setLines((prev) =>
+                          prev.map((l) =>
+                            l.key === line.key
+                              ? { ...l, unitPrice: e.target.value }
+                              : l,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
                 </FormField>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-foreground">

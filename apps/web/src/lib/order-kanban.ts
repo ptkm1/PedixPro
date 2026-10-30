@@ -49,20 +49,62 @@ export function situationColumnId(situationId: string): string {
   return `stage:${situationId}`;
 }
 
-export function stageBadgeClass(code: string, mapsToCancel?: boolean): string {
-  const status = orderStatusFromSituation(code, mapsToCancel);
-  switch (status) {
-    case "CONFIRMED":
-      if (code === SYSTEM_SITUATION_CODES.DELIVERED) {
-        return "border-transparent bg-emerald-500/15 text-emerald-800 dark:text-emerald-300";
-      }
-      return "border-transparent bg-blue-500/15 text-blue-800 dark:text-blue-300";
-    case "CANCELLED":
-      return "border-transparent bg-destructive/15 text-destructive";
-    case "PENDING_CREDIT_APPROVAL":
-      return "border-transparent bg-amber-500/15 text-amber-800 dark:text-amber-300";
+/** Cor sólida da coluna Kanban (bolinha). Fonte única das cores de etapa. */
+export function situationDotClass(
+  code: string,
+  mapsToCancel?: boolean,
+): string {
+  switch (code) {
+    case SYSTEM_SITUATION_CODES.DELIVERED:
+      return "bg-emerald-500";
+    case SYSTEM_SITUATION_CODES.SENT:
+      return "bg-sky-500";
+    case SYSTEM_SITUATION_CODES.PACKED:
+      return "bg-violet-500";
+    case SYSTEM_SITUATION_CODES.PICKING:
+      return "bg-amber-500";
+    case SYSTEM_SITUATION_CODES.OPEN:
+      return "bg-blue-500";
+    case SYSTEM_SITUATION_CODES.CREDIT:
+      return "bg-amber-500";
+    case SYSTEM_SITUATION_CODES.DRAFT:
+      return "bg-muted-foreground/50";
+    case SYSTEM_SITUATION_CODES.CANCELLED:
+      return "bg-destructive";
     default:
+      return mapsToCancel ? "bg-destructive" : "bg-muted-foreground/50";
+  }
+}
+
+/** Chip/badge com as mesmas cores da coluna Kanban (Aberto azul, separado roxo…). */
+export function stageBadgeClass(code: string, mapsToCancel?: boolean): string {
+  switch (code) {
+    case SYSTEM_SITUATION_CODES.DELIVERED:
+      return "border-transparent bg-emerald-500/15 text-emerald-800 dark:text-emerald-300";
+    case SYSTEM_SITUATION_CODES.SENT:
+      return "border-transparent bg-sky-500/15 text-sky-800 dark:text-sky-300";
+    case SYSTEM_SITUATION_CODES.PACKED:
+      return "border-transparent bg-violet-500/15 text-violet-800 dark:text-violet-300";
+    case SYSTEM_SITUATION_CODES.PICKING:
+      return "border-transparent bg-amber-500/15 text-amber-800 dark:text-amber-300";
+    case SYSTEM_SITUATION_CODES.OPEN:
+      return "border-transparent bg-blue-500/15 text-blue-800 dark:text-blue-300";
+    case SYSTEM_SITUATION_CODES.CREDIT:
+      return "border-transparent bg-amber-500/15 text-amber-800 dark:text-amber-300";
+    case SYSTEM_SITUATION_CODES.DRAFT:
       return "border-transparent bg-muted text-muted-foreground";
+    case SYSTEM_SITUATION_CODES.CANCELLED:
+      return "border-transparent bg-destructive/15 text-destructive";
+    default: {
+      const status = orderStatusFromSituation(code, mapsToCancel);
+      if (status === "CANCELLED" || mapsToCancel) {
+        return "border-transparent bg-destructive/15 text-destructive";
+      }
+      if (status === "PENDING_CREDIT_APPROVAL") {
+        return "border-transparent bg-amber-500/15 text-amber-800 dark:text-amber-300";
+      }
+      return "border-transparent bg-muted text-muted-foreground";
+    }
   }
 }
 
@@ -81,28 +123,7 @@ export function statusBadgeClass(status: string): string {
 }
 
 export function columnAccentClass(column: KanbanColumn): string {
-  switch (column.situationCode) {
-    case SYSTEM_SITUATION_CODES.DELIVERED:
-      return "bg-emerald-500";
-    case SYSTEM_SITUATION_CODES.SENT:
-      return "bg-sky-500";
-    case SYSTEM_SITUATION_CODES.PACKED:
-      return "bg-violet-500";
-    case SYSTEM_SITUATION_CODES.PICKING:
-      return "bg-amber-500";
-    case SYSTEM_SITUATION_CODES.OPEN:
-      return "bg-blue-500";
-    case SYSTEM_SITUATION_CODES.CREDIT:
-      return "bg-amber-500";
-    case SYSTEM_SITUATION_CODES.DRAFT:
-      return "bg-muted-foreground/50";
-    case SYSTEM_SITUATION_CODES.CANCELLED:
-      return "bg-destructive";
-    default:
-      return column.mapsToCancel
-        ? "bg-destructive"
-        : "bg-muted-foreground/50";
-  }
+  return situationDotClass(column.situationCode, column.mapsToCancel);
 }
 
 function situationIdOf(order: KanbanOrderLike): string | null {
