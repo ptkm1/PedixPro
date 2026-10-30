@@ -14,13 +14,12 @@ export type SvcTarget = {
 };
 
 /**
- * UFs cuja contingência SVC é a SVC-RS (tpEmis=7).
- * Demais UFs usam SVC-AN (tpEmis=6), inclusive SP/MG/RS e as UFs da SVRS
- * (tabela vigente Portal NF-e / unificação SVAN+SVC-AN).
+ * UFs cuja contingência SVC ainda é a SVC-RS (tpEmis=7).
+ * BA saiu: SEFAZ de origem desabilitou SVC-RS (cStat 114).
+ * Demais UFs usam SVC-AN (tpEmis=6), inclusive SP/MG/RS e as UFs da SVRS.
  */
 const SVC_RS_UFS = new Set([
   "AM",
-  "BA",
   "GO",
   "MA",
   "MS",
@@ -96,6 +95,16 @@ export type SefazUnavailableInput = {
  * Indica se a falha é indisponibilidade da SEFAZ autorizadora
  * (vale fallback SVC). Rejeições de negócio (cStat 2xx/3xx/5xx) não entram.
  */
+/** cStat 114: a SEFAZ de origem desligou a SVC-RS — reenviar na SVC-AN. */
+export function isSvcRsDisabledByOrigin(
+  result: SefazUnavailableInput,
+): boolean {
+  const cStat = result.parsed?.cStat?.trim();
+  if (cStat === "114") return true;
+  const text = `${result.error ?? ""} ${result.parsed?.xMotivo ?? ""}`;
+  return /\b114\b/.test(text) && /SVC-RS/i.test(text);
+}
+
 export function shouldFallbackToSvc(result: SefazUnavailableInput): boolean {
   if (result.ok || result.pending) return false;
 

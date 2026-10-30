@@ -13,6 +13,11 @@ export type SefazRejectionHint = {
 };
 
 const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
+  "114": {
+    title: "SVC-RS desabilitada pela SEFAZ de origem",
+    howToFix:
+      "A UF não usa mais a SVC-RS. Desmarque “Forçar emissão em contingência SVC” se a SEFAZ estadual estiver no ar, ou retransmita para usar a SVC-AN.",
+  },
   "215": {
     title: "Falha no schema XML",
     howToFix:
