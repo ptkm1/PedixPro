@@ -7,6 +7,7 @@ import { taxRegimeToCrt } from "./certificate-store.js";
 import {
   escapeXml,
   formatNfeDecimal,
+  formatNfeDateTime,
   generateAccessKey,
   onlyDigits,
 } from "./nfe-access-key.js";
@@ -328,12 +329,8 @@ function buildInfNFe(input: {
       "Código IBGE do município do emitente não preenchido (7 dígitos).",
     );
   }
-  const dhEmi = issuedAt.toISOString().replace(/\.\d{3}Z$/, "-03:00");
-  const dhCont = (
-    config.nfeContingencySince ?? issuedAt
-  )
-    .toISOString()
-    .replace(/\.\d{3}Z$/, "-03:00");
+  const dhEmi = formatNfeDateTime(issuedAt);
+  const dhCont = formatNfeDateTime(config.nfeContingencySince ?? issuedAt);
   const tpAmb = config.nfeEnvironment === "PRODUCTION" ? "1" : "2";
   const homolog = tpAmb === "2";
   const crt = taxRegimeToCrt(config.taxRegime);

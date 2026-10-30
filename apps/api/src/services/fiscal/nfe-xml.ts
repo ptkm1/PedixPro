@@ -11,6 +11,7 @@ import {
 } from "../../fiscal/nfe-prod-fields.js";
 import { decToNum } from "../../util/money.js";
 import { sellerLabelOrDirect } from "../../util/order-seller-filter.js";
+import { formatNfeDateTime } from "../../fiscal/nfe-access-key.js";
 
 export class NfeXmlError extends Error {
   constructor(message: string) {
@@ -116,7 +117,7 @@ export async function buildNfeXml(
   const destIe = customer?.stateRegistration?.trim() || "ISENTO";
 
   const nNF = provisionalNnf(order);
-  const dhEmi = order.createdAt.toISOString().replace(/\.\d{3}Z$/, "-03:00");
+  const dhEmi = formatNfeDateTime(order.createdAt);
   const code = orderCode(order);
   const fileSlug = orderFileSlug(order);
 
