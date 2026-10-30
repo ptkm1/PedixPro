@@ -18,6 +18,11 @@ const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
     howToFix:
       "indIEDest=9 exige indFinal=1. Se o destinatário é CNPJ com IE, o XML precisa da IE (indIEDest=1). Confira a inscrição estadual no cadastro do cliente.",
   },
+  "487": {
+    title: "Escritório de contabilidade não cadastrado na SEFAZ-BA",
+    howToFix:
+      "Use no autXML o CNPJ da SEFAZ-BA 13.937.073/0001-56 (não o 13.937.075). Retransmita a mesma nota.",
+  },
   "486": {
     title: "Grupo autXML obrigatório na Bahia",
     howToFix:
