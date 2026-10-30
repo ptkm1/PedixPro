@@ -53,6 +53,10 @@ import {
 import { validateProductFiscalAgainstCatalog } from "../fiscal/fiscal-catalog-validation.js";
 import { explainSefazRejection } from "../fiscal/sefaz-rejection-hints.js";
 import {
+  formatNfePrevalidateError,
+  validateNfeBeforeTransmission,
+} from "../fiscal/nfe-prevalidate.js";
+import {
   computeItemTaxes,
   validateCustomerFiscal,
   validateOrganizationFiscalConfig,
@@ -181,8 +185,6 @@ export async function buildOutboundInvoiceFromOrder(
   ];
   if (issues.length) return { ok: false as const, issues };
 
-  const nextNumber = cfg.nfeLastNumber + 1;
-
   const invoiceItems = order.items.map((item, idx) => {
     const ncm = item.product.fiscalNcm;
     const op = item.product.outboundOperation;
@@ -245,9 +247,10 @@ export async function buildOutboundInvoiceFromOrder(
   const nature = resolveInvoiceNature(invoiceItems);
 
   const invoice = await prisma.$transaction(async (tx) => {
-    await tx.establishment.update({
+    const est = await tx.establishment.update({
       where: { id: cfg.id },
-      data: { nfeLastNumber: nextNumber },
+      data: { nfeLastNumber: { increment: 1 } },
+      select: { nfeLastNumber: true, nfeSeries: true },
     });
 
     return tx.fiscalInvoice.create({
@@ -264,8 +267,8 @@ export async function buildOutboundInvoiceFromOrder(
         netWeightKg: netWeightKg > 0 ? netWeightKg : null,
         orderId: order.id,
         customerId: order.customerId,
-        number: nextNumber,
-        series: cfg.nfeSeries,
+        number: est.nfeLastNumber,
+        series: est.nfeSeries,
         totalAmount,
         issuerSnapshot: buildIssuerSnapshot(cfg, nature),
         recipientSnapshot: buildRecipientSnapshot(order.customer!),
@@ -415,20 +418,23 @@ export async function transmitOutboundInvoice(
   let issuedAt = firstPkg.issuedAt;
   let tpEmis = startTpEmis;
   let justification = startJustification;
+  let infNFeXml = firstPkg.infNFeXml;
   let signedNFe = signInfNFe(
-    firstPkg.infNFeXml,
+    infNFeXml,
     cert.privateKeyPem,
     cert.certPem,
   );
   let enviNFe = wrapEnviNFe(signedNFe);
 
-  let sefaz = await authorizeNfe({
+  let sefaz = await authorizeAfterLocalValidation({
     uf,
     homologation: homolog,
     enviNFeXml: enviNFe,
+    infNFeXml,
+    accessKey,
+    tpEmis,
     pfx: cert.pfx,
     password: cert.password,
-    tpEmis,
   });
   await logNfeAttempt({
     invoiceId: invoice.id,
@@ -457,13 +463,16 @@ export async function transmitOutboundInvoice(
     justification = rebuilt.justification;
     signedNFe = rebuilt.signedNFe;
     enviNFe = rebuilt.enviNFe;
-    sefaz = await authorizeNfe({
+    infNFeXml = rebuilt.infNFeXml;
+    sefaz = await authorizeAfterLocalValidation({
       uf,
       homologation: homolog,
       enviNFeXml: enviNFe,
+      infNFeXml,
+      accessKey,
+      tpEmis,
       pfx: cert.pfx,
       password: cert.password,
-      tpEmis,
     });
     await logNfeAttempt({
       invoiceId: invoice.id,
@@ -524,13 +533,16 @@ export async function transmitOutboundInvoice(
       tpEmis = rebuilt.tpEmis;
       signedNFe = rebuilt.signedNFe;
       enviNFe = rebuilt.enviNFe;
-      sefaz = await authorizeNfe({
+      infNFeXml = rebuilt.infNFeXml;
+      sefaz = await authorizeAfterLocalValidation({
         uf,
         homologation: homolog,
         enviNFeXml: enviNFe,
+        infNFeXml,
+        accessKey,
+        tpEmis,
         pfx: cert.pfx,
         password: cert.password,
-        tpEmis,
       });
       await logNfeAttempt({
         invoiceId: invoice.id,
@@ -558,13 +570,16 @@ export async function transmitOutboundInvoice(
         justification = back.justification;
         signedNFe = back.signedNFe;
         enviNFe = back.enviNFe;
-        sefaz = await authorizeNfe({
+        infNFeXml = back.infNFeXml;
+        sefaz = await authorizeAfterLocalValidation({
           uf,
           homologation: homolog,
           enviNFeXml: enviNFe,
+          infNFeXml,
+          accessKey,
+          tpEmis,
           pfx: cert.pfx,
           password: cert.password,
-          tpEmis,
         });
         await logNfeAttempt({
           invoiceId: invoice.id,
@@ -1141,9 +1156,46 @@ function rebuildSignedForTpEmis(input: {
     accessKey,
     tpEmis: input.tpEmis,
     justification: input.justification,
+    infNFeXml: pkg.infNFeXml,
     signedNFe,
     enviNFe: wrapEnviNFe(signedNFe),
   };
+}
+
+async function authorizeAfterLocalValidation(input: {
+  uf: string;
+  homologation: boolean;
+  enviNFeXml: string;
+  infNFeXml: string;
+  accessKey: string;
+  tpEmis: string;
+  pfx: Buffer;
+  password: string;
+}): Promise<SefazAuthResult> {
+  const pre = validateNfeBeforeTransmission({
+    infNFeXml: input.infNFeXml,
+    uf: input.uf,
+    homologation: input.homologation,
+    tpEmis: input.tpEmis,
+    accessKey: input.accessKey,
+  });
+  if (!pre.valid) {
+    const error = formatNfePrevalidateError(pre);
+    return {
+      ok: false,
+      rawResponse: "",
+      parsed: { success: false, cStat: "LOCAL", xMotivo: error },
+      error,
+    };
+  }
+  return authorizeNfe({
+    uf: input.uf,
+    homologation: input.homologation,
+    enviNFeXml: input.enviNFeXml,
+    pfx: input.pfx,
+    password: input.password,
+    tpEmis: input.tpEmis,
+  });
 }
 
 function buildIssuerSnapshot(
