@@ -17,8 +17,8 @@ import {
     Table2,
     UserRound,
 } from "lucide-react-native";
-import type { ReactNode } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { Image, StyleSheet, Text, TextInput, View } from "react-native";
 
 export type OrderSummaryPanelProps = {
   customerName: string | null;
@@ -35,7 +35,64 @@ export type OrderSummaryPanelProps = {
   onNotesChange: (value: string) => void;
   /** Banner de crédito / loading (já montado pelo caller). */
   creditSlot?: ReactNode;
+  canOverrideUnitPrice?: boolean;
+  onUnitPriceChange?: (line: CartLine, unitPrice: number) => void;
 };
+
+function formatUnitDraft(n: number): string {
+  return n.toFixed(2).replace(".", ",");
+}
+
+function parseUnitDraft(raw: string): number | null {
+  const n = Number(raw.trim().replace(/\s/g, "").replace(",", "."));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function SummaryUnitPriceInput({
+  line,
+  onCommit,
+}: {
+  line: CartLine;
+  onCommit: (unitPrice: number) => void;
+}) {
+  const { colors } = useTheme();
+  const [text, setText] = useState(formatUnitDraft(line.effectiveUnitPrice));
+  useEffect(() => {
+    setText(formatUnitDraft(line.effectiveUnitPrice));
+  }, [line.effectiveUnitPrice, line.productId]);
+
+  return (
+    <View style={styles.priceRow}>
+      <Text style={[styles.pricePrefix, { color: colors.textSecondary }]}>
+        Unit. R$
+      </Text>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        onEndEditing={() => {
+          const parsed = parseUnitDraft(text);
+          if (parsed == null) {
+            setText(formatUnitDraft(line.effectiveUnitPrice));
+            return;
+          }
+          onCommit(parsed);
+        }}
+        keyboardType="decimal-pad"
+        inputMode="decimal"
+        accessibilityLabel={`Preço unitário de ${line.name}`}
+        style={[
+          styles.priceInput,
+          {
+            color: colors.text,
+            borderColor: colors.border,
+            backgroundColor: colors.surfaceMuted,
+          },
+        ]}
+      />
+    </View>
+  );
+}
 
 function MetaRow({
   icon: Icon,
@@ -89,6 +146,8 @@ export function OrderSummaryPanel({
   notes,
   onNotesChange,
   creditSlot,
+  canOverrideUnitPrice,
+  onUnitPriceChange,
 }: OrderSummaryPanelProps) {
   const { colors, isDark } = useTheme();
   const hasCustomer = Boolean(customerName);
@@ -312,18 +371,47 @@ export function OrderSummaryPanel({
                   >
                     {line.name}
                   </Text>
-                  <Text
-                    style={[styles.lineMeta, { color: colors.textSecondary }]}
-                    numberOfLines={1}
-                  >
-                    R$ {fmtMoney(line.effectiveUnitPrice)}
-                    {hasDiscount ? ` · −${line.discountPercent}%` : ""}
-                    {line.priceOverridden
-                      ? " · Preço ajustado"
-                      : line.priceOriginLabel
-                        ? ` · ${line.priceOriginLabel}`
-                        : ""}
-                  </Text>
+                  {canOverrideUnitPrice && onUnitPriceChange ? (
+                    <SummaryUnitPriceInput
+                      line={line}
+                      onCommit={(n) => onUnitPriceChange(line, n)}
+                    />
+                  ) : (
+                    <Text
+                      style={[styles.lineMeta, { color: colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      R$ {fmtMoney(line.effectiveUnitPrice)}
+                      {hasDiscount ? ` · −${line.discountPercent}%` : ""}
+                      {line.priceOverridden
+                        ? " · Preço ajustado"
+                        : line.priceOriginLabel
+                          ? ` · ${line.priceOriginLabel}`
+                          : ""}
+                    </Text>
+                  )}
+                  {canOverrideUnitPrice && onUnitPriceChange ? (
+                    hasDiscount ||
+                    line.priceOverridden ||
+                    line.priceOriginLabel ? (
+                      <Text
+                        style={[
+                          styles.lineMeta,
+                          { color: colors.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {hasDiscount ? `−${line.discountPercent}%` : ""}
+                        {hasDiscount &&
+                        (line.priceOverridden || line.priceOriginLabel)
+                          ? " · "
+                          : ""}
+                        {line.priceOverridden
+                          ? "Preço ajustado"
+                          : (line.priceOriginLabel ?? "")}
+                      </Text>
+                    ) : null
+                  ) : null}
                   {hasDiscount ? (
                     <View style={styles.discountTag}>
                       <BadgePercent
@@ -573,6 +661,25 @@ const styles = StyleSheet.create({
   lineMeta: {
     fontSize: 12,
     fontWeight: "500",
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  pricePrefix: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  priceInput: {
+    minWidth: 88,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 13,
+    fontWeight: "700",
   },
   discountTag: {
     flexDirection: "row",

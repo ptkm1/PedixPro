@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  FilePenLine,
   Pencil,
   ShieldAlert,
   XCircle,
@@ -71,6 +72,7 @@ type ReleaseOrder = {
     creditBlocked?: boolean;
     creditLimit?: unknown;
   } | null;
+  paymentConditionId?: string | null;
   paymentCondition?: {
     id: string;
     name: string;
@@ -125,6 +127,14 @@ function sellerLabel(o: ReleaseOrder) {
   return o.seller?.user?.name?.trim() || DIRECT_SALE_LABEL;
 }
 
+function paymentConditionLabel(o: ReleaseOrder) {
+  const name = o.paymentCondition?.name?.trim();
+  if (name) return name;
+  if (o.paymentCondition?.days === 0) return "À vista";
+  if (o.paymentCondition && o.paymentCondition.days > 0) return "A prazo";
+  return "—";
+}
+
 function parseCreditReasons(raw: unknown): CreditReason[] {
   if (!raw) return [];
   if (Array.isArray(raw)) {
@@ -165,6 +175,7 @@ export function OrderReleasePage() {
   const [sellerQ, setSellerQ] = useState("");
   const [note, setNote] = useState("");
   const [editItemsOpen, setEditItemsOpen] = useState(false);
+  const [editOrderOpen, setEditOrderOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const canWrite =
@@ -341,8 +352,11 @@ export function OrderReleasePage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <section className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <h2 className="text-sm font-medium">Fila de liberação</h2>
+            <Badge variant="secondary" className="tabular-nums">
+              {filteredOrders.length}
+            </Badge>
           </div>
           {isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Carregando…</p>
@@ -362,6 +376,7 @@ export function OrderReleasePage() {
                     <TableHead>Nº</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Vendedor</TableHead>
+                    <TableHead>Condição de pagamento</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead>Situação financeira</TableHead>
@@ -395,6 +410,9 @@ export function OrderReleasePage() {
                         </TableCell>
                         <TableCell className="max-w-[8rem] truncate">
                           {sellerLabel(o)}
+                        </TableCell>
+                        <TableCell className="max-w-[9rem] truncate">
+                          {paymentConditionLabel(o)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-xs">
                           {formatDateTime(o.createdAt)}
@@ -526,15 +544,26 @@ export function OrderReleasePage() {
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <h3 className="text-sm font-medium">Produtos</h3>
                   {canEditItems ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setEditItemsOpen(true)}
-                    >
-                      <Pencil className="size-3.5" />
-                      Editar itens
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditItemsOpen(true)}
+                      >
+                        <Pencil className="size-3.5" />
+                        Editar itens
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditOrderOpen(true)}
+                      >
+                        <FilePenLine className="size-3.5" />
+                        Editar pedido
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
                 <div className="overflow-auto rounded-md border border-border">
@@ -690,6 +719,15 @@ export function OrderReleasePage() {
                 open={editItemsOpen}
                 onOpenChange={setEditItemsOpen}
                 order={selected}
+                onSaved={() => {
+                  invalidate();
+                }}
+              />
+              <EditOrderItemsSheet
+                open={editOrderOpen}
+                onOpenChange={setEditOrderOpen}
+                order={selected}
+                mode="order"
                 onSaved={() => {
                   invalidate();
                 }}

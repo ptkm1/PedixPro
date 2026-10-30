@@ -152,11 +152,15 @@ function newLine(): DraftLine {
 }
 
 function parseMoneyInput(raw: string): number | null {
-  const normalized = raw.trim().replace(",", ".");
+  const normalized = raw.trim().replace(/\s/g, "").replace(",", ".");
   if (!normalized) return null;
   const n = Number(normalized);
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 100) / 100;
+}
+
+function formatUnitPriceDraft(n: number): string {
+  return n.toFixed(2).replace(".", ",");
 }
 
 function useDebouncedValue<T>(value: T, delayMs = 300): T {
@@ -632,9 +636,7 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
         description={
           sellerId && products.length === 0 && !catalogQ.isPending
             ? "Este vendedor não tem produtos no catálogo. Associe produtos em Vendedores."
-            : canEditUnitPrice
-              ? "Quantidade, desconto extra e preço unitário (tabela por padrão; administradores e gestores podem ajustar)."
-              : "Quantidade e preço efetivo (tabela / promoção). Desconto extra é opcional."
+            : "Quantidade, desconto extra e preço unitário. O valor da tabela vem preenchido; administradores e gestores podem editar o campo Preço."
         }
         className="mt-6"
       >
@@ -764,32 +766,38 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
                     }
                   />
                 </FormField>
-                {canEditUnitPrice ? (
-                  <FormField
-                    label="Preço"
-                    htmlFor={`item-price-${line.key}`}
-                    hint={
-                      priceLabel
-                        ? liveLineTotal != null
-                          ? `${priceLabel} · ${formatOrderMoney(liveLineTotal)}`
-                          : priceLabel
-                        : liveLineTotal != null
-                          ? formatOrderMoney(liveLineTotal)
-                          : undefined
-                    }
-                    hintOverlay
-                  >
+                <FormField
+                  label="Preço"
+                  htmlFor={`item-price-${line.key}`}
+                  hint={
+                    priceLabel
+                      ? liveLineTotal != null
+                        ? `${priceLabel} · ${formatOrderMoney(liveLineTotal)}`
+                        : priceLabel
+                      : liveLineTotal != null
+                        ? formatOrderMoney(liveLineTotal)
+                        : "Editável (tabela por padrão)"
+                  }
+                  hintOverlay
+                >
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs font-medium text-muted-foreground">
+                      R$
+                    </span>
                     <Input
                       id={`item-price-${line.key}`}
+                      className="pl-9 tabular-nums"
                       inputMode="decimal"
+                      autoComplete="off"
+                      aria-label="Preço unitário editável"
                       value={
                         line.priceDirty
                           ? line.unitPrice
                           : displayUnit != null
-                            ? String(displayUnit)
+                            ? formatUnitPriceDraft(displayUnit)
                             : ""
                       }
-                      placeholder="Tabela"
+                      placeholder="0,00"
                       onChange={(e) =>
                         setLines((prev) =>
                           prev.map((l) =>
@@ -804,24 +812,8 @@ export function CreateOrderSheet({ open, onOpenChange, onCreated }: Props) {
                         )
                       }
                     />
-                  </FormField>
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium text-foreground">
-                      Preço
-                    </span>
-                    <p className="flex h-9 items-center text-sm text-muted-foreground">
-                      {displayUnit != null
-                        ? formatOrderMoney(displayUnit)
-                        : "—"}
-                      {priceLabel ? (
-                        <span className="ml-1 truncate text-xs">
-                          {priceLabel}
-                        </span>
-                      ) : null}
-                    </p>
                   </div>
-                )}
+                </FormField>
                 <Button
                   type="button"
                   variant="ghost"

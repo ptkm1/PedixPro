@@ -6,6 +6,7 @@ import {
 import { useConfirm } from "@/components/confirm";
 import { FilterBar, FormField } from "@/components/forms";
 import { CreateOrderSheet } from "@/components/orders/CreateOrderSheet";
+import { OrderStageSelect } from "@/components/orders/OrderStageSelect";
 import { OrdersKanbanBoard } from "@/components/orders/OrdersKanbanBoard";
 import { AppSelect } from "@/components/ui/app-select";
 import { Badge } from "@/components/ui/badge";
@@ -162,11 +163,36 @@ export function OrdersPage() {
     queryFn: () => apiFetch<OrderSituation[]>("/admin/order-situations"),
   });
 
+  const etapaFilterId = useMemo(() => {
+    if (!situationFilter) return "";
+    if (situationFilter === SYSTEM_SITUATION_CODES.CREDIT) {
+      return (
+        situations.find((s) => s.code === SYSTEM_SITUATION_CODES.CREDIT)?.id ??
+        ""
+      );
+    }
+    return situationFilter;
+  }, [situationFilter, situations]);
+
+  const etapaFilterOptions = useMemo(
+    () =>
+      situations
+        .filter((s) => s.active)
+        .map((s) => ({
+          id: s.id,
+          code: s.code,
+          name: s.name,
+          mapsToCancel: s.mapsToCancel,
+        })),
+    [situations],
+  );
+
   const listQueryKey = useMemo(
     () => [
       "admin",
       "orders",
       situationFilter ?? "all",
+      situations.find((s) => s.id === situationFilter)?.code ?? "",
       debouncedOrderNumber.trim(),
       debouncedCity.trim(),
       debouncedTradeName.trim(),
@@ -176,6 +202,7 @@ export function OrdersPage() {
     ],
     [
       situationFilter,
+      situations,
       debouncedOrderNumber,
       debouncedCity,
       debouncedTradeName,
@@ -190,7 +217,14 @@ export function OrdersPage() {
     queryFn: () => {
       const params = new URLSearchParams();
       if (situationFilter) {
-        if (situationFilter === SYSTEM_SITUATION_CODES.CREDIT) {
+        const selectedSit =
+          situationFilter === SYSTEM_SITUATION_CODES.CREDIT
+            ? situations.find((s) => s.code === SYSTEM_SITUATION_CODES.CREDIT)
+            : situations.find((s) => s.id === situationFilter);
+        if (
+          situationFilter === SYSTEM_SITUATION_CODES.CREDIT ||
+          selectedSit?.code === SYSTEM_SITUATION_CODES.CREDIT
+        ) {
           params.set("situationCode", SYSTEM_SITUATION_CODES.CREDIT);
         } else {
           params.set("situationId", situationFilter);
@@ -291,12 +325,19 @@ export function OrdersPage() {
 
   function situationOptionsFor(order?: Order) {
     const active = situations.filter((s) => s.active);
-    const opts = active.map((s) => ({ value: s.id, label: s.name }));
+    const opts = active.map((s) => ({
+      id: s.id,
+      code: s.code,
+      name: s.name,
+      mapsToCancel: s.mapsToCancel,
+    }));
     const current = order?.situation;
     if (current && !active.some((s) => s.id === current.id)) {
       opts.push({
-        value: current.id,
-        label: `${current.name} (inativa)`,
+        id: current.id,
+        code: current.code,
+        name: `${current.name} (inativa)`,
+        mapsToCancel: current.mapsToCancel,
       });
     }
     return opts;
@@ -420,8 +461,6 @@ export function OrdersPage() {
     }
   }
 
-  const pendingCreditSelected =
-    situationFilter === SYSTEM_SITUATION_CODES.CREDIT;
   const situationBusy = patchSituation.isPending;
 
   const kanbanHint = canWrite
@@ -467,7 +506,7 @@ export function OrdersPage() {
         <Button
           type="button"
           size="sm"
-          variant={!pendingCreditSelected ? "default" : "outline"}
+          variant={!situationFilter ? "default" : "outline"}
           onClick={() => setFilter(null)}
         >
           Todas
@@ -477,7 +516,7 @@ export function OrdersPage() {
         </Button>
       </div>
 
-      <FilterBar className="shrink-0 p-4 lg:grid-cols-5">
+      <FilterBar className="shrink-0 p-4 lg:grid-cols-6">
         <FormField label="Nº do pedido" htmlFor="orders-filter-number">
           <Input
             id="orders-filter-number"
@@ -528,6 +567,17 @@ export function OrdersPage() {
                 label: s.user.name,
               })),
             ]}
+          />
+        </FormField>
+        <FormField label="Etapa" htmlFor="orders-filter-stage">
+          <OrderStageSelect
+            id="orders-filter-stage"
+            value={etapaFilterId}
+            onValueChange={(v) => setFilter(v || null)}
+            emptyLabel="Todas"
+            placeholder="Todas"
+            options={etapaFilterOptions}
+            colored
           />
         </FormField>
         {establishments.length > 1 ? (
@@ -616,18 +666,13 @@ export function OrdersPage() {
             </Button>
           ) : null}
           {canWrite ? (
-            <AppSelect
+            <OrderStageSelect
               value={bulkStage}
               disabled={!hasSelection || situationBusy}
               placeholder="Alterar etapa…"
               emptyLabel="Alterar etapa…"
               triggerClassName="w-[11.5rem]"
-              options={situations
-                .filter((s) => s.active)
-                .map((s) => ({
-                  value: s.id,
-                  label: s.name,
-                }))}
+              options={etapaFilterOptions}
               onValueChange={(v) => {
                 setBulkStage(v);
                 if (v) void applyStageChange([...selectedIds], v);
@@ -656,7 +701,10 @@ export function OrdersPage() {
 
       {!isLoading && !isError && orders.length > 0 ? (
         <div className="surface-card min-h-0 min-w-0 flex-1 overflow-hidden">
-          <Table containerClassName="h-full min-h-0 overflow-auto">
+          <Table
+            tableId="orders-list"
+            containerClassName="h-full min-h-0 overflow-auto"
+          >
             <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
               <TableRow>
                 <TableHead className="w-10 px-4">
@@ -703,11 +751,12 @@ export function OrdersPage() {
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       {canWrite ? (
-                        <AppSelect
+                        <OrderStageSelect
                           value={o.situationId ?? ""}
                           disabled={situationBusy}
                           triggerClassName="w-auto min-w-[10.5rem]"
                           options={situationOptionsFor(o)}
+                          colored
                           onValueChange={(v) => {
                             if (!v || v === o.situationId) return;
                             void applyStageChange([o.id], v, o.status);
