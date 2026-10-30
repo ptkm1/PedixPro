@@ -26,7 +26,7 @@ const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
   "225": {
     title: "Falha no Schema XML do lote de NFe",
     howToFix:
-      "Revise os dados fiscais dos produtos (NCM, CFOP, CST/CSOSN, origem).",
+      "O XML saiu com campo vazio ou grupo tributário inválido. Confira NCM (8 dígitos), CFOP, unidade (até 6 letras), CST PIS/COFINS (ex.: 04 em PISNT, não em alíquota), CSOSN/CST de ICMS, código IBGE do emitente e endereço sem campos em branco.",
   },
   "539": {
     title: "Duplicidade de NF-e",

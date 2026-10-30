@@ -39,7 +39,42 @@ type Recipient = {
 };
 
 /** CSOSN do Simples que no XML levam só orig + CSOSN (grupo ICMSSNxxx). */
-const CSOSN_ORIG_ONLY = new Set(["102", "103", "300", "400"]);
+const CSOSN_ORIG_ONLY = new Set(["102", "103", "300", "400", "500"]);
+
+const PIS_NT = new Set(["04", "05", "06", "07", "08", "09"]);
+const PIS_ALIQ = new Set(["01", "02"]);
+
+function nfeFilled(raw: string | null | undefined, fallback: string): string {
+  const t = (raw ?? "").trim();
+  return t || fallback;
+}
+
+function nfeIbge(raw: string | null | undefined, fallback: string): string {
+  const d = (raw ?? "").replace(/\D/g, "");
+  return d.length === 7 ? d : fallback;
+}
+
+function nfeCfop(raw: string | null | undefined): string {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (d.length >= 4) return d.slice(0, 4);
+  return "5102";
+}
+
+function nfeUnit(raw: string | null | undefined): string {
+  const t = (raw ?? "").trim().slice(0, 6);
+  return t || "UN";
+}
+
+function nfeCsosn(raw: unknown): string {
+  const d = String(raw ?? "102").replace(/\D/g, "").padStart(3, "0").slice(-3);
+  if (CSOSN_ORIG_ONLY.has(d) || d === "101") return d;
+  return "102";
+}
+
+function nfeCstIcms(raw: unknown): string {
+  const d = String(raw ?? "00").replace(/\D/g, "").padStart(2, "0").slice(-2);
+  return d || "00";
+}
 
 function resolveFiscalOrigin(
   tax: Record<string, unknown>,
@@ -63,16 +98,7 @@ function buildIcmsXml(
   const orig = resolveFiscalOrigin(tax, lineNumber);
 
   if (taxRegime === "SIMPLES_NACIONAL") {
-    const csosn = String(tax.csosn ?? "102").padStart(3, "0");
-    const tag = `ICMSSN${csosn}`;
-    if (CSOSN_ORIG_ONLY.has(csosn)) {
-      return `<ICMS>
-          <${tag}>
-            <orig>${orig}</orig>
-            <CSOSN>${csosn}</CSOSN>
-          </${tag}>
-        </ICMS>`;
-    }
+    const csosn = nfeCsosn(tax.csosn);
     if (csosn === "101") {
       const pCred = formatNfeDecimal(Number(tax.pCredSN ?? tax.icmsRate ?? 0));
       const vCred = formatNfeDecimal(Number(tax.vCredICMSSN ?? tax.icms ?? 0));
@@ -85,7 +111,7 @@ function buildIcmsXml(
           </ICMSSN101>
         </ICMS>`;
     }
-    // Demais CSOSN: emite grupo genérico com campos mínimos (evita hardcode 102).
+    const tag = `ICMSSN${csosn}`;
     return `<ICMS>
           <${tag}>
             <orig>${orig}</orig>
@@ -94,12 +120,27 @@ function buildIcmsXml(
         </ICMS>`;
   }
 
-  const cst = String(tax.cst ?? "00").padStart(2, "0");
+  const cst = nfeCstIcms(tax.cst);
+  if (cst === "40" || cst === "41" || cst === "50") {
+    return `<ICMS>
+          <ICMS40>
+            <orig>${orig}</orig>
+            <CST>${cst}</CST>
+          </ICMS40>
+        </ICMS>`;
+  }
+  if (cst === "60") {
+    return `<ICMS>
+          <ICMS60>
+            <orig>${orig}</orig>
+            <CST>60</CST>
+          </ICMS60>
+        </ICMS>`;
+  }
   const vBC = formatNfeDecimal(Number(tax.base ?? 0));
   const pICMS = formatNfeDecimal(Number(tax.icmsRate ?? 0));
   const vICMS = formatNfeDecimal(Number(tax.icms ?? 0));
-  if (cst === "00") {
-    return `<ICMS>
+  return `<ICMS>
           <ICMS00>
             <orig>${orig}</orig>
             <CST>00</CST>
@@ -108,17 +149,6 @@ function buildIcmsXml(
             <pICMS>${pICMS}</pICMS>
             <vICMS>${vICMS}</vICMS>
           </ICMS00>
-        </ICMS>`;
-  }
-  return `<ICMS>
-          <ICMS${cst}>
-            <orig>${orig}</orig>
-            <CST>${cst}</CST>
-            <modBC>3</modBC>
-            <vBC>${vBC}</vBC>
-            <pICMS>${pICMS}</pICMS>
-            <vICMS>${vICMS}</vICMS>
-          </ICMS${cst}>
         </ICMS>`;
 }
 
@@ -129,17 +159,18 @@ function taxNum(tax: Record<string, unknown>, key: string): number {
 }
 
 function buildPisCofinsXml(tax: Record<string, unknown>): string {
-  const cst = String(tax.cstPis ?? "07").padStart(2, "0");
+  const cst = String(tax.cstPis ?? "07").replace(/\D/g, "").padStart(2, "0").slice(-2) || "07";
+  if (PIS_NT.has(cst)) {
+    return `<PIS><PISNT><CST>${cst}</CST></PISNT></PIS>
+        <COFINS><COFINSNT><CST>${cst}</CST></COFINSNT></COFINS>`;
+  }
   const vBC = formatNfeDecimal(taxNum(tax, "base"));
   const pPIS = formatNfeDecimal(taxNum(tax, "pisRate"));
   const vPIS = formatNfeDecimal(taxNum(tax, "pis"));
   const pCOFINS = formatNfeDecimal(taxNum(tax, "cofinsRate"));
   const vCOFINS = formatNfeDecimal(taxNum(tax, "cofins"));
-  if (cst === "07" || cst === "08" || cst === "09") {
-    return `<PIS><PISNT><CST>${cst}</CST></PISNT></PIS>
-        <COFINS><COFINSNT><CST>${cst}</CST></COFINSNT></COFINS>`;
-  }
-  return `<PIS>
+  if (PIS_ALIQ.has(cst)) {
+    return `<PIS>
           <PISAliq>
             <CST>${cst}</CST>
             <vBC>${vBC}</vBC>
@@ -154,6 +185,23 @@ function buildPisCofinsXml(tax: Record<string, unknown>): string {
             <pCOFINS>${pCOFINS}</pCOFINS>
             <vCOFINS>${vCOFINS}</vCOFINS>
           </COFINSAliq>
+        </COFINS>`;
+  }
+  return `<PIS>
+          <PISOutr>
+            <CST>${cst}</CST>
+            <vBC>${vBC}</vBC>
+            <pPIS>${pPIS}</pPIS>
+            <vPIS>${vPIS}</vPIS>
+          </PISOutr>
+        </PIS>
+        <COFINS>
+          <COFINSOutr>
+            <CST>${cst}</CST>
+            <vBC>${vBC}</vBC>
+            <pCOFINS>${pCOFINS}</pCOFINS>
+            <vCOFINS>${vCOFINS}</vCOFINS>
+          </COFINSOutr>
         </COFINS>`;
 }
 
@@ -272,8 +320,14 @@ function buildInfNFe(input: {
 }) {
   const { config, invoice, recipient, accessKey, issuedAt, emitterName } =
     input;
-  const uf = (config.uf ?? "SP").toUpperCase();
+  const uf = nfeFilled(config.uf, "SP").toUpperCase().slice(0, 2);
   const cUF = UF_IBGE[uf] ?? "35";
+  const emitIbge = nfeIbge(config.cityIbge, "");
+  if (!emitIbge) {
+    throw new Error(
+      "Código IBGE do município do emitente não preenchido (7 dígitos).",
+    );
+  }
   const dhEmi = issuedAt.toISOString().replace(/\.\d{3}Z$/, "-03:00");
   const tpAmb = config.nfeEnvironment === "PRODUCTION" ? "1" : "2";
   const homolog = tpAmb === "2";
@@ -282,12 +336,17 @@ function buildInfNFe(input: {
   const isCnpj = destDoc.length === 14;
   const destName = homolog
     ? "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
-    : recipient.name;
+    : nfeFilled(recipient.name, "DESTINATARIO");
+  const destUf = nfeFilled(recipient.state, uf).toUpperCase().slice(0, 2);
+  const destIbge = nfeIbge(recipient.cityIbge, emitIbge);
+  const idDest = destUf === uf ? "1" : "2";
   const tpEmis = String(invoice.tpEmis ?? "1").slice(0, 1) || "1";
   const freight = Number(invoice.freightAmount ?? 0);
   const totals = sumTaxSnapshots(invoice.items);
   const vNF = totals.vProd + freight + totals.vIPI;
   const natOp = normalizeNfeNature(input.nature);
+  const emitIe = nfeFilled(config.stateRegistration, "ISENTO");
+  const destIeRaw = (recipient.stateRegistration ?? "").trim();
 
   const det = invoice.items
     .map((item) => {
@@ -304,6 +363,13 @@ function buildInfNFe(input: {
         productId: item.productId,
         lineNumber: item.lineNumber,
       });
+      const ncm = (item.ncm ?? "").replace(/\D/g, "").padStart(8, "0").slice(-8);
+      if (!ncm || ncm === "00000000") {
+        throw new Error(
+          `Item ${item.lineNumber}: NCM inválido ou vazio (informe 8 dígitos no produto).`,
+        );
+      }
+      const unit = nfeUnit(item.unit);
       const cestXml = cest ? `\n        <CEST>${cest}</CEST>` : "";
       const extIpiXml = extIpi
         ? `\n        <EXTIPI>${escapeXml(extIpi)}</EXTIPI>`
@@ -313,15 +379,15 @@ function buildInfNFe(input: {
       <prod>
         <cProd>${escapeXml(cProd)}</cProd>
         <cEAN>${escapeXml(gtin)}</cEAN>
-        <xProd>${escapeXml(item.description)}</xProd>
-        <NCM>${escapeXml((item.ncm ?? "00000000").replace(/\D/g, "").padStart(8, "0"))}</NCM>${cestXml}${extIpiXml}
-        <CFOP>${escapeXml(item.cfop ?? "5102")}</CFOP>
-        <uCom>${escapeXml(item.unit ?? "UN")}</uCom>
+        <xProd>${escapeXml(nfeFilled(item.description, `ITEM ${item.lineNumber}`).slice(0, 120))}</xProd>
+        <NCM>${ncm}</NCM>${cestXml}${extIpiXml}
+        <CFOP>${nfeCfop(item.cfop)}</CFOP>
+        <uCom>${escapeXml(unit)}</uCom>
         <qCom>${formatNfeDecimal(Number(item.quantity), 4)}</qCom>
         <vUnCom>${formatNfeDecimal(Number(item.unitPrice))}</vUnCom>
         <vProd>${formatNfeDecimal(vProd)}</vProd>
         <cEANTrib>${escapeXml(gtin)}</cEANTrib>
-        <uTrib>${escapeXml(item.unit ?? "UN")}</uTrib>
+        <uTrib>${escapeXml(unit)}</uTrib>
         <qTrib>${formatNfeDecimal(Number(item.quantity), 4)}</qTrib>
         <vUnTrib>${formatNfeDecimal(Number(item.unitPrice))}</vUnTrib>
         <indTot>1</indTot>
@@ -345,8 +411,8 @@ function buildInfNFe(input: {
     <nNF>${invoice.number}</nNF>
     <dhEmi>${dhEmi}</dhEmi>
     <tpNF>1</tpNF>
-    <idDest>1</idDest>
-    <cMunFG>${escapeXml(config.cityIbge ?? "3550308")}</cMunFG>
+    <idDest>${idDest}</idDest>
+    <cMunFG>${emitIbge}</cMunFG>
     <tpImp>1</tpImp>
     <tpEmis>${tpEmis}</tpEmis>
     <cDV>${accessKey.slice(-1)}</cDV>
@@ -368,34 +434,39 @@ function buildInfNFe(input: {
     <xNome>${escapeXml(emitterName)}</xNome>
     <xFant>${escapeXml(emitterName)}</xFant>
     <enderEmit>
-      <xLgr>${escapeXml(config.street ?? "NAO INFORMADO")}</xLgr>
-      <nro>${escapeXml(config.addressNumber ?? "S/N")}</nro>
-      <xBairro>${escapeXml(config.district ?? "CENTRO")}</xBairro>
-      <cMun>${escapeXml(config.cityIbge ?? "3550308")}</cMun>
-      <xMun>${escapeXml(config.city ?? "SAO PAULO")}</xMun>
+      <xLgr>${escapeXml(nfeFilled(config.street, "NAO INFORMADO"))}</xLgr>
+      <nro>${escapeXml(nfeFilled(config.addressNumber, "S/N"))}</nro>
+      <xBairro>${escapeXml(nfeFilled(config.district, "CENTRO"))}</xBairro>
+      <cMun>${emitIbge}</cMun>
+      <xMun>${escapeXml(nfeFilled(config.city, "MUNICIPIO"))}</xMun>
       <UF>${uf}</UF>
-      <CEP>${onlyDigits(config.zipCode ?? "00000000", 8)}</CEP>
+      <CEP>${onlyDigits(nfeFilled(config.zipCode, "00000000"), 8)}</CEP>
       <cPais>1058</cPais>
       <xPais>BRASIL</xPais>
     </enderEmit>
-    <IE>${escapeXml(config.stateRegistration ?? "ISENTO")}</IE>
+    <IE>${escapeXml(emitIe)}</IE>
     <CRT>${crt}</CRT>
   </emit>
   <dest>
     <${isCnpj ? "CNPJ" : "CPF"}>${onlyDigits(destDoc, isCnpj ? 14 : 11)}</${isCnpj ? "CNPJ" : "CPF"}>
     <xNome>${escapeXml(destName)}</xNome>
     <enderDest>
-      <xLgr>${escapeXml(recipient.street ?? "NAO INFORMADO")}</xLgr>
-      <nro>${escapeXml(recipient.addressNumber ?? "S/N")}</nro>
-      <xBairro>${escapeXml(recipient.district ?? "CENTRO")}</xBairro>
-      <cMun>${escapeXml(recipient.cityIbge ?? config.cityIbge ?? "3550308")}</cMun>
-      <xMun>${escapeXml(recipient.city ?? "SAO PAULO")}</xMun>
-      <UF>${escapeXml(recipient.state ?? uf)}</UF>
-      <CEP>${onlyDigits(recipient.zipCode ?? "00000000", 8)}</CEP>
+      <xLgr>${escapeXml(nfeFilled(recipient.street, "NAO INFORMADO"))}</xLgr>
+      <nro>${escapeXml(nfeFilled(recipient.addressNumber, "S/N"))}</nro>
+      <xBairro>${escapeXml(nfeFilled(recipient.district, "CENTRO"))}</xBairro>
+      <cMun>${destIbge}</cMun>
+      <xMun>${escapeXml(nfeFilled(recipient.city, "MUNICIPIO"))}</xMun>
+      <UF>${destUf}</UF>
+      <CEP>${onlyDigits(nfeFilled(recipient.zipCode, "00000000"), 8)}</CEP>
       <cPais>1058</cPais>
       <xPais>BRASIL</xPais>
     </enderDest>
-    <indIEDest>9</indIEDest>
+    ${
+      destIeRaw && destIeRaw.toUpperCase() !== "ISENTO"
+        ? `<indIEDest>1</indIEDest>
+    <IE>${escapeXml(destIeRaw.replace(/\D/g, "") || destIeRaw)}</IE>`
+        : `<indIEDest>9</indIEDest>`
+    }
   </dest>${det}
   <total>
     <ICMSTot>
