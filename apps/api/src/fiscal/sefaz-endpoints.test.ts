@@ -26,6 +26,12 @@ describe("endpoints SVC", () => {
     );
   });
 
+  it("Bahia emite no SEFAZ-BA quando tpEmis é normal", () => {
+    expect(getAutorizacaoUrl("BA", false, "1")).toContain("nfe.sefaz.ba.gov.br");
+    expect(getAutorizacaoUrl("BA", true, "1")).toContain("hnfe.sefaz.ba.gov.br");
+    expect(getAutorizacaoUrl("BA", false, "7")).toContain("nfe.svrs.rs.gov.br");
+  });
+
   it("tpEmis 7 usa SVC-RS no mesmo ambiente", () => {
     expect(getAutorizacaoUrl("PR", true, "7")).toContain(
       "nfe-homologacao.svrs.rs.gov.br",

@@ -215,6 +215,13 @@ enum NfeEnvironment {
   PRODUCTION
 }
 
+/// Estado da contingência SVC do emitente (não fica preso em SVC).
+enum NfeContingencyState {
+  NORMAL
+  SVC_ATIVA
+  SEFAZ_INDISPONIVEL
+}
+
 enum FiscalTaxRegime {
   SIMPLES_NACIONAL
   LUCRO_PRESUMIDO
@@ -1871,9 +1878,12 @@ model Establishment {
   /// Série NFC-e (modelo 65) — arquitetura; emissão ainda não implementada.
   nfceSeries                Int?
   nfceLastNumber            Int?
-  /// Contingência SVC automática (fallback se a SEFAZ da UF estiver indisponível).
-  /// true = forçar emissão já no SVC, mesmo com a autorizadora no ar.
+  /// Espelho de nfeContingencyState = SVC_ATIVA (a emissão não usa mais o checkbox).
   contingencyEnabled        Boolean         @default(false)
+  nfeContingencyState       NfeContingencyState @default(NORMAL)
+  /// Início da contingência (dhCont no XML).
+  nfeContingencySince       DateTime?
+  nfeContingencyCheckedAt   DateTime?
   certificatePfxEncrypted   Bytes?
   certificatePasswordEncrypted String?
   certificateExpiresAt      DateTime?

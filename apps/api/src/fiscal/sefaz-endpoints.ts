@@ -50,6 +50,11 @@ const SVRS_STATES = new Set([
   "TO",
 ]);
 
+function baWebservice(homologation: boolean, service: string): string {
+  const host = homologation ? "hnfe.sefaz.ba.gov.br" : "nfe.sefaz.ba.gov.br";
+  return `https://${host}/webservices/${service}/${service}.asmx`;
+}
+
 /** URLs da SVC-AN (SVAN unificado) e SVC-RS para autorização/eventos/consulta. */
 export function getSvcAutorizacaoUrl(
   authorizer: "SVCAN" | "SVCRS",
@@ -125,6 +130,9 @@ export function getAutorizacaoUrl(
       ? "https://homologacao.nfe.fazenda.pr.gov.br/nfe/NFeAutorizacao4"
       : "https://nfe.fazenda.pr.gov.br/nfe/NFeAutorizacao4";
   }
+  if (u === "BA") {
+    return baWebservice(homologation, "NFeAutorizacao4");
+  }
   if (SVRS_STATES.has(u) || u === "MA" || u === "MS" || u === "MT") {
     return homologation
       ? "https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx"
@@ -164,6 +172,9 @@ export function getRecepcaoEventoUrl(
       ? "https://homologacao.nfe.fazenda.pr.gov.br/nfe/NFeRecepcaoEvento4"
       : "https://nfe.fazenda.pr.gov.br/nfe/NFeRecepcaoEvento4";
   }
+  if (u === "BA") {
+    return baWebservice(homologation, "NFeRecepcaoEvento4");
+  }
   return homologation
     ? "https://nfe-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx"
     : "https://nfe.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx";
@@ -192,6 +203,9 @@ export function getConsultaProtocoloUrl(
       ? "https://homologacao.nfe.fazenda.pr.gov.br/nfe/NFeConsultaProtocolo4"
       : "https://nfe.fazenda.pr.gov.br/nfe/NFeConsultaProtocolo4";
   }
+  if (u === "BA") {
+    return baWebservice(homologation, "NFeConsultaProtocolo4");
+  }
   return homologation
     ? "https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx"
     : "https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx";
@@ -214,7 +228,55 @@ export function getInutilizacaoUrl(uf: string, homologation: boolean): string {
       ? "https://homologacao.nfe.fazenda.pr.gov.br/nfe/NFeInutilizacao4"
       : "https://nfe.fazenda.pr.gov.br/nfe/NFeInutilizacao4";
   }
+  if (u === "BA") {
+    return baWebservice(homologation, "NFeInutilizacao4");
+  }
   return homologation
     ? "https://nfe-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx"
     : "https://nfe.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx";
+}
+
+export function getSvcStatusServicoUrl(
+  authorizer: "SVCAN" | "SVCRS",
+  homologation: boolean,
+): string {
+  if (authorizer === "SVCAN") {
+    return homologation
+      ? "https://hom.sefazvirtual.fazenda.gov.br/NFeStatusServico4/NFeStatusServico4.asmx"
+      : "https://www.sefazvirtual.fazenda.gov.br/NFeStatusServico4/NFeStatusServico4.asmx";
+  }
+  return homologation
+    ? "https://nfe-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx"
+    : "https://nfe.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx";
+}
+
+export function getStatusServicoUrl(
+  uf: string,
+  homologation: boolean,
+  tpEmis?: string | null,
+): string {
+  const svc = svcAuthorizerFromTpEmis(tpEmis);
+  if (svc) return getSvcStatusServicoUrl(svc, homologation);
+  const u = uf.toUpperCase();
+  if (u === "SP") {
+    return homologation
+      ? "https://homologacao.nfe.fazenda.sp.gov.br/ws/nfestatusservico4.asmx"
+      : "https://nfe.fazenda.sp.gov.br/ws/nfestatusservico4.asmx";
+  }
+  if (u === "MG") {
+    return homologation
+      ? "https://hnfe.fazenda.mg.gov.br/nfe2/services/NFeStatusServico4"
+      : "https://nfe.fazenda.mg.gov.br/nfe2/services/NFeStatusServico4";
+  }
+  if (u === "PR") {
+    return homologation
+      ? "https://homologacao.nfe.fazenda.pr.gov.br/nfe/NFeStatusServico4"
+      : "https://nfe.fazenda.pr.gov.br/nfe/NFeStatusServico4";
+  }
+  if (u === "BA") {
+    return baWebservice(homologation, "NFeStatusServico4");
+  }
+  return homologation
+    ? "https://nfe-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx"
+    : "https://nfe.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx";
 }

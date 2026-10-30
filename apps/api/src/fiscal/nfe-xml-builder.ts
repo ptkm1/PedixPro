@@ -329,6 +329,11 @@ function buildInfNFe(input: {
     );
   }
   const dhEmi = issuedAt.toISOString().replace(/\.\d{3}Z$/, "-03:00");
+  const dhCont = (
+    config.nfeContingencySince ?? issuedAt
+  )
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "-03:00");
   const tpAmb = config.nfeEnvironment === "PRODUCTION" ? "1" : "2";
   const homolog = tpAmb === "2";
   const crt = taxRegimeToCrt(config.taxRegime);
@@ -429,7 +434,7 @@ function buildInfNFe(input: {
     <verProc>PEDIDOS-1.0</verProc>${
       isSvcTpEmis(tpEmis)
         ? `
-    <dhCont>${dhEmi}</dhCont>
+    <dhCont>${dhCont}</dhCont>
     <xJust>${escapeXml(normalizeSvcJustification(invoice.contingencyJustification))}</xJust>`
         : ""
     }

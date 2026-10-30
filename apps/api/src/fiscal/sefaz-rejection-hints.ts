@@ -16,7 +16,7 @@ const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
   "114": {
     title: "SVC-RS desabilitada pela SEFAZ de origem",
     howToFix:
-      "A UF não usa mais a SVC-RS. Desmarque “Forçar emissão em contingência SVC” se a SEFAZ estadual estiver no ar, ou retransmita para usar a SVC-AN.",
+      "A SEFAZ de origem desabilitou a SVC. O Pedix volta automaticamente para emissão normal (tpEmis 1) no webservice da UF. Retransmita a mesma nota.",
   },
   "215": {
     title: "Falha no schema XML",

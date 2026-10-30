@@ -12,7 +12,20 @@ import {
 
 describe("svcForUf", () => {
   it("mapeia UFs da SVC-RS (tpEmis 7)", () => {
-    for (const uf of ["AM", "GO", "MA", "MS", "MT", "PE", "PI", "PR"]) {
+    for (const uf of [
+      "AM",
+      "BA",
+      "CE",
+      "GO",
+      "MA",
+      "MS",
+      "MT",
+      "PA",
+      "PE",
+      "PI",
+      "PR",
+      "SE",
+    ]) {
       const svc = svcForUf(uf);
       expect(svc.tpEmis, uf).toBe("7");
       expect(svc.authorizer, uf).toBe("SVCRS");
@@ -30,9 +43,6 @@ describe("svcForUf", () => {
       "ES",
       "TO",
       "AC",
-      "CE",
-      "PA",
-      "BA",
     ]) {
       const svc = svcForUf(uf);
       expect(svc.tpEmis, uf).toBe("6");
@@ -80,7 +90,7 @@ describe("shouldFallbackToSvc", () => {
     ).toBe(false);
   });
 
-  it("dispara em cStat 108/109 e falhas de transporte", () => {
+  it("dispara só em cStat 108/109 (timeout não transmite na SVC)", () => {
     expect(
       shouldFallbackToSvc({
         ok: false,
@@ -101,21 +111,21 @@ describe("shouldFallbackToSvc", () => {
         error: "Timeout SEFAZ (60000ms)",
         parsed: { success: false } as { cStat?: string },
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldFallbackToSvc({
         ok: false,
         error: "SEFAZ HTTP 503: service unavailable",
         parsed: {},
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldFallbackToSvc({
         ok: false,
         error: "connect ECONNREFUSED 127.0.0.1:443",
         parsed: {},
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("não dispara em falha local de TLS", () => {

@@ -1,4 +1,5 @@
 import { runFiscalTransmitJobs } from "./fiscal-transmit-queue.js";
+import { recheckActiveContingencies } from "./nfe-contingency.js";
 
 /**
  * Processa a fila de transmissão NF-e periodicamente.
@@ -25,6 +26,14 @@ export function scheduleFiscalTransmitCron(log?: {
       }
     } catch (err) {
       log?.error(err, "[fiscal-transmit] falha no job agendado");
+    }
+    try {
+      const svc = await recheckActiveContingencies();
+      if (svc.checked > 0) {
+        log?.info(svc, "[fiscal-transmit] contingência SVC reavaliada");
+      }
+    } catch (err) {
+      log?.error(err, "[fiscal-transmit] falha ao reavaliar SVC");
     }
   };
 

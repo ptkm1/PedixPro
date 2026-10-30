@@ -4,6 +4,7 @@ import { runCertificateExpiryAlerts } from "../services/cert-expiry-alerts.js";
 import { reconcileOpenReceivables } from "../services/banking/receivable-service.js";
 import { runCustomerInactivation } from "../services/customer-status.js";
 import { runFiscalTransmitJobs } from "../services/fiscal-transmit-queue.js";
+import { recheckActiveContingencies } from "../services/nfe-contingency.js";
 import { runMorningBriefJob } from "../services/morning-brief.js";
 import { runStockExpiryAlerts } from "../services/stock-expiry-alerts.js";
 
@@ -85,10 +86,12 @@ export async function jobsRoutes(app: FastifyInstance) {
         limit: z.number().int().min(1).max(50).optional(),
       })
       .safeParse(req.body ?? {});
-    return runFiscalTransmitJobs({
+    const jobs = await runFiscalTransmitJobs({
       organizationId: body.success ? body.data.organizationId : undefined,
       limit: body.success ? body.data.limit : undefined,
     });
+    const svc = await recheckActiveContingencies();
+    return { ...jobs, contingency: svc };
   });
 
   app.post("/customer-inactivation", async (req, reply) => {
