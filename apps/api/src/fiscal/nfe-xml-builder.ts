@@ -64,6 +64,26 @@ function buildAutXml(uf: string): string {
   </autXML>`;
 }
 
+/** Limite do schema NF-e 4.00 para `infAdic/infCpl`. */
+export const NFE_INF_CPL_MAX = 5000;
+
+export function normalizeNfeAdditionalInfo(
+  raw?: string | null,
+): string | null {
+  const t = (raw ?? "").replace(/\r\n/g, "\n").trim();
+  if (!t) return null;
+  return t.slice(0, NFE_INF_CPL_MAX);
+}
+
+function buildInfAdicXml(raw?: string | null): string {
+  const infCpl = normalizeNfeAdditionalInfo(raw);
+  if (!infCpl) return "";
+  return `
+  <infAdic>
+    <infCpl>${escapeXml(infCpl)}</infCpl>
+  </infAdic>`;
+}
+
 function nfeIbge(raw: string | null | undefined, fallback: string): string {
   const d = (raw ?? "").replace(/\D/g, "");
   return d.length === 7 ? d : fallback;
@@ -517,7 +537,7 @@ function buildInfNFe(input: {
     </ICMSTot>
   </total>
   ${buildTranspXml(invoice)}
-  ${buildPagXml(vNF, input.payment)}
+  ${buildPagXml(vNF, input.payment)}${buildInfAdicXml(config.nfeAdditionalInfo)}
 </infNFe>`;
 }
 

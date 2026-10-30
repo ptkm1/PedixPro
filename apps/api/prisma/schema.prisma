@@ -1884,6 +1884,8 @@ model Establishment {
   /// Início da contingência (dhCont no XML).
   nfeContingencySince       DateTime?
   nfeContingencyCheckedAt   DateTime?
+  /// Texto fixo de infCpl (informações complementares) em todas as NF-e deste CNPJ.
+  nfeAdditionalInfo         String?         @db.Text
   certificatePfxEncrypted   Bytes?
   certificatePasswordEncrypted String?
   certificateExpiresAt      DateTime?
