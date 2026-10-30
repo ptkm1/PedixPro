@@ -37,6 +37,8 @@ const publicSelect = {
   nfceSeries: true,
   nfceLastNumber: true,
   contingencyEnabled: true,
+  nfeContingencyState: true,
+  nfeContingencySince: true,
   autoStockOnInboundInvoice: true,
   isPrimary: true,
   active: true,
@@ -362,8 +364,6 @@ export async function updateEstablishment(
   if (input.nfceSeries !== undefined) data.nfceSeries = input.nfceSeries;
   if (input.nfceLastNumber !== undefined)
     data.nfceLastNumber = input.nfceLastNumber;
-  if (input.contingencyEnabled !== undefined)
-    data.contingencyEnabled = input.contingencyEnabled;
   if (input.autoStockOnInboundInvoice !== undefined)
     data.autoStockOnInboundInvoice = input.autoStockOnInboundInvoice;
   if (input.active !== undefined) {
@@ -421,6 +421,8 @@ export function toSettingsPayload(est: Establishment) {
     nfceSeries: est.nfceSeries,
     nfceLastNumber: est.nfceLastNumber,
     contingencyEnabled: est.contingencyEnabled,
+    nfeContingencyState: est.nfeContingencyState,
+    nfeContingencySince: est.nfeContingencySince,
     autoStockOnInboundInvoice: est.autoStockOnInboundInvoice,
     isPrimary: est.isPrimary,
     active: est.active,

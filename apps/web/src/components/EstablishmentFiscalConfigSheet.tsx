@@ -32,6 +32,8 @@ type FiscalSettings = {
   nfeSeries?: number;
   nfeLastNumber?: number;
   contingencyEnabled?: boolean;
+  nfeContingencyState?: "NORMAL" | "SVC_ATIVA" | "SEFAZ_INDISPONIVEL";
+  nfeContingencySince?: string | null;
   autoStockOnInboundInvoice?: boolean;
   logo?: {
     uploaded: boolean;
@@ -501,20 +503,16 @@ export function EstablishmentFiscalConfigSheet({
           </FormSection>
 
           <FormSection title="Contingência (SVC)">
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={form.contingencyEnabled}
-                onCheckedChange={(v) => {
-                  const next = v === true;
-                  setForm({ ...form, contingencyEnabled: next });
-                  saveSettings.mutate({ contingencyEnabled: next });
-                }}
-              />
-              Forçar emissão em contingência SVC
-            </label>
+            <p className="text-sm">
+              {settings?.nfeContingencyState === "SVC_ATIVA"
+                ? "SVC ativa — novas notas só vão à SVC enquanto a SEFAZ da UF estiver fora e o status da SVC for 107."
+                : settings?.nfeContingencyState === "SEFAZ_INDISPONIVEL"
+                  ? "SEFAZ da UF indisponível. A SVC só é usada se o status do serviço retornar cStat 107."
+                  : "Emissão normal (tpEmis 1). A SVC não é escolhida manualmente."}
+            </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Se a SEFAZ da UF estiver indisponível, a nota pode ser refeita no
-              SVC automaticamente. Marque para enviar direto ao SVC.
+              O Pedix consulta o status da SEFAZ e da SVC. Rejeição 114 volta
+              automaticamente para o webservice da UF, sem reenviar na SVC-RS.
             </p>
           </FormSection>
         </div>
