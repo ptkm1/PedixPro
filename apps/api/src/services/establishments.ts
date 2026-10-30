@@ -39,6 +39,7 @@ const publicSelect = {
   contingencyEnabled: true,
   nfeContingencyState: true,
   nfeContingencySince: true,
+  nfeAdditionalInfo: true,
   autoStockOnInboundInvoice: true,
   isPrimary: true,
   active: true,
@@ -301,6 +302,7 @@ export type UpdateEstablishmentInput = Partial<CreateEstablishmentInput> & {
   nfeLastNumber?: number;
   nfceSeries?: number | null;
   nfceLastNumber?: number | null;
+  nfeAdditionalInfo?: string | null;
 };
 
 export async function updateEstablishment(
@@ -364,6 +366,10 @@ export async function updateEstablishment(
   if (input.nfceSeries !== undefined) data.nfceSeries = input.nfceSeries;
   if (input.nfceLastNumber !== undefined)
     data.nfceLastNumber = input.nfceLastNumber;
+  if (input.nfeAdditionalInfo !== undefined) {
+    const t = input.nfeAdditionalInfo?.trim() || null;
+    data.nfeAdditionalInfo = t ? t.slice(0, 5000) : null;
+  }
   if (input.autoStockOnInboundInvoice !== undefined)
     data.autoStockOnInboundInvoice = input.autoStockOnInboundInvoice;
   if (input.active !== undefined) {
@@ -423,6 +429,7 @@ export function toSettingsPayload(est: Establishment) {
     contingencyEnabled: est.contingencyEnabled,
     nfeContingencyState: est.nfeContingencyState,
     nfeContingencySince: est.nfeContingencySince,
+    nfeAdditionalInfo: est.nfeAdditionalInfo,
     autoStockOnInboundInvoice: est.autoStockOnInboundInvoice,
     isPrimary: est.isPrimary,
     active: est.active,

@@ -3,6 +3,7 @@ import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { formatCnpjShort } from "@/auth/EstablishmentContext";
 import { apiFetch, fetchAuthenticatedBlob } from "@/lib/api";
 import { getErrorMessage } from "@/lib/api-error";
@@ -31,6 +32,7 @@ type FiscalSettings = {
   nfeEnvironment?: NfeEnvironment;
   nfeSeries?: number;
   nfeLastNumber?: number;
+  nfeAdditionalInfo?: string | null;
   contingencyEnabled?: boolean;
   nfeContingencyState?: "NORMAL" | "SVC_ATIVA" | "SEFAZ_INDISPONIVEL";
   nfeContingencySince?: string | null;
@@ -103,6 +105,7 @@ export function EstablishmentFiscalConfigSheet({
     zipCode: "",
     nfeEnvironment: "HOMOLOGATION" as NfeEnvironment,
     nfeSeries: "1",
+    nfeAdditionalInfo: "",
     contingencyEnabled: false,
     autoStockOnInboundInvoice: false,
   });
@@ -169,6 +172,7 @@ export function EstablishmentFiscalConfigSheet({
       zipCode: settings.zipCode ?? "",
       nfeEnvironment: settings.nfeEnvironment ?? "HOMOLOGATION",
       nfeSeries: String(settings.nfeSeries ?? 1),
+      nfeAdditionalInfo: settings.nfeAdditionalInfo ?? "",
       contingencyEnabled: settings.contingencyEnabled ?? false,
       autoStockOnInboundInvoice: settings.autoStockOnInboundInvoice ?? false,
     });
@@ -367,6 +371,21 @@ export function EstablishmentFiscalConfigSheet({
                 />
               </FormField>
             </FormGrid>
+            <FormField
+              className="mt-4"
+              label="Informações complementares (todas as NF-e)"
+              hint="Um único texto para todas as notas deste estabelecimento. Até 5.000 caracteres. Deixe em branco para omitir."
+            >
+              <Textarea
+                value={form.nfeAdditionalInfo}
+                maxLength={5000}
+                rows={5}
+                placeholder="Texto fixo impresso em todas as notas deste CNPJ (infCpl)."
+                onChange={(e) =>
+                  setForm({ ...form, nfeAdditionalInfo: e.target.value })
+                }
+              />
+            </FormField>
             <div className="mt-4">
               <Button
                 disabled={saveSettings.isPending}
@@ -374,6 +393,7 @@ export function EstablishmentFiscalConfigSheet({
                   saveSettings.mutate({
                     ...form,
                     nfeSeries: Number(form.nfeSeries) || 1,
+                    nfeAdditionalInfo: form.nfeAdditionalInfo.trim() || null,
                   })
                 }
               >

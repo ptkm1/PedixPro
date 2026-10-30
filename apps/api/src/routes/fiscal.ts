@@ -183,6 +183,7 @@ export const fiscalRoutes: FastifyPluginAsync = async (app) => {
         nfeEnvironment: z.enum(["HOMOLOGATION", "PRODUCTION"]).optional(),
         nfeSeries: z.number().int().positive().optional(),
         contingencyEnabled: z.boolean().optional(),
+        nfeAdditionalInfo: z.string().max(5000).nullable().optional(),
         autoStockOnInboundInvoice: z.boolean().optional(),
       })
       .safeParse(req.body);

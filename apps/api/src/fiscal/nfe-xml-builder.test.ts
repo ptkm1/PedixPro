@@ -33,6 +33,7 @@ function stubConfig(): Establishment {
     nfeContingencyState: "NORMAL",
     nfeContingencySince: null,
     nfeContingencyCheckedAt: null,
+    nfeAdditionalInfo: null,
     certificatePfxEncrypted: null,
     certificatePasswordEncrypted: null,
     certificateExpiresAt: null,
