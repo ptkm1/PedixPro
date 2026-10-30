@@ -53,7 +53,8 @@ function nfeFilled(raw: string | null | undefined, fallback: string): string {
 }
 
 /** CNPJ da SEFAZ-BA para autXML quando o emitente não tem escritório de contabilidade. */
-export const SEFAZ_BA_AUTXML_CNPJ = "13937075000156";
+/** CNPJ informado pela própria SEFAZ-BA na rejeição 487. */
+export const SEFAZ_BA_AUTXML_CNPJ = "13937073000156";
 
 function buildAutXml(uf: string): string {
   if (uf !== "BA") return "";

@@ -471,6 +471,6 @@ describe("buildSignedNfePackage prod", () => {
     });
 
     expect(infNFeXml).toContain("<autXML>");
-    expect(infNFeXml).toContain("<CNPJ>13937075000156</CNPJ>");
+    expect(infNFeXml).toContain("<CNPJ>13937073000156</CNPJ>");
   });
 });
