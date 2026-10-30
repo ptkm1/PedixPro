@@ -42,7 +42,7 @@ export function nfeAamm(date: Date, timeZone = NFE_TIME_ZONE): string {
   return `${String(p.year).slice(-2)}${p.month}`;
 }
 
-function mod11Digit(digits: string): string {
+export function nfeMod11CheckDigit(digits: string): string {
   let weight = 2;
   let sum = 0;
   for (let i = digits.length - 1; i >= 0; i--) {
@@ -73,7 +73,7 @@ export function generateAccessKey(input: {
   const tpEmis = String(input.tpEmis ?? "1").replace(/\D/g, "").slice(-1) || "1";
   const cNF = String(randomInt(0, 100_000_000)).padStart(8, "0");
   const base = `${cUF}${aamm}${cnpj}${mod}${serie}${nNF}${tpEmis}${cNF}`;
-  return `${base}${mod11Digit(base)}`;
+  return `${base}${nfeMod11CheckDigit(base)}`;
 }
 
 /** Recalcula a chave preservando cNF/AAMM e trocando só o tpEmis + DV. */
@@ -87,7 +87,13 @@ export function rebuildAccessKeyWithTpEmis(
   }
   const tp = String(tpEmis).replace(/\D/g, "").slice(-1) || "1";
   const base = `${digits.slice(0, 34)}${tp}${digits.slice(35, 43)}`;
-  return `${base}${mod11Digit(base)}`;
+  return `${base}${nfeMod11CheckDigit(base)}`;
+}
+
+export function isValidNfeAccessKey(accessKey: string): boolean {
+  const digits = onlyDigits(accessKey);
+  if (digits.length !== 44) return false;
+  return nfeMod11CheckDigit(digits.slice(0, 43)) === digits[43];
 }
 
 export function onlyDigits(value: string, len?: number): string {

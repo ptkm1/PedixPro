@@ -13,6 +13,7 @@ import {
 } from "./nfe-access-key.js";
 import { nfeCest, nfeCProd, nfeExtIpi, nfeGtin } from "./nfe-prod-fields.js";
 import { compactNfeXml } from "./nfe-signer.js";
+import { resolveNfeDestIcms } from "./nfe-dest.js";
 import { isSvcTpEmis, normalizeSvcJustification } from "./nfe-svc.js";
 import { UF_IBGE } from "./sefaz-endpoints.js";
 
@@ -28,6 +29,7 @@ export function normalizeNfeNature(raw: string | null | undefined): string {
 type Recipient = {
   name: string;
   document?: string | null;
+  ie?: string | null;
   stateRegistration?: string | null;
   street?: string | null;
   addressNumber?: string | null;
@@ -363,7 +365,11 @@ function buildInfNFe(input: {
     emitIeRaw.toUpperCase() === "ISENTO"
       ? "ISENTO"
       : emitIeRaw.replace(/\D/g, "") || "ISENTO";
-  const destIeRaw = (recipient.stateRegistration ?? "").trim();
+  const destIcms = resolveNfeDestIcms({
+    document: recipient.document,
+    ie: recipient.ie,
+    stateRegistration: recipient.stateRegistration,
+  });
 
   const det = invoice.items
     .map((item) => {
@@ -435,7 +441,7 @@ function buildInfNFe(input: {
     <cDV>${accessKey.slice(-1)}</cDV>
     <tpAmb>${tpAmb}</tpAmb>
     <finNFe>1</finNFe>
-    <indFinal>0</indFinal>
+    <indFinal>${destIcms.indFinal}</indFinal>
     <indPres>1</indPres>
     <indIntermed>0</indIntermed>
     <procEmi>0</procEmi>
@@ -480,10 +486,10 @@ function buildInfNFe(input: {
       <xPais>BRASIL</xPais>
     </enderDest>
     ${
-      destIeRaw && destIeRaw.toUpperCase() !== "ISENTO"
+      destIcms.indIEDest === "1" && destIcms.ie
         ? `<indIEDest>1</indIEDest>
-    <IE>${escapeXml(destIeRaw.replace(/\D/g, "") || destIeRaw)}</IE>`
-        : `<indIEDest>9</indIEDest>`
+    <IE>${escapeXml(destIcms.ie)}</IE>`
+        : `<indIEDest>${destIcms.indIEDest}</indIEDest>`
     }
   </dest>${buildAutXml(uf)}${det}
   <total>

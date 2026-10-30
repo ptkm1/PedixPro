@@ -21,10 +21,13 @@ export function customerFiscalDocument(
 }
 
 export function customerFiscalRecipientSnapshot(customer: CustomerFiscalFields) {
+  const ie = customer.stateRegistration ?? null;
   return {
     name: customer.name ?? "",
     document: customerFiscalDocument(customer),
-    ie: customer.stateRegistration,
+    ie,
+    /** Alias lido pelo XML da NF-e (o builder usa stateRegistration). */
+    stateRegistration: ie,
     street: customer.street,
     addressNumber: customer.number,
     district: customer.neighborhood,

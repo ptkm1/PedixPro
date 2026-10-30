@@ -369,4 +369,108 @@ describe("buildSignedNfePackage prod", () => {
     expect(infNFeXml).not.toContain("<dhCont>");
     expect(infNFeXml).not.toContain("<xJust>");
   });
+
+  it("CNPJ com IE no snapshot `ie` vira indIEDest 1 (não 696)", () => {
+    const item = {
+      id: "i1",
+      fiscalInvoiceId: "n1",
+      productId: "p1",
+      lineNumber: 1,
+      description: "Item",
+      ncm: "19053100",
+      cfop: "5102",
+      unit: "UN",
+      quantity: 1,
+      unitPrice: 10,
+      totalPrice: 10,
+      supplierProductCode: null,
+      taxSnapshot: { orig: 0, csosn: "102" },
+      createdAt: new Date(),
+    } as unknown as FiscalInvoiceItem;
+    const invoice = {
+      id: "n1",
+      organizationId: "org",
+      direction: "OUTBOUND",
+      status: "DRAFT",
+      documentModel: 55,
+      tpEmis: "1",
+      number: 1,
+      series: 3,
+      items: [item],
+    } as unknown as FiscalInvoice & { items: FiscalInvoiceItem[] };
+
+    const { infNFeXml } = buildSignedNfePackage({
+      config: stubConfig(),
+      invoice,
+      recipient: {
+        name: "Cliente BA",
+        document: "11444777000161",
+        ie: "204.706.939",
+        street: "Rua A",
+        addressNumber: "1",
+        district: "Centro",
+        city: "Salvador",
+        state: "BA",
+        zipCode: "40000000",
+        cityIbge: "2927408",
+      },
+      emitterName: "Empresa Demo",
+    });
+
+    expect(infNFeXml).toContain("<indIEDest>1</indIEDest>");
+    expect(infNFeXml).toContain("<IE>204706939</IE>");
+    expect(infNFeXml).toContain("<indFinal>0</indFinal>");
+  });
+
+  it("Bahia inclui autXML da SEFAZ-BA (486)", () => {
+    const item = {
+      id: "i1",
+      fiscalInvoiceId: "n1",
+      productId: "p1",
+      lineNumber: 1,
+      description: "Item",
+      ncm: "19053100",
+      cfop: "5102",
+      unit: "UN",
+      quantity: 1,
+      unitPrice: 10,
+      totalPrice: 10,
+      supplierProductCode: null,
+      taxSnapshot: { orig: 0, csosn: "102" },
+      createdAt: new Date(),
+    } as unknown as FiscalInvoiceItem;
+    const invoice = {
+      id: "n1",
+      organizationId: "org",
+      direction: "OUTBOUND",
+      status: "DRAFT",
+      documentModel: 55,
+      tpEmis: "1",
+      number: 1,
+      series: 1,
+      items: [item],
+    } as unknown as FiscalInvoice & { items: FiscalInvoiceItem[] };
+
+    const ba = { ...stubConfig(), uf: "BA", cityIbge: "2927408", city: "Salvador" };
+    const { infNFeXml } = buildSignedNfePackage({
+      config: ba,
+      invoice,
+      recipient: {
+        name: "Cliente",
+        document: "11444777000161",
+        ie: "12345678",
+        street: "Rua A",
+        addressNumber: "1",
+        district: "Centro",
+        city: "Salvador",
+        state: "BA",
+        zipCode: "40000000",
+        cityIbge: "2927408",
+      },
+      emitterName: "Empresa Demo",
+    });
+
+    expect(infNFeXml).toContain("<autXML>");
+    expect(infNFeXml).toContain("<CNPJ>13937075000156</CNPJ>");
+  });
 });

@@ -13,6 +13,11 @@ export type SefazRejectionHint = {
 };
 
 const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
+  "696": {
+    title: "Não contribuinte deve ser consumidor final",
+    howToFix:
+      "indIEDest=9 exige indFinal=1. Se o destinatário é CNPJ com IE, o XML precisa da IE (indIEDest=1). Confira a inscrição estadual no cadastro do cliente.",
+  },
   "486": {
     title: "Grupo autXML obrigatório na Bahia",
     howToFix:
