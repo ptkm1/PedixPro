@@ -3,6 +3,7 @@ import {
   buildSoapEnvelope,
   extractSoapBody,
   parseSefazAuthorizationResponse,
+  parseSefazConsultaSitResponse,
   parseSefazEventResponse,
 } from "./nfe-signer.js";
 import {
@@ -222,15 +223,9 @@ export async function consultNfeProtocolo(input: {
       CONSULTA_ACTION,
     );
     const body = extractSoapBody(rawResponse);
-    const parsed = parseSefazEventResponse(body);
+    const parsed = parseSefazConsultaSitResponse(body);
     const cStat = parsed.cStat;
-    const ok =
-      cStat === "100" ||
-      cStat === "101" ||
-      cStat === "110" ||
-      cStat === "150" ||
-      cStat === "151" ||
-      parsed.success;
+    const ok = parsed.success;
     return {
       ok,
       rawResponse: body,

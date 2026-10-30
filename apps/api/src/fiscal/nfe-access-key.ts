@@ -96,6 +96,15 @@ export function isValidNfeAccessKey(accessKey: string): boolean {
   return nfeMod11CheckDigit(digits.slice(0, 43)) === digits[43];
 }
 
+/** tpEmis gravado na chave (posição 35). Eventos/consulta devem seguir isto, não um tpEmis residual no cadastro. */
+export function nfeTpEmisFromAccessKey(
+  accessKey: string | null | undefined,
+): string | null {
+  const digits = onlyDigits(accessKey ?? "");
+  if (digits.length !== 44) return null;
+  return digits[34] ?? null;
+}
+
 export function onlyDigits(value: string, len?: number): string {
   const d = value.replace(/\D/g, "");
   return len ? d.padStart(len, "0").slice(-len) : d;
