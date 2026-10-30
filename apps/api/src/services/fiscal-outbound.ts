@@ -324,13 +324,9 @@ export async function transmitOutboundInvoice(
   const homolog = config!.nfeEnvironment === "HOMOLOGATION";
   const uf = config!.uf ?? "SP";
   const svc = svcForUf(uf);
-  const alreadySvc = isSvcTpEmis(invoice.tpEmis);
-  const forceSvc = Boolean(config!.contingencyEnabled) && !alreadySvc;
-  const startTpEmis = alreadySvc
-    ? String(invoice.tpEmis).slice(0, 1)
-    : forceSvc
-      ? svc.tpEmis
-      : "1";
+  const forceSvc = Boolean(config!.contingencyEnabled);
+  /** Não reutilizar tpEmis 7 de rejeição antiga: a checkbox não tinha efeito. */
+  const startTpEmis = forceSvc ? svc.tpEmis : "1";
   const startJustification = isSvcTpEmis(startTpEmis)
     ? normalizeSvcJustification(
         invoice.contingencyJustification ??
@@ -386,7 +382,6 @@ export async function transmitOutboundInvoice(
   });
 
   const usedSvcFallback =
-    !alreadySvc &&
     !forceSvc &&
     !isSvcTpEmis(tpEmis) &&
     shouldFallbackToSvc(sefaz);
@@ -434,7 +429,10 @@ export async function transmitOutboundInvoice(
     });
   }
 
-  if (tpEmis === TP_EMIS_SVC_RS && isSvcRsDisabledByOrigin(sefaz)) {
+  if (
+    isSvcRsDisabledByOrigin(sefaz) &&
+    tpEmis !== TP_EMIS_SVC_AN
+  ) {
     await prisma.fiscalInvoiceEvent.create({
       data: {
         fiscalInvoiceId: invoice.id,
