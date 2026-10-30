@@ -12,7 +12,7 @@ import {
 
 describe("svcForUf", () => {
   it("mapeia UFs da SVC-RS (tpEmis 7)", () => {
-    for (const uf of ["AM", "BA", "GO", "MA", "MS", "MT", "PE", "PI", "PR"]) {
+    for (const uf of ["AM", "GO", "MA", "MS", "MT", "PE", "PI", "PR"]) {
       const svc = svcForUf(uf);
       expect(svc.tpEmis, uf).toBe("7");
       expect(svc.authorizer, uf).toBe("SVCRS");
@@ -32,6 +32,7 @@ describe("svcForUf", () => {
       "AC",
       "CE",
       "PA",
+      "BA",
     ]) {
       const svc = svcForUf(uf);
       expect(svc.tpEmis, uf).toBe("6");

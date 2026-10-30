@@ -33,10 +33,13 @@ import {
 } from "../fiscal/sefaz-client.js";
 import { rebuildAccessKeyWithTpEmis } from "../fiscal/nfe-access-key.js";
 import {
+  isSvcRsDisabledByOrigin,
   isSvcTpEmis,
   normalizeSvcJustification,
   shouldFallbackToSvc,
   svcForUf,
+  TP_EMIS_SVC_AN,
+  TP_EMIS_SVC_RS,
 } from "../fiscal/nfe-svc.js";
 import { validateProductFiscalAgainstCatalog } from "../fiscal/fiscal-catalog-validation.js";
 import { explainSefazRejection } from "../fiscal/sefaz-rejection-hints.js";
@@ -431,6 +434,49 @@ export async function transmitOutboundInvoice(
     });
   }
 
+  if (tpEmis === TP_EMIS_SVC_RS && isSvcRsDisabledByOrigin(sefaz)) {
+    await prisma.fiscalInvoiceEvent.create({
+      data: {
+        fiscalInvoiceId: invoice.id,
+        eventType: "NFeAutorizacaoSVC",
+        requestPayload: enviNFe.slice(0, 50000),
+        responsePayload: (sefaz.rawResponse || sefaz.error || "").slice(
+          0,
+          50000,
+        ),
+        success: false,
+      },
+    });
+
+    justification = normalizeSvcJustification(
+      invoice.contingencyJustification ??
+        `SVC-RS desabilitada pela SEFAZ ${uf} - reenvio na SVC-AN`,
+    );
+    tpEmis = TP_EMIS_SVC_AN;
+    accessKey = rebuildAccessKeyWithTpEmis(accessKey, tpEmis);
+    const anInvoice = {
+      ...workingInvoice,
+      tpEmis,
+      contingencyJustification: justification,
+    };
+    const anPkg = buildSignedNfePackage({
+      ...packageOpts,
+      invoice: anInvoice,
+      accessKey,
+      issuedAt,
+    });
+    signedNFe = signInfNFe(anPkg.infNFeXml, cert.privateKeyPem, cert.certPem);
+    enviNFe = wrapEnviNFe(signedNFe);
+    sefaz = await authorizeNfe({
+      uf,
+      homologation: homolog,
+      enviNFeXml: enviNFe,
+      pfx: cert.pfx,
+      password: cert.password,
+      tpEmis,
+    });
+  }
+
   const issuerSnapshot = {
     ...(typeof invoice.issuerSnapshot === "object" &&
     invoice.issuerSnapshot != null
@@ -440,7 +486,8 @@ export async function transmitOutboundInvoice(
     ...(isSvcTpEmis(tpEmis)
       ? {
           tpEmis,
-          svcAuthorizer: svc.authorizer,
+          svcAuthorizer:
+            tpEmis === TP_EMIS_SVC_AN ? "SVCAN" : svc.authorizer,
           contingencyJustification: justification,
         }
       : {}),
