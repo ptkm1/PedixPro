@@ -1,4 +1,4 @@
-import { escapeXml, onlyDigits } from "./nfe-access-key.js";
+import { escapeXml, formatNfeDateTime, onlyDigits } from "./nfe-access-key.js";
 import { compactNfeXml } from "./nfe-signer.js";
 import { sefazOrgaoForEvent } from "./nfe-svc.js";
 import { UF_IBGE } from "./sefaz-endpoints.js";
@@ -20,7 +20,7 @@ export function buildCancelamentoEvento(input: {
   const nSeq = String(input.seqEvento ?? 1).padStart(2, "0");
   const tpEvento = "110111";
   const id = `ID${tpEvento}${chNFe}${nSeq}`;
-  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z$/, "-03:00");
+  const dhEvento = formatNfeDateTime(new Date());
   const xJust = escapeXml(input.justification.trim());
 
   const infEvento = `<infEvento Id="${id}"><cOrgao>${cOrgao}</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${input.seqEvento ?? 1}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>${escapeXml(input.protocol)}</nProt><xJust>${xJust}</xJust></detEvento></infEvento>`;
@@ -49,7 +49,7 @@ export function buildCartaCorrecaoEvento(input: {
   const nSeq = input.seqEvento ?? 1;
   const tpEvento = "110110";
   const id = `ID${tpEvento}${chNFe}${String(nSeq).padStart(2, "0")}`;
-  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z$/, "-03:00");
+  const dhEvento = formatNfeDateTime(new Date());
   const xCorrecao = escapeXml(text);
 
   const infEvento =
@@ -147,7 +147,7 @@ export function buildManifestacaoEvento(input: {
   const tpAmb = input.homologation ? "2" : "1";
   const nSeq = String(input.seqEvento ?? 1).padStart(2, "0");
   const id = `ID${meta.tpEvento}${chNFe}${nSeq}`;
-  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z$/, "-03:00");
+  const dhEvento = formatNfeDateTime(new Date());
   const justXml =
     meta.needsJust && input.justification
       ? `<xJust>${escapeXml(input.justification.trim())}</xJust>`

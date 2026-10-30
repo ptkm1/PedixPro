@@ -13,6 +13,11 @@ export type SefazRejectionHint = {
 };
 
 const KNOWN: Record<string, Omit<SefazRejectionHint, "cStat">> = {
+  "703": {
+    title: "Data-hora de emissão posterior ao horário de recebimento",
+    howToFix:
+      "A data/hora da NF-e estava à frente do relógio da SEFAZ. Retransmita a mesma nota — o Pedix grava dhEmi no horário de Brasília.",
+  },
   "114": {
     title: "SVC-RS desabilitada pela SEFAZ de origem",
     howToFix:
