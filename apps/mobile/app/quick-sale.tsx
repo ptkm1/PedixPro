@@ -645,6 +645,22 @@ export default function QuickSaleScreen() {
           s.setLineUnitPrice(line.productId, unitPrice)
         }
       />
+      {!s.paymentConditionId ? (
+        <Text style={styles.warn}>
+          Selecione a condição de pagamento (aba Clientes) para confirmar.
+        </Text>
+      ) : null}
+      {s.usableTables.length > 0 && !s.priceTableId ? (
+        <Text style={styles.warn}>
+          Selecione a tabela de preço (aba Clientes) para confirmar.
+        </Text>
+      ) : null}
+      {s.creditBlockedCheckout ? (
+        <Text style={styles.warn}>
+          Pedido bloqueado pela política de crédito — o escritório precisa
+          liberar o cliente antes de confirmar.
+        </Text>
+      ) : null}
       <View style={{ height: 120 }} />
     </ScrollView>
   );
