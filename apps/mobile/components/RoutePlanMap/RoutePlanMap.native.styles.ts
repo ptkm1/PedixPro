@@ -7,6 +7,8 @@ import { useTheme } from "../../lib/theme";
 export const PIN_WITH_SELLER = "#2563eb";
 /** Vermelho sólido — clientes sem vendedor. */
 export const PIN_WITHOUT_SELLER = "#dc2626";
+/** Dot do vendedor (substitui MapView.showsUserLocation). */
+export const USER_LOCATION_FILL = "#0284c7";
 
 export type RoutePlanMapNativeStylesParams = {
   routeStrokeColor?: string;
@@ -40,6 +42,22 @@ export function useRoutePlanMapNativeStyles(
           shadowOpacity: 0.45,
           shadowRadius: 3,
           elevation: 4,
+        },
+        userDotOuter: {
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          backgroundColor: "rgba(2, 132, 199, 0.25)",
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 2,
+          borderColor: "#ffffff",
+        },
+        userDotInner: {
+          width: 12,
+          height: 12,
+          borderRadius: 6,
+          backgroundColor: USER_LOCATION_FILL,
         },
       }),
     [colors],
